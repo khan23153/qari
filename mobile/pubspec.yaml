@@ -1,0 +1,85 @@
+name: qari
+description: "Qari — Learn to read the Quran with AI-powered Tajweed feedback."
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.6.1
+  riverpod_annotation: ^2.6.1
+
+  # Networking
+  dio: ^5.7.0
+  retrofit: ^4.4.1
+  pretty_dio_logger: ^1.4.1
+
+  # Models / serialization
+  freezed_annotation: ^2.4.4
+  json_annotation: ^4.9.0
+
+  # Audio
+  just_audio: ^0.9.43
+  record: ^5.2.0
+
+  # Storage / caching
+  shared_preferences: ^2.3.3
+  flutter_cache_manager: ^3.4.1
+  cached_network_image: ^3.4.1
+  drift: ^2.21.0
+  sqlite3_flutter_libs: ^0.5.27
+
+  # Firebase
+  firebase_core: ^3.8.1
+  firebase_auth: ^5.3.4
+
+  # UI / utilities
+  google_fonts: ^6.2.1
+  flutter_svg: ^2.0.17
+  fl_chart: ^0.70.2
+  flutter_animate: ^4.5.2
+  haptic_feedback: ^1.1.0
+  permission_handler: ^11.3.1
+  path_provider: ^2.1.5
+  url_launcher: ^6.3.1
+  intl: ^0.19.0
+
+  # RTL / Arabic text
+  bidi: ^0.3.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.1.0
+  build_runner: ^2.4.14
+  freezed: ^2.5.7
+  json_serializable: ^6.9.0
+  riverpod_generator: ^2.6.3
+  retrofit_generator: ^9.1.7
+  drift_dev: ^2.21.0
+  mockito: ^5.4.4
+  integration_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/fonts/
+
+  fonts:
+    - family: QuranUthmani
+      fonts:
+        - asset: assets/fonts/KFGQPCUthmanicScriptHAFS.ttf
+    - family: NotoNastaliq
+      fonts:
+        - asset: assets/fonts/NotoNastaliqUrdu-Regular.ttf
