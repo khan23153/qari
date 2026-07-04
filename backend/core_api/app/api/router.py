@@ -1,13 +1,26 @@
-"""Main API router aggregating all route modules."""
+"""Aggregate all route routers into a single APIRouter."""
+
 from fastapi import APIRouter
 
-from app.api.routes import corpus, lessons, users, progress, flashcards, recitation, scholar
+from app.api.routes import (
+    corpus,
+    lessons,
+    users,
+    progress,
+    flashcards,
+    recitation,
+    scholar,
+    content_bundle,
+)
 
 api_router = APIRouter()
-api_router.include_router(corpus.router, tags=["corpus"])
-api_router.include_router(lessons.router, tags=["lessons"])
-api_router.include_router(users.router, tags=["users"])
-api_router.include_router(progress.router, tags=["progress"])
-api_router.include_router(flashcards.router, tags=["flashcards"])
-api_router.include_router(recitation.router, tags=["recitation"])
-api_router.include_router(scholar.router, tags=["scholar"])
+
+# Include all route modules
+api_router.include_router(corpus.router)
+api_router.include_router(lessons.router)
+api_router.include_router(users.router)
+api_router.include_router(progress.router)
+api_router.include_router(flashcards.router)
+api_router.include_router(recitation.router)
+api_router.include_router(scholar.router)
+api_router.include_router(content_bundle.router)
