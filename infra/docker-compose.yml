@@ -1,0 +1,104 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: qari
+      POSTGRES_PASSWORD: qari
+      POSTGRES_DB: qari
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qari"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  core-api:
+    build:
+      context: ../backend/core_api
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://qari:qari@postgres:5432/qari
+      REDIS_URL: redis://redis:6379/0
+      ENV: dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../backend/core_api:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  recitation-api:
+    build:
+      context: ../backend/recitation_api
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      REDIS_URL: redis://redis:6379/1
+      CORE_API_URL: http://core-api:8000/v1
+      ENV: dev
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../backend/recitation_api:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+
+  inference-worker:
+    build:
+      context: ../backend/recitation_api
+      dockerfile: Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379/1
+      ENV: dev
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../backend/recitation_api:/app
+    command: python -m app.workers.inference_worker
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: qari
+      MINIO_ROOT_PASSWORD: qari12345
+    command: server /data --console-address ":9001"
+    volumes:
+      - miniodata:/data
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
