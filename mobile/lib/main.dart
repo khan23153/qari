@@ -1,53 +1,105 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 
 import 'core/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
+import 'data/services/local_storage_service.dart';
 import 'features/onboarding/presentation/pages/language_select_page.dart';
 import 'features/home/presentation/pages/home_page.dart';
-import 'data/services/local_storage_service.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Set preferred orientations
+  // Lock orientation to portrait for consistent Quran reading
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
   ]);
 
   // Initialize Firebase
-  await Firebase.initializeApp();
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    // Firebase may not be configured in dev — continue without it
+    debugPrint('Firebase init skipped: $e');
+  }
 
-  // Initialize local storage
-  await LocalStorageService.instance.init();
-
-  runApp(const ProviderScope(child: QariApp()));
+  runApp(
+    const ProviderScope(
+      child: QariApp(),
+    ),
+  );
 }
 
-class QariApp extends ConsumerWidget {
+class QariApp extends ConsumerStatefulWidget {
   const QariApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final hasOnboarded = LocalStorageService.instance.hasOnboarded;
-    final themeMode = LocalStorageService.instance.themeMode;
+  ConsumerState<QariApp> createState() => _QariAppState();
+}
+
+class _QariAppState extends ConsumerState<QariApp> {
+  bool _hasSelectedLanguage = false;
+  bool _hasSelectedPath = false;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkOnboardingStatus();
+  }
+
+  Future<void> _checkOnboardingStatus() async {
+    final storage = LocalStorageService();
+    final lang = await storage.getSelectedLanguage();
+    final path = await storage.getSelectedPath();
+    setState(() {
+      _hasSelectedLanguage = lang != null;
+      _hasSelectedPath = path != null;
+      _isLoading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final themeMode = ref.watch(themeModeProvider);
+    final locale = ref.watch(appLocaleProvider);
+
+    if (_isLoading) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.lightTheme,
+        home: const Scaffold(
+          body: Center(
+            child: CircularProgressIndicator(),
+          ),
+        ),
+      );
+    }
 
     return MaterialApp(
-      title: 'Qari',
       debugShowCheckedModeBanner: false,
+      title: 'Qari',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       highContrastTheme: AppTheme.highContrastTheme,
       themeMode: themeMode,
-      locale: Locale(LocalStorageService.instance.appLanguage),
-      supportedLocales: const [
-        Locale('en'),
-        Locale('ur'),
-        Locale('hi'),
+      locale: locale,
+      supportedLocales: AppConstants.supportedLocales,
+      localizationsDelegates: const [
+        DefaultMaterialLocalizations.delegate,
+        DefaultWidgetsLocalizations.delegate,
       ],
-      home: hasOnboarded ? const HomePage() : const LanguageSelectPage(),
+      home: _hasSelectedLanguage && _hasSelectedPath
+          ? const HomePage()
+          : const LanguageSelectPage(),
     );
   }
 }
+
+/// Provider for current theme mode
+final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
+
+/// Provider for current app locale
+final appLocaleProvider = StateProvider<Locale>((ref) => const Locale('en'));
