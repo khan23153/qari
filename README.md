@@ -10,19 +10,24 @@ A cross-platform (Android + iOS) mobile app for absolute beginners to:
 ## Architecture
 
 ```
-Mobile (Flutter)
-   │  HTTPS/JSON (REST)                 │  WSS (binary audio frames)
-   ▼                                    ▼
-API Gateway (rate limit, JWT verify)
-   ▼                                    ▼
-core-api (FastAPI) ────────────────────► recitation-api (FastAPI, WebSocket)
-   │        │                          │
-   │        └── Redis (cache/session)  ├── GPU inference workers (Whisper-Quran + Wav2Vec2 aligner)
-   ▼                                   │      (queue: Redis Streams; autoscale on queue depth)
-PostgreSQL ◄──────────────────────────────────────────┘
-   ▲
-etl-job (scheduled)  ──► Quran.com API v4 + corpus.quran.com dataset
-CDN/S3 ◄── qari audio, makhraj videos, word audio
+┌─────────────────────────────────────────────────────────────────┐
+│                        Mobile (Flutter)                          │
+│   Onboarding · Lessons · Quran Reader · Recitation · Flashcards  │
+└───────────────┬───────────────────────────┬──────────────────────┘
+                │ HTTPS/JSON (REST)          │ Multipart upload
+                ▼                           ▼
+        ┌──────────────┐          ┌──────────────────┐
+        │  core-api    │          │ recitation-api   │
+        │  (FastAPI)   │          │ (FastAPI + WS)   │
+        └──┬───┬───────┘          └──┬───────────────┘
+           │   │                     │
+     ┌─────┘   └── Redis ────────────┤
+     ▼              (cache/queue)    ▼
+  PostgreSQL                   GPU Inference Workers
+  (corpus + user)              (Whisper-Quran + Wav2Vec2)
+     ▲
+     │
+  ETL Job ──► Quran.com API v4 + Quranic Arabic Corpus
 ```
 
 ## Repository Structure
