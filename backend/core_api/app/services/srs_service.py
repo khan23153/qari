@@ -1,50 +1,92 @@
-"""Spaced Repetition System (SRS) — SM-2 algorithm implementation.
+"""SM-2 spaced repetition algorithm implementation.
 
-Grades 0-5:
-  0-2: incorrect, reset repetitions
-  3:   correct but difficult
-  4:   correct with effort
-  5:   perfect
+Reference: https://www.supermemo.com/en/blog/application-of-a-computer-to-improve-the-results-obtained-in-working-with-the-supermemo-method
+
+The SM-2 algorithm adjusts the easiness factor (EF), repetition count,
+and inter-repetition interval based on the quality of the response (0-5).
 """
+
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import Optional
+
+from shared import SM2_INITIAL_EASINESS, SM2_MAX_EASINESS, SM2_MIN_EASINESS, SM2_REPETITION_INTERVAL
 
 
-def sm2_update(
-    ease_factor: float,
-    interval_days: float,
-    repetitions: int,
+@dataclass
+class SM2Result:
+    """Result of an SM-2 update."""
+    new_easiness: float
+    new_interval: int          # days
+    new_repetitions: int
+    next_due_at: datetime
+    is_suspended: bool
+
+
+def calculate_sm2(
+    *,
     grade: int,
-) -> tuple[float, float, int, datetime]:
-    """Run one SM-2 step.
+    easiness: float,
+    repetitions: int,
+    interval: int,
+    last_reviewed_at: Optional[datetime] = None,
+) -> SM2Result:
+    """Run one iteration of the SM-2 algorithm.
 
-    Returns (new_ease_factor, new_interval_days, new_repetitions, next_due_at).
+    Parameters
+    ----------
+    grade : int
+        Quality of response, 0-5 (0=complete blackout, 5=perfect).
+    easiness : float
+        Current easiness factor (EF), typically 1.3–2.5.
+    repetitions : int
+        Number of consecutive correct repetitions.
+    interval : int
+        Current interval in days.
+    last_reviewed_at : datetime, optional
+        When the card was last reviewed. Defaults to now.
+
+    Returns
+    -------
+    SM2Result
+        Updated easiness, interval, repetitions, next due datetime, and
+        suspension flag.
     """
+    if not 0 <= grade <= 5:
+        raise ValueError(f"grade must be 0-5, got {grade}")
+
+    now = last_reviewed_at or datetime.now(timezone.utc)
+
+    # --- Grade < 3: reset repetitions, interval = 1 ---
     if grade < 3:
-        # Failed — reset
-        repetitions = 0
-        interval_days = 0
+        new_repetitions = 0
+        new_interval = 1
     else:
-        repetitions += 1
-        if repetitions == 1:
-            interval_days = 1
-        elif repetitions == 2:
-            interval_days = 6
+        new_repetitions = repetitions + 1
+        if new_repetitions == 1:
+            new_interval = 1
+        elif new_repetitions == 2:
+            new_interval = SM2_REPETITION_INTERVAL  # 6 days
         else:
-            interval_days = interval_days * ease_factor
+            new_interval = max(1, round(interval * easiness))
 
-    # Update ease factor (clamped to 1.3)
-    ease_factor = max(
-        1.3,
-        ease_factor + (0.1 - (5 - grade) * (0.08 + (5 - grade) * 0.02)),
+    # --- Update easiness factor ---
+    # EF' = EF + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02))
+    new_easiness = easiness + (0.1 - (5 - grade) * (0.08 + (5 - grade) * 0.02))
+
+    # Clamp to [1.3, 2.5]
+    new_easiness = max(SM2_MIN_EASINESS, min(SM2_MAX_EASINESS, round(new_easiness, 2)))
+
+    # --- Suspension: grade 0 repeatedly could warrant suspension ---
+    # We suspend only if grade is 0 AND repetitions were already 0 (chronic failure)
+    is_suspended = (grade == 0 and repetitions == 0 and new_easiness <= SM2_MIN_EASINESS)
+
+    next_due = now + timedelta(days=new_interval)
+
+    return SM2Result(
+        new_easiness=new_easiness,
+        new_interval=new_interval,
+        new_repetitions=new_repetitions,
+        next_due_at=next_due,
+        is_suspended=is_suspended,
     )
-
-    next_due = datetime.now(timezone.utc) + timedelta(days=interval_days)
-    return ease_factor, interval_days, repetitions, next_due
-
-
-# Grade mapping from UI labels (Hinglish)
-GRADE_MAP = {
-    "bhool_gaya": 1,   # "I forgot"
-    "mushkil": 3,       # "Difficult"
-    "aasaan": 5,        # "Easy"
-}
