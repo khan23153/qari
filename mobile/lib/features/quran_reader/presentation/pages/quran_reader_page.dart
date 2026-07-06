@@ -3,12 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:haptic_feedback/haptic_feedback.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../../core/constants/app_constants.dart';
-import '../../../core/theme/app_theme.dart';
-import '../../../data/models/word_model.dart';
-import '../../../data/models/surah_model.dart';
-import '../../../data/services/local_storage_service.dart';
-import '../../../data/services/audio_service.dart';
+import '../../../../core/constants/app_constants.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../data/models/word_model.dart';
+import '../../../../data/models/surah_model.dart';
+import '../../../../data/services/local_storage_service.dart';
+import '../../../../data/services/audio_service.dart';
 import '../widgets/ayah_widget.dart';
 import '../widgets/word_bottom_sheet.dart';
 import '../widgets/grammar_legend.dart';

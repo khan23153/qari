@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:haptic_feedback/haptic_feedback.dart';
 
-import '../../../core/constants/app_constants.dart';
-import '../../../data/services/local_storage_service.dart';
+import '../../../../core/constants/app_constants.dart';
+import '../../../../data/services/local_storage_service.dart';
 import 'path_select_page.dart';
 
 /// S1: Language Select — 3 large cards (English, اردو, Hinglish).

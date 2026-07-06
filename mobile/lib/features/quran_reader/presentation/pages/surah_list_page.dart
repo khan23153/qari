@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:haptic_feedback/haptic_feedback.dart';
 
-import '../../../core/constants/app_constants.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../../../core/constants/app_constants.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../pages/quran_reader_page.dart';
 
 /// Surah list page — browse and select surahs to read.

@@ -3,9 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:haptic_feedback/haptic_feedback.dart';
 
-import '../../../core/constants/app_constants.dart';
-import '../../../data/services/local_storage_service.dart';
-import '../../home/presentation/pages/home_page.dart';
+import '../../../../core/constants/app_constants.dart';
+import '../../../../data/services/local_storage_service.dart';
+import '../../../home/presentation/pages/home_page.dart';
 
 /// S2: Welcome/Path Select — Warm illustration + two large stacked buttons.
 /// 'Zero Se Shuru Karein' (foundation) / 'Direct Quran Par Jayein' (quran_direct).

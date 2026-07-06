@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:haptic_feedback/haptic_feedback.dart';
 
-import '../../../core/constants/app_constants.dart';
-import '../../../core/theme/app_theme.dart';
-import '../../../data/services/local_storage_service.dart';
-import '../../../data/services/audio_service.dart';
+import '../../../../core/constants/app_constants.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../data/services/local_storage_service.dart';
+import '../../../../data/services/audio_service.dart';
 import '../widgets/streak_calendar.dart';
 import '../widgets/badges_grid.dart';
 import '../widgets/settings_section.dart';

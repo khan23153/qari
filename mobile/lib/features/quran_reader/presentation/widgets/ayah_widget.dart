@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:haptic_feedback/haptic_feedback.dart';
 
-import '../../../core/constants/app_constants.dart';
-import '../../../core/theme/app_theme.dart';
-import '../../../data/models/word_model.dart';
-import '../../../core/utils/arabic_text_utils.dart';
+import '../../../../core/constants/app_constants.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../data/models/word_model.dart';
+import '../../../../core/utils/arabic_text_utils.dart';
 
 /// Ayah widget — displays an ayah with color-coded word-by-word tap targets,
 /// density controls, and an action row (play, recite, context, share).

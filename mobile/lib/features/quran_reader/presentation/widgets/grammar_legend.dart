@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../core/constants/app_constants.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../../../core/constants/app_constants.dart';
+import '../../../../core/theme/app_theme.dart';
 
 /// Grammar legend — explains the color-coding system for pos_groups.
 /// Shown as a bottom sheet from the Quran Reader settings bar.

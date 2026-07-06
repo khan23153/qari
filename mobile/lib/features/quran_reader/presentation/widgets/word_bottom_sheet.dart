@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:haptic_feedback/haptic_feedback.dart';
 
-import '../../../core/constants/app_constants.dart';
-import '../../../core/theme/app_theme.dart';
-import '../../../data/models/word_model.dart';
-import '../../../data/services/audio_service.dart';
-import '../../../data/repositories/flashcard_repository.dart';
+import '../../../../core/constants/app_constants.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../data/models/word_model.dart';
+import '../../../../data/services/audio_service.dart';
+import '../../../../data/repositories/flashcard_repository.dart';
 
 /// Word bottom sheet — shows word detail: audio autoplay, meaning,
 /// morphology, root chip, and save to flashcards button.

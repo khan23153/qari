@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:haptic_feedback/haptic_feedback.dart';
 
-import '../../../core/constants/app_constants.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../../../core/constants/app_constants.dart';
+import '../../../../core/theme/app_theme.dart';
 
 /// Settings section — language switcher, qari picker, font-size slider with
 /// live Arabic preview, theme selector, download manager, audio-consent toggle,
