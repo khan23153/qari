@@ -307,6 +307,9 @@ async def run_full_pipeline(
         # ------------------------------------------------------------------
         # Step 3: Parse corpus morphology
         # ------------------------------------------------------------------
+        # Initialize before the guarded block so later stages can safely
+        # reference it even when corpus parsing is skipped or fails.
+        roots: List[Dict[str, Any]] = []
         if settings.load_corpus and corpus_file_path:
             logger.info("step_3_parse_corpus", file=corpus_file_path)
             try:
@@ -363,8 +366,8 @@ async def run_full_pipeline(
                 # Load words
                 await loader.load_words(db, all_words)
 
-                # Load roots
-                if settings.load_corpus and corpus_file_path:
+                # Load roots (only if corpus parsing actually produced any)
+                if roots:
                     await loader.load_roots(db, roots)
 
                 # Load tajweed

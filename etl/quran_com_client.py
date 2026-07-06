@@ -10,7 +10,7 @@ The client wraps every endpoint the ETL pipeline needs:
 * ``GET /quran/verses/imlaei``              – Imlaei (simple) text
 * ``GET /quran/verses/uthmani_tajweed``     – Uthmani + tajweed markup
 * ``GET /quran/verses/translations``        – translation editions
-* ``GET /quran/verses/by_chapter/{n}``      – ayah list with word refs
+* ``GET /verses/by_chapter/{n}``            – ayah list with word refs
 * ``GET /quran/verses/{key}/by_word``       – word-by-word data
 * ``GET /audio/reciters/{id}``              – reciter info
 * ``GET /audio/reciters/{id}/by_chapter/{n}`` – per-surah audio files + segments
@@ -227,7 +227,7 @@ class QuranComClient:
     ) -> List[Dict[str, Any]]:
         """Fetch all ayahs for a surah with Uthmani, Imlaei text and translations.
 
-        Endpoint: ``GET /quran/verses/by_chapter/{surah_number}``
+        Endpoint: ``GET /verses/by_chapter/{surah_number}``
         Query params: fields=text_uthmani,text_imlaei,translations; translations=...
 
         Returns a list of ayah dicts each containing:
@@ -244,7 +244,7 @@ class QuranComClient:
 
         while True:
             data = await self._get(
-                f"/quran/verses/by_chapter/{surah_number}", params=params
+                f"/verses/by_chapter/{surah_number}", params=params
             )
             if isinstance(data, dict):
                 verses = data.get("verses", [])
@@ -272,30 +272,41 @@ class QuranComClient:
     async def get_word_translations(self, surah_number: int) -> List[Dict[str, Any]]:
         """Fetch word-by-word translations and transliterations for a surah.
 
-        Endpoint: ``GET /quran/verses/by_chapter/{surah_number}/by_word``
+        Endpoint: ``GET /verses/by_chapter/{surah_number}`` with ``words=true``.
+        The quran.com v4 API has no dedicated ``/by_word`` sub-resource; word
+        data is returned inline on each verse when ``words=true`` is set.
         Returns word dicts with: verse_key, word_number, translation,
         transliteration, arabic_text, etc.
         """
         logger.info("fetching_word_translations", surah=surah_number)
         params: Dict[str, Any] = {
-            "per_page": 500,
+            "words": "true",
+            "word_fields": "text_uthmani,location,transliteration",
+            "word_translation_language": "en",
+            "per_page": 300,
             "page": 1,
         }
         all_words: List[Dict[str, Any]] = []
 
         while True:
             data = await self._get(
-                f"/quran/verses/by_chapter/{surah_number}/by_word",
+                f"/verses/by_chapter/{surah_number}",
                 params=params,
             )
             if isinstance(data, dict):
-                words = data.get("verses", [])
+                verses = data.get("verses", [])
             elif isinstance(data, list):
-                words = data
+                verses = data
             else:
-                words = []
+                verses = []
 
-            all_words.extend(words)
+            # Words are nested on each verse; flatten them out and stamp
+            # the parent verse_key onto each word for downstream joins.
+            for verse in verses:
+                verse_key = verse.get("verse_key", "")
+                for word in verse.get("words", []):
+                    word.setdefault("verse_key", verse_key)
+                    all_words.append(word)
 
             paging = data.get("pagination", {}) if isinstance(data, dict) else {}
             total_pages = paging.get("total_pages", 1)
@@ -349,7 +360,7 @@ class QuranComClient:
     async def get_tajweed_text(self, surah_number: int) -> List[Dict[str, Any]]:
         """Fetch the Uthmani tajweed-markup text variant for a surah.
 
-        Endpoint: ``GET /quran/verses/by_chapter/{surah_number}``
+        Endpoint: ``GET /verses/by_chapter/{surah_number}``
         with ``fields=text_uthmani_tajweed``.
 
         Returns a list of verse dicts with verse_key and text_uthmani_tajweed.
@@ -364,7 +375,7 @@ class QuranComClient:
 
         while True:
             data = await self._get(
-                f"/quran/verses/by_chapter/{surah_number}", params=params
+                f"/verses/by_chapter/{surah_number}", params=params
             )
             if isinstance(data, dict):
                 verses = data.get("verses", [])
@@ -404,13 +415,13 @@ class QuranComClient:
     async def get_word_audio(self, surah_number: int) -> List[Dict[str, Any]]:
         """Fetch per-word audio URLs for a surah.
 
-        Endpoint: ``GET /quran/verses/by_chapter/{surah_number}/by_word``
-        with word audio fields.
+        Endpoint: ``GET /verses/by_chapter/{surah_number}`` with ``words=true``.
+        Per-word audio URLs are returned inline on each word.
         """
         logger.info("fetching_word_audio", surah=surah_number)
         data = await self._get(
-            f"/quran/verses/by_chapter/{surah_number}/by_word",
-            params={"fields": "audio_url", "per_page": 500},
+            f"/verses/by_chapter/{surah_number}",
+            params={"words": "true", "word_fields": "audio_url,location", "per_page": 300},
         )
         if isinstance(data, dict):
             return data.get("verses", [])
