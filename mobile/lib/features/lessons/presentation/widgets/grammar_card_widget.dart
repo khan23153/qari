@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../core/constants/app_constants.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../../../core/constants/app_constants.dart';
+import '../../../../core/theme/app_theme.dart';
 
 /// Grammar card widget — displays Arabic text with color-coding per pos_group.
 /// Fi'l = green + solid underline, Ism = blue + no underline, Harf = amber + dotted underline.

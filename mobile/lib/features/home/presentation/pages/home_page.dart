@@ -2,16 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:haptic_feedback/haptic_feedback.dart';
 
-import '../../../core/constants/app_constants.dart';
-import '../../../data/services/local_storage_service.dart';
-import '../../quran_reader/presentation/pages/surah_list_page.dart';
-import '../../recitation/presentation/pages/recitation_page.dart';
-import '../../profile/presentation/pages/profile_page.dart';
+import '../../../../core/constants/app_constants.dart';
+import '../../../../data/services/local_storage_service.dart';
+import '../../../quran_reader/presentation/pages/surah_list_page.dart';
+import '../../../recitation/presentation/pages/recitation_page.dart';
+import '../../../profile/presentation/pages/profile_page.dart';
 import '../widgets/streak_card.dart';
 import '../widgets/continue_card.dart';
 import '../widgets/daily_goal_ring.dart';
 import '../widgets/learning_path_map.dart';
-import '../../flashcards/presentation/pages/flashcard_page.dart';
+import '../../../flashcards/presentation/pages/flashcard_page.dart';
 
 /// S3: Home screen with bottom nav (4 tabs: Home, Quran, Practice, Profile).
 /// Home tab shows streak, XP, continue card, flashcards due, daily goal ring,

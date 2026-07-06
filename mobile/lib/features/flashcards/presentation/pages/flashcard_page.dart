@@ -4,11 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:haptic_feedback/haptic_feedback.dart';
 
-import '../../../core/constants/app_constants.dart';
-import '../../../core/theme/app_theme.dart';
-import '../../../data/models/flashcard_model.dart';
-import '../../../data/services/audio_service.dart';
-import '../../../data/repositories/flashcard_repository.dart';
+import '../../../../core/constants/app_constants.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../data/models/flashcard_model.dart';
+import '../../../../data/services/audio_service.dart';
+import '../../../../data/repositories/flashcard_repository.dart';
 
 /// S9: Flashcards — full-screen card Arabic front -> tap -> meaning+translit+
 /// audio+source ayah, grade buttons (Bhool gaya/Mushkil/Aasaan = SM-2 grades

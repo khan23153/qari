@@ -1,5 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
-import '../constants/app_constants.dart';
+import '../../core/constants/app_constants.dart';
 
 /// Wrapper around SharedPreferences for persistent app settings.
 /// Handles onboarding state, language, path, theme, font scale, qari,
