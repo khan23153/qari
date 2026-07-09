@@ -73,7 +73,7 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
   }
 
   Future<void> _toggleGrammarColors() async {
-    await Haptics.selection();
+    await Haptics.vibrate(HapticsType.selection);
     setState(() {
       _grammarColorsEnabled = !_grammarColorsEnabled;
       if (_grammarColorsEnabled) {
@@ -86,7 +86,7 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
   }
 
   Future<void> _toggleTajweedColors() async {
-    await Haptics.selection();
+    await Haptics.vibrate(HapticsType.selection);
     setState(() {
       _tajweedColorsEnabled = !_tajweedColorsEnabled;
       if (_tajweedColorsEnabled) {
@@ -99,7 +99,7 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
   }
 
   void _cycleDensity() async {
-    await Haptics.selection();
+    await Haptics.vibrate(HapticsType.selection);
     setState(() {
       _densityLevel = (_densityLevel + 1) % 4;
     });
@@ -108,7 +108,7 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
   }
 
   void _onWordTapped(WordModel word) {
-    Haptics.impact();
+    Haptics.vibrate(HapticsType.medium);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -122,7 +122,7 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
   }
 
   Future<void> _playAyahAudio(int index) async {
-    await Haptics.selection();
+    await Haptics.vibrate(HapticsType.selection);
     final ayah = _ayahs[index];
 
     if (_playingAyahIndex == index && _audioService.isPlaying) {

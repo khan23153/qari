@@ -60,7 +60,7 @@ class _LessonPlayerPageState extends ConsumerState<LessonPlayerPage> {
   void _onQuizAnswered(bool isCorrect) {
     if (isCorrect) {
       _correctAnswers++;
-      Haptics.impact();
+      Haptics.vibrate(HapticsType.medium);
     } else {
       Haptics.heavyImpact();
     }

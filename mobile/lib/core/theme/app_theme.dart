@@ -44,7 +44,7 @@ class AppTheme {
             color: Color(0xFF1C1B1F),
           ),
         ),
-        cardTheme: CardTheme(
+        cardTheme: CardThemeData(
           elevation: 1,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppConstants.cardBorderRadius),
@@ -114,7 +114,7 @@ class AppTheme {
             color: Color(0xFFE6E1E5),
           ),
         ),
-        cardTheme: CardTheme(
+        cardTheme: CardThemeData(
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppConstants.cardBorderRadius),
@@ -184,7 +184,7 @@ class AppTheme {
             color: Colors.black,
           ),
         ),
-        cardTheme: CardTheme(
+        cardTheme: CardThemeData(
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppConstants.cardBorderRadius),

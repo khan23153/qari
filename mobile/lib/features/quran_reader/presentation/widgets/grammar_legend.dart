@@ -84,7 +84,7 @@ class GrammarLegend extends StatelessWidget {
     // Show only the main 3 categories
     final mainGroups = ['fiil', 'ism', 'harf'];
     return mainGroups.map((group) {
-      final config = AppConstants.getGrammarConfig(group);
+      final config = AppTheme.getGrammarConfig(group);
       return Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: Row(

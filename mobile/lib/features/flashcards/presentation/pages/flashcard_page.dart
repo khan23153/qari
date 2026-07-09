@@ -55,7 +55,7 @@ class _FlashcardPageState extends ConsumerState<FlashcardPage>
   }
 
   void _flipCard() async {
-    await Haptics.impact();
+    await Haptics.vibrate(HapticsType.medium);
     if (_isFlipped) {
       _flipController.reverse();
     } else {
@@ -65,7 +65,7 @@ class _FlashcardPageState extends ConsumerState<FlashcardPage>
   }
 
   Future<void> _gradeCard(int grade) async {
-    await Haptics.impact();
+    await Haptics.vibrate(HapticsType.medium);
 
     // Record grade
     switch (grade) {

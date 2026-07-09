@@ -4,6 +4,7 @@ import 'package:haptic_feedback/haptic_feedback.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/providers.dart';
 import '../../../../data/services/local_storage_service.dart';
 import '../../../../data/services/audio_service.dart';
 import '../widgets/streak_calendar.dart';
@@ -69,7 +70,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   Future<void> _updateLanguage(String code) async {
-    await Haptics.selection();
+    await Haptics.vibrate(HapticsType.selection);
     setState(() => _selectedLanguage = code);
     final storage = LocalStorageService();
     await storage.setSelectedLanguage(code);
@@ -80,7 +81,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   Future<void> _updateQari(String qari) async {
-    await Haptics.selection();
+    await Haptics.vibrate(HapticsType.selection);
     setState(() => _selectedQari = qari);
     final storage = LocalStorageService();
     await storage.setSelectedQari(qari);
@@ -93,7 +94,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   Future<void> _updateTheme(String mode) async {
-    await Haptics.selection();
+    await Haptics.vibrate(HapticsType.selection);
     setState(() => _themeMode = mode);
     final storage = LocalStorageService();
     await storage.setThemeMode(mode);
@@ -116,14 +117,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   Future<void> _toggleAudioConsent(bool value) async {
-    await Haptics.selection();
+    await Haptics.vibrate(HapticsType.selection);
     setState(() => _audioConsent = value);
     final storage = LocalStorageService();
     await storage.setAudioConsent(value);
   }
 
   Future<void> _toggleGrammarColors(bool value) async {
-    await Haptics.selection();
+    await Haptics.vibrate(HapticsType.selection);
     setState(() {
       _grammarColors = value;
       if (value) _tajweedColors = false;
@@ -134,7 +135,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   Future<void> _toggleTajweedColors(bool value) async {
-    await Haptics.selection();
+    await Haptics.vibrate(HapticsType.selection);
     setState(() {
       _tajweedColors = value;
       if (value) _grammarColors = false;

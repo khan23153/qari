@@ -88,7 +88,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         behavior: HitTestBehavior.opaque,
         onTap: () async {
           if (index == 2) return; // Practice handled by FAB
-          await Haptics.selection();
+          await Haptics.vibrate(HapticsType.selection);
           setState(() => _currentIndex = index);
         },
         child: Column(
@@ -123,7 +123,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     return GestureDetector(
       onTap: () async {
-        await Haptics.impact();
+        await Haptics.vibrate(HapticsType.medium);
         Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => const RecitationPage()),
         );
@@ -193,7 +193,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
-            await Haptics.impact();
+            await Haptics.vibrate(HapticsType.medium);
             // Trigger refresh — in production this would call the API
             await Future.delayed(const Duration(seconds: 1));
           },

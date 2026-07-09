@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:haptic_feedback/haptic_feedback.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:record/record.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -78,7 +79,7 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
 
   Future<void> _startListening() async {
     // Play reference audio for the user to listen first
-    await Haptics.selection();
+    await Haptics.vibrate(HapticsType.selection);
     setState(() => _state = RecitationState.listening);
 
     try {
@@ -95,7 +96,7 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
   }
 
   Future<void> _startRecording() async {
-    await Haptics.impact();
+    await Haptics.vibrate(HapticsType.medium);
     setState(() => _state = RecitationState.recording);
 
     // Check mic permission
@@ -144,7 +145,7 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
 
   Future<void> _stopAndAnalyze() async {
     _durationTimer?.cancel();
-    await Haptics.selection();
+    await Haptics.vibrate(HapticsType.selection);
 
     setState(() => _state = RecitationState.analyzing);
 
@@ -224,7 +225,7 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
 
   void _onWordTapped(WordVerdict verdict) {
     if (verdict.isCorrect) return;
-    Haptics.impact();
+    Haptics.vibrate(HapticsType.medium);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,

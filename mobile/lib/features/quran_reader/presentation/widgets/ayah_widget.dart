@@ -126,7 +126,7 @@ class AyahWidget extends StatelessWidget {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Wrap(
-        alignment: WrapAlign.center,
+        alignment: WrapAlignment.center,
         spacing: 4,
         runSpacing: 8,
         children: ayah.words.map((word) {
@@ -157,7 +157,7 @@ class AyahWidget extends StatelessWidget {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Wrap(
-        alignment: WrapAlign.center,
+        alignment: WrapAlignment.center,
         spacing: 4,
         runSpacing: 4,
         children: ayah.words.map((word) {
@@ -237,7 +237,7 @@ class _AyahHeader extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         if (ayah.sajda)
-          Icon(Icons.prostrate_rounded, size: 18, color: theme.colorScheme.secondary),
+          Icon(Icons.arrow_downward_rounded, size: 18, color: theme.colorScheme.secondary),
         const Spacer(),
         if (isPlaying)
           Icon(Icons.volume_up_rounded, size: 18, color: theme.colorScheme.primary)
@@ -386,7 +386,7 @@ class _WordTapTarget extends StatelessWidget {
 
     return GestureDetector(
       onTap: () async {
-        await Haptics.selection();
+        await Haptics.vibrate(HapticsType.selection);
         onTap();
       },
       child: Container(

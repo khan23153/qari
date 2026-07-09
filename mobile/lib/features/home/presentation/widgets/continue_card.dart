@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:haptic_feedback/haptic_feedback.dart';
 
+import '../../../../core/constants/app_constants.dart';
+
 /// Continue card — shows the last lesson in progress with a resume button.
 class ContinueCard extends StatelessWidget {
   final String lessonTitle;
@@ -25,7 +27,7 @@ class ContinueCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: () async {
-          await Haptics.selection();
+          await Haptics.vibrate(HapticsType.selection);
           onTap();
         },
         borderRadius: BorderRadius.circular(AppConstants.cardBorderRadius),

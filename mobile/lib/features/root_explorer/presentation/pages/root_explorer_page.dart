@@ -231,7 +231,7 @@ class _RootExplorerPageState extends ConsumerState<RootExplorerPage> {
               isLeft: index % 2 == 0,
               theme: theme,
               onTap: () async {
-                await Haptics.selection();
+                await Haptics.vibrate(HapticsType.selection);
                 // Could navigate to ayah or word detail
               },
             )

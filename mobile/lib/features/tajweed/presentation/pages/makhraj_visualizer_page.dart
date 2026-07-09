@@ -100,7 +100,7 @@ class _MakhrajVisualizerPageState extends ConsumerState<MakhrajVisualizerPage> {
   }
 
   Future<void> _playExample() async {
-    await Haptics.selection();
+    await Haptics.vibrate(HapticsType.selection);
     setState(() => _isPlaying = true);
     try {
       // In production, play the actual audio
@@ -165,7 +165,7 @@ class _MakhrajVisualizerPageState extends ConsumerState<MakhrajVisualizerPage> {
                     label: Text(r.name),
                     selected: isSelected,
                     onSelected: (_) async {
-                      await Haptics.selection();
+                      await Haptics.vibrate(HapticsType.selection);
                       setState(() => _selectedRuleIndex = index);
                     },
                     backgroundColor: theme.colorScheme.surface,
@@ -375,7 +375,7 @@ class _MakhrajVisualizerPageState extends ConsumerState<MakhrajVisualizerPage> {
                           label: Text('${speed}x'),
                           selected: isSelected,
                           onSelected: (_) async {
-                            await Haptics.selection();
+                            await Haptics.vibrate(HapticsType.selection);
                             setState(() => _playbackSpeed = speed);
                             await _audioService.setSpeed(speed);
                           },

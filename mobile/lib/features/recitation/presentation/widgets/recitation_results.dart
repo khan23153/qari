@@ -321,7 +321,7 @@ class _WordByWordDisplay extends StatelessWidget {
       child: Directionality(
         textDirection: TextDirection.rtl,
         child: Wrap(
-          alignment: WrapAlign.center,
+          alignment: WrapAlignment.center,
           spacing: 4,
           runSpacing: 12,
           children: result.wordVerdicts.map((verdict) {
@@ -332,7 +332,7 @@ class _WordByWordDisplay extends StatelessWidget {
               onTap: isCorrect
                   ? null
                   : () async {
-                      await Haptics.impact();
+                      await Haptics.vibrate(HapticsType.medium);
                       onWordTapped(verdict);
                     },
               child: Container(

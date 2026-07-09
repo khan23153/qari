@@ -2,6 +2,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
+import '../../../../core/constants/app_constants.dart';
+
 /// Daily goal ring — circular progress showing today's lesson goal.
 class DailyGoalRing extends StatelessWidget {
   final int current;

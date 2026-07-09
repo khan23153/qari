@@ -29,7 +29,7 @@ class _WordComparisonSheetState extends State<WordComparisonSheet> {
   bool _isPlayingUser = false;
 
   Future<void> _playReference() async {
-    await Haptics.selection();
+    await Haptics.vibrate(HapticsType.selection);
     setState(() => _isPlayingReference = true);
     try {
       if (widget.verdict.referenceAudioUrl != null) {
@@ -42,7 +42,7 @@ class _WordComparisonSheetState extends State<WordComparisonSheet> {
   }
 
   Future<void> _playUserAudio() async {
-    await Haptics.selection();
+    await Haptics.vibrate(HapticsType.selection);
     setState(() => _isPlayingUser = true);
     try {
       if (widget.verdict.userAudioUrl != null) {

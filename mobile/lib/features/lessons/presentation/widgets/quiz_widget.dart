@@ -43,7 +43,7 @@ class _QuizWidgetState extends State<QuizWidget> {
     });
 
     if (_isCorrect!) {
-      Haptics.impact();
+      Haptics.vibrate(HapticsType.medium);
     } else {
       Haptics.heavyImpact();
     }
@@ -61,7 +61,7 @@ class _QuizWidgetState extends State<QuizWidget> {
     setState(() => _isCorrect = isCorrect);
 
     if (isCorrect) {
-      Haptics.impact();
+      Haptics.vibrate(HapticsType.medium);
     } else {
       Haptics.heavyImpact();
     }
@@ -83,7 +83,7 @@ class _QuizWidgetState extends State<QuizWidget> {
     setState(() => _isCorrect = allCorrect);
 
     if (allCorrect) {
-      Haptics.impact();
+      Haptics.vibrate(HapticsType.medium);
     } else {
       Haptics.heavyImpact();
     }

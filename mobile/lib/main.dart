@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 
 import 'core/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
+import 'core/providers.dart';
 import 'data/services/local_storage_service.dart';
 import 'features/onboarding/presentation/pages/language_select_page.dart';
 import 'features/home/presentation/pages/home_page.dart';
@@ -97,9 +98,3 @@ class _QariAppState extends ConsumerState<QariApp> {
     );
   }
 }
-
-/// Provider for current theme mode
-final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
-
-/// Provider for current app locale
-final appLocaleProvider = StateProvider<Locale>((ref) => const Locale('en'));

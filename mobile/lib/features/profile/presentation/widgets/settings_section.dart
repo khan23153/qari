@@ -243,7 +243,7 @@ class SettingsSection extends StatelessWidget {
             trailing: const Icon(Icons.chevron_right_rounded),
             contentPadding: EdgeInsets.zero,
             onTap: () async {
-              await Haptics.selection();
+              await Haptics.vibrate(HapticsType.selection);
               // Navigate to download manager
             },
           ),

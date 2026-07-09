@@ -30,10 +30,10 @@ class LearningPathMap extends StatelessWidget {
         final node = _pathNodes[index];
         // Zigzag pattern: offset left, center, right
         final alignment = index % 3 == 0
-            ? CrossAxisAlignment.start
+            ? Alignment.centerLeft
             : index % 3 == 1
-                ? CrossAxisAlignment.center
-                : CrossAxisAlignment.end;
+                ? Alignment.center
+                : Alignment.centerRight;
 
         return Column(
           children: [
@@ -66,7 +66,7 @@ class _PathNodeData {
 /// A single node in the learning path.
 class _PathNode extends StatelessWidget {
   final _PathNodeData node;
-  final CrossAxisAlignment alignment;
+  final Alignment alignment;
 
   const _PathNode({required this.node, required this.alignment});
 
@@ -107,7 +107,7 @@ class _PathNode extends StatelessWidget {
       child: GestureDetector(
         onTap: () async {
           if (isLocked) return;
-          await Haptics.selection();
+          await Haptics.vibrate(HapticsType.selection);
           // Navigate to lesson
         },
         child: Column(

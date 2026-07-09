@@ -78,7 +78,7 @@ class _AskScholarPageState extends ConsumerState<AskScholarPage> {
   }
 
   void _submit() async {
-    await Haptics.impact();
+    await Haptics.vibrate(HapticsType.medium);
 
     if (_textController.text.trim().isEmpty && !_isRecording) {
       ScaffoldMessenger.of(context).showSnackBar(

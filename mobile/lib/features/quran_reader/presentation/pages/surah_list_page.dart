@@ -4,6 +4,7 @@ import 'package:haptic_feedback/haptic_feedback.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../data/services/local_storage_service.dart';
 import '../pages/quran_reader_page.dart';
 
 /// Surah list page — browse and select surahs to read.
@@ -105,7 +106,7 @@ class _SurahListPageState extends ConsumerState<SurahListPage> {
                   return _SurahTile(
                     surah: surah,
                     onTap: () async {
-                      await Haptics.selection();
+                      await Haptics.vibrate(HapticsType.selection);
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => QuranReaderPage(

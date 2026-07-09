@@ -61,7 +61,7 @@ class _WordBottomSheetState extends State<WordBottomSheet> {
         surahNumber: widget.word.surahNumber,
         ayahNumber: widget.word.ayahNumber,
       );
-      await Haptics.impact();
+      await Haptics.vibrate(HapticsType.medium);
       if (mounted) setState(() {
         _isSaved = true;
         _isSaving = false;

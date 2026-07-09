@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
+import '../../../../core/constants/app_constants.dart';
+
 /// Streak card showing the current streak with a flame icon.
 class StreakCard extends StatelessWidget {
   final int streakCount;
