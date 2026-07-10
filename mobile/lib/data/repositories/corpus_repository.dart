@@ -15,7 +15,7 @@ class CorpusRepository {
   /// Fetches all surahs (metadata only, no ayah text).
   Future<List<SurahModel>> getSurahs() async {
     try {
-      final response = await _client.get('/corpus/surahs');
+      final response = await _client.get('/surahs');
       final data = response.data as List<dynamic>;
       return data
           .map((json) => SurahModel.fromJson(json as Map<String, dynamic>))
@@ -28,7 +28,7 @@ class CorpusRepository {
   /// Fetches a single surah by number.
   Future<SurahModel> getSurah(int surahNumber) async {
     try {
-      final response = await _client.get('/corpus/surahs/$surahNumber');
+      final response = await _client.get('/surahs/$surahNumber');
       return SurahModel.fromJson(response.data as Map<String, dynamic>);
     } on DioException catch (e) {
       throw ApiException.fromDioError(e);
@@ -41,7 +41,7 @@ class CorpusRepository {
   Future<List<AyahModel>> getAyahs(int surahNumber) async {
     try {
       final response = await _client.get(
-        '/corpus/surahs/$surahNumber/ayahs',
+        '/surahs/$surahNumber/ayahs',
         queryParameters: {'include_words': true},
       );
       final data = response.data as List<dynamic>;
@@ -57,7 +57,7 @@ class CorpusRepository {
   Future<AyahModel> getAyah(int surahNumber, int ayahNumber) async {
     try {
       final response = await _client.get(
-        '/corpus/surahs/$surahNumber/ayahs/$ayahNumber',
+        '/surahs/$surahNumber/ayahs/$ayahNumber',
         queryParameters: {'include_words': true},
       );
       return AyahModel.fromJson(response.data as Map<String, dynamic>);
@@ -74,7 +74,7 @@ class CorpusRepository {
   }) async {
     try {
       final response = await _client.get(
-        '/corpus/surahs/$surahNumber/ayahs',
+        '/surahs/$surahNumber/ayahs',
         queryParameters: {
           'include_words': true,
           'start': startAyah,
@@ -95,7 +95,7 @@ class CorpusRepository {
   /// Fetches word details by word ID.
   Future<WordModel> getWord(int wordId) async {
     try {
-      final response = await _client.get('/corpus/words/$wordId');
+      final response = await _client.get('/words/$wordId');
       return WordModel.fromJson(response.data as Map<String, dynamic>);
     } on DioException catch (e) {
       throw ApiException.fromDioError(e);
@@ -107,7 +107,7 @@ class CorpusRepository {
   /// Fetches all derived words from a root.
   Future<RootDetail> getRoot(int rootId) async {
     try {
-      final response = await _client.get('/corpus/roots/$rootId');
+      final response = await _client.get('/roots/$rootId');
       return RootDetail.fromJson(response.data as Map<String, dynamic>);
     } on DioException catch (e) {
       throw ApiException.fromDioError(e);
@@ -118,7 +118,7 @@ class CorpusRepository {
   Future<List<RootSummary>> searchRoots(String query) async {
     try {
       final response = await _client.get(
-        '/corpus/roots/search',
+        '/roots/search',
         queryParameters: {'q': query},
       );
       final data = response.data as List<dynamic>;

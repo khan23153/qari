@@ -28,7 +28,7 @@ class AppConstants {
       locale: Locale('ur'),
     ),
     AppLanguage(
-      code: 'hi',
+      code: 'hi_latn',
       name: 'Hinglish',
       nativeName: 'Hinglish',
       script: 'Latin',
@@ -62,8 +62,8 @@ class AppConstants {
   /// Ism (noun) = blue + no underline
   /// Harf (particle) = amber + dotted underline
   static const Map<String, GrammarColorConfig> grammarColors = {
-    'fiil': GrammarColorConfig(
-      posGroup: 'fiil',
+    'fil': GrammarColorConfig(
+      posGroup: 'fil',
       label: "Fi'l",
       labelUrdu: 'فعل',
       color: Color(0xFF2E7D32),

@@ -65,13 +65,17 @@ async def list_surahs(
 
     out = [
         SurahBrief(
+            surah_id=s.surah_number,
             surah_number=s.surah_number,
+            name=s.name_arabic,
             name_arabic=s.name_arabic,
-            name_transliteration=s.name_transliteration,
+            name_english=_surah_name_translation(s, lang.value),
             name_translation=_surah_name_translation(s, lang.value),
-            revelation_place=s.revelation_place,
+            revelation_type=s.revelation_place,
             revelation_order=s.revelation_order,
             ayah_count=s.ayah_count,
+            page_start=s.page_start,
+            page_end=s.page_start,
         )
         for s in surahs
     ]
@@ -102,14 +106,17 @@ async def get_surah(
         raise NotFoundError("Surah", surah_number)
 
     out = SurahDetail(
+        surah_id=surah.surah_number,
         surah_number=surah.surah_number,
+        name=surah.name_arabic,
         name_arabic=surah.name_arabic,
-        name_transliteration=surah.name_transliteration,
+        name_english=_surah_name_translation(surah, lang.value),
         name_translation=_surah_name_translation(surah, lang.value),
-        revelation_place=surah.revelation_place,
+        revelation_type=surah.revelation_place,
         revelation_order=surah.revelation_order,
         ayah_count=surah.ayah_count,
         page_start=surah.page_start,
+        page_end=surah.page_start,
         juz_list=surah.juz_list,
         context_story=_surah_context_story(surah, lang.value),
     )
@@ -162,24 +169,37 @@ async def get_surah_ayahs(
     )
     ayahs = list(result.scalars().all())
 
+    localized_ayah = _ayah_translation(a, lang.value)
     out = [
         AyahOut(
-            id=a.id,
+            ayah_id=a.id,
             surah_number=a.surah_number,
             ayah_number=a.ayah_number,
+            ayah_text=a.text_arabic,
             text_arabic=a.text_arabic,
-            text_translation=_ayah_translation(a, lang.value),
+            ayah_text_simple=a.text_transliteration,
             text_transliteration=a.text_transliteration,
+            translation_en=localized_ayah,
+            translation_ur=localized_ayah,
+            translation_hi=localized_ayah,
+            text_translation=localized_ayah,
             juz=a.juz,
             page=a.page,
             sajda=a.sajda,
             audio_url=a.audio_url,
             words=[
                 WordBrief(
-                    id=w.id,
-                    word_position=w.word_position,
+                    word_id=w.id,
+                    surah_number=w.surah_number,
+                    ayah_number=w.ayah_number,
+                    word_number=w.word_position,
+                    text=w.text_arabic,
                     text_arabic=w.text_arabic,
+                    transliteration=w.text_transliteration,
                     text_transliteration=w.text_transliteration,
+                    translation_en=_word_translation(w, lang.value),
+                    translation_ur=_word_translation(w, lang.value),
+                    translation_hi=_word_translation(w, lang.value),
                     translation=_word_translation(w, lang.value),
                     pos_group=w.pos_group,
                     audio_url=w.audio_url,
@@ -257,14 +277,20 @@ async def get_word_detail(
             meaning=getattr(word.root, f"meaning_{lang.value}", None),
         )
 
+    word_trans = _word_translation(word, lang.value)
     out = WordDetail(
-        id=word.id,
+        word_id=word.id,
         surah_number=word.surah_number,
         ayah_number=word.ayah_number,
-        word_position=word.word_position,
+        word_number=word.word_position,
+        text=word.text_arabic,
         text_arabic=word.text_arabic,
+        transliteration=word.text_transliteration,
         text_transliteration=word.text_transliteration,
-        translation=_word_translation(word, lang.value),
+        translation_en=word_trans,
+        translation_ur=word_trans,
+        translation_hi=word_trans,
+        translation=word_trans,
         pos_group=word.pos_group,
         pos_detail=word.pos_detail,
         morphology_features=word.morphology_features,
@@ -326,12 +352,26 @@ async def get_root_detail(
         for w in occ_result.scalars().all()
     ]
 
+    root_meaning = getattr(root, f"meaning_{lang.value}", None)
     out = RootDetail(
-        id=root.id,
+        root_id=root.id,
         root_arabic=root.root_arabic,
         root_transliteration=root.root_transliteration,
-        meaning=getattr(root, f"meaning_{lang.value}", None),
+        core_meaning=root_meaning,
+        meaning=root_meaning,
         occurrence_count=root.occurrence_count,
+        derived_words=[
+            {
+                "word": w.text_arabic,
+                "transliteration": w.text_transliteration,
+                "meaning": None,
+                "posGroup": w.pos_group,
+                "surahNumber": w.surah_number,
+                "ayahNumber": w.ayah_number,
+                "frequency": 1,
+            }
+            for w in occ_result.scalars().all()
+        ],
         occurrences=occurrences,
     )
     await cache_set(cache_key, out.model_dump(), ttl=RedisKeys.TTL_WORD)

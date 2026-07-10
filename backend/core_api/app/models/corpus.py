@@ -158,9 +158,7 @@ class Word(Base):
     __table_args__ = (
         CheckConstraint("word_position >= 1", name="ck_words_word_position_positive"),
         CheckConstraint(
-            "pos_group IS NULL OR pos_group IN ('noun','verb','particle','pronoun',"
-            "'adjective','adverb','conjunction','preposition','interjection',"
-            "'proper_noun','number')",
+            "pos_group IS NULL OR pos_group IN ('ism','fil','harf')",
             name="ck_words_pos_group",
         ),
         UniqueConstraint("surah_number", "ayah_number", "word_position", name="uq_words_surah_ayah_pos"),

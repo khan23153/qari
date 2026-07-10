@@ -247,7 +247,7 @@ class _LanguageCard extends StatelessWidget {
         return '🇬🇧';
       case 'ur':
         return '🇵🇰';
-      case 'hi':
+      case 'hi_latn':
         return '🇮🇳';
       default:
         return '🌐';

@@ -22,7 +22,7 @@ class RecitationRepository {
   }) async {
     try {
       final response = await _client.uploadFile(
-        '/recitation/upload',
+        '/recitations/upload',
         filePath: filePath,
         fieldName: 'audio',
         extraFields: {
@@ -43,7 +43,7 @@ class RecitationRepository {
   /// or null if still processing.
   Future<RecitationResult?> getRecitationResult(String sessionId) async {
     try {
-      final response = await _client.get('/recitation/sessions/$sessionId');
+      final response = await _client.get('/recitations/$sessionId');
       final data = response.data as Map<String, dynamic>;
 
       final status = data['status'] as String?;
@@ -92,7 +92,7 @@ class RecitationRepository {
   Future<List<RecitationResult>> getHistory({int limit = 20}) async {
     try {
       final response = await _client.get(
-        '/recitation/history',
+        '/recitations/history',
         queryParameters: {'limit': limit},
       );
       final data = response.data as List<dynamic>;
@@ -112,7 +112,7 @@ class RecitationRepository {
   }) async {
     try {
       final response = await _client.get(
-        '/recitation/reference',
+        '/recitations/reference',
         queryParameters: {
           'surah_number': surahNumber,
           'ayah_number': ayahNumber,
