@@ -108,7 +108,10 @@ def _ensure_reference(surah: int, ayah: int, qari_id: Optional[str]) -> bool:
         resp = httpx.get(url, timeout=10)
         resp.raise_for_status()
         payload = resp.json()
-        ayahs = payload.get("ayahs") or payload.get("data") or []
+        # The corpus route returns a bare list of ayahs.
+        ayahs = payload if isinstance(payload, list) else (
+            payload.get("ayahs") or payload.get("data") or []
+        )
         if not ayahs:
             return False
         ayah_obj = ayahs[0]
