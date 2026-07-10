@@ -31,8 +31,8 @@ services:
 
   core-api:
     build:
-      context: ../backend/core_api
-      dockerfile: Dockerfile
+      context: ../backend
+      dockerfile: core_api/Dockerfile
     restart: unless-stopped
     ports:
       - "8000:8000"
@@ -48,6 +48,7 @@ services:
         condition: service_healthy
     volumes:
       - ../backend/core_api:/app
+      - ../backend/shared:/app/shared
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   recitation-api:
