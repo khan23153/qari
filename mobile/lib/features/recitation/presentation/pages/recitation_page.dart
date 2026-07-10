@@ -44,6 +44,7 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
   int _recordingDuration = 0;
   Timer? _durationTimer;
   Stream<Amplitude>? _amplitudeStream;
+  StreamSubscription<Amplitude>? _amplitudeSubscription;
   final List<double> _waveformSamples = [];
 
   // Results
@@ -70,6 +71,7 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
   @override
   void dispose() {
     _durationTimer?.cancel();
+    _amplitudeSubscription?.cancel();
     _recordingService.dispose();
     _audioService.dispose();
     super.dispose();
@@ -96,6 +98,7 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
   }
 
   Future<void> _startRecording() async {
+    _amplitudeSubscription?.cancel();
     await Haptics.vibrate(HapticsType.medium);
     setState(() => _state = RecitationState.recording);
 
@@ -130,7 +133,7 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
 
     // Start amplitude stream for waveform
     _amplitudeStream = _recordingService.getAmplitudeStream();
-    _amplitudeStream!.listen((amplitude) {
+    _amplitudeSubscription = _amplitudeStream!.listen((amplitude) {
       // Convert dB to normalized 0-1 value
       final normalized = ((amplitude.current + 60) / 60).clamp(0.0, 1.0);
       setState(() {
@@ -195,10 +198,11 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
         _result = result;
       });
     } catch (e) {
-      // For demo: generate sample results
+      debugPrint('Recitation analysis error: $e');
       setState(() {
-        _state = RecitationState.results;
-        _result = _generateSampleResult();
+        _state = RecitationState.errorAnalysisFailed;
+        _errorMessage = 'We couldn\'t analyze your recitation. '
+            'Please check your connection and try again.';
       });
     }
   }
@@ -357,6 +361,14 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
           theme: theme,
           showNoRedMarks: true,
         );
+      case RecitationState.errorAnalysisFailed:
+        return _ErrorState(
+          icon: Icons.cloud_off_rounded,
+          title: 'Analysis Failed',
+          message: _errorMessage ?? 'Something went wrong while analyzing your recitation.',
+          onRetry: _reset,
+          theme: theme,
+        );
     }
   }
 
@@ -379,33 +391,6 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
           ),
         ],
       ),
-    );
-  }
-
-  // ─── Sample Result ───────────────────────────────────────────────────────
-
-  RecitationResult _generateSampleResult() {
-    return RecitationResult(
-      sessionId: 'demo-${DateTime.now().millisecondsSinceEpoch}',
-      surahNumber: _surahNumber,
-      ayahNumber: _ayahNumber,
-      overallScore: 0.78,
-      pronunciationScore: 0.80,
-      tajweedScore: 0.72,
-      fluencyScore: 0.85,
-      accuracyScore: 0.75,
-      wordVerdicts: [
-        WordVerdict(word: 'بِسْمِ', wordIndex: 0, isCorrect: true, confidence: 0.95),
-        WordVerdict(word: 'ٱللَّهِ', wordIndex: 1, isCorrect: true, confidence: 0.92),
-        WordVerdict(word: 'ٱلرَّحْمَٰنِ', wordIndex: 2, isCorrect: false, confidence: 0.65,
-          errorType: 'pronunciation', errorDescription: 'The "h" in rahman needs more emphasis from the throat.',
-          referenceAudioUrl: null, userAudioUrl: null),
-        WordVerdict(word: 'ٱلرَّحِيمِ', wordIndex: 3, isCorrect: true, confidence: 0.88),
-      ],
-      feedback: 'Good job! Work on the throat letter "ح" in rahman for clearer pronunciation.',
-      durationSeconds: _recordingDuration,
-      createdAt: DateTime.now(),
-      confidence: 0.85,
     );
   }
 }

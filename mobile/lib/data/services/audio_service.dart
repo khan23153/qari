@@ -22,7 +22,6 @@ class AudioService {
     if (_isInitialized) return;
     try {
       _currentReciter = await _storage.getSelectedQari();
-      await _player.setAudioSource(AudioSource.uri(Uri.parse('')));
       _isInitialized = true;
     } catch (e) {
       debugPrint('AudioService init error: $e');

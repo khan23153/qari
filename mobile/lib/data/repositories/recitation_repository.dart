@@ -29,6 +29,7 @@ class RecitationRepository {
           'surah_number': surahNumber,
           'ayah_number': ayahNumber,
         },
+        idempotencyKey: idempotencyKey,
         onProgress: onProgress,
       );
       final data = response.data as Map<String, dynamic>;

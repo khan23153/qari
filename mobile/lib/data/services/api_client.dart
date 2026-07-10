@@ -155,6 +155,7 @@ class ApiClient {
     String fieldName = 'file',
     Map<String, dynamic>? extraFields,
     ProgressCallback? onProgress,
+    String? idempotencyKey,
   }) async {
     final formData = FormData.fromMap({
       fieldName: await MultipartFile.fromFile(filePath),
@@ -165,7 +166,10 @@ class ApiClient {
       path,
       data: formData,
       options: Options(
-        headers: {'Content-Type': 'multipart/form-data'},
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey,
+        },
       ),
       onSendProgress: onProgress,
     );

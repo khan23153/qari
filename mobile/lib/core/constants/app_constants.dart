@@ -247,4 +247,5 @@ enum RecitationState {
   errorMicDenied,
   errorTooNoisy,
   errorLowConfidence,
+  errorAnalysisFailed,
 }
