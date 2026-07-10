@@ -11,6 +11,7 @@ from app.api.routes import (
     recitation,
     scholar,
     content_bundle,
+    app_release,
 )
 
 api_router = APIRouter()
@@ -24,3 +25,4 @@ api_router.include_router(flashcards.router)
 api_router.include_router(recitation.router)
 api_router.include_router(scholar.router)
 api_router.include_router(content_bundle.router)
+api_router.include_router(app_release.router)

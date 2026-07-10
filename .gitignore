@@ -46,6 +46,9 @@ ml/models/
 *.pem
 *.key
 secrets/
+infra/certs/
+# ...except the CA cert embedded in the app (needed to trust the self-signed backend)
+!mobile/android/app/src/main/res/raw/qari_ca.pem
 
 # Docker
 infra/data/

@@ -9,9 +9,11 @@ from app.api.routes import (
     recitation,
     scholar,
     content_bundle,
+    app_release,
 )
 
 __all__ = [
     "corpus", "lessons", "users", "progress",
     "flashcards", "recitation", "scholar", "content_bundle",
+    "app_release",
 ]
