@@ -73,11 +73,39 @@ uvicorn app.main:app --reload --port 8000
 
 ### ETL Pipeline
 
+Seeds the corpus mirror in `core-api`'s Postgres from two verified sources:
+
+1. **Quran.com API v4** (`api.quran.com/api/v4`) — surahs, Uthmani + Imlaei
+   text, translations, word-by-word transliteration/translation, per-word
+   audio, and ayah audio URLs with segment timestamps per qari. Tajweed
+   annotations are derived by parsing the `text_uthmani_tajweed` variant.
+2. **Quranic Arabic Corpus** (`corpus.quran.com`, Kais Dukes, GNU license) —
+   the downloadable, versioned morphology TSV, parsed offline for POS tags,
+   segments, features, lemmas, and roots.
+
 ```bash
 cd etl
 pip install -r requirements.txt
+# Download the morphology file first (corpus.quran.com) and point to it:
+export QURANIC_CORPUS_FILE=/path/to/quranic-corpus-morphology.txt
 python -m etl.run_full_pipeline
 ```
+
+The pipeline validates canonical row counts (114 surahs / 6,236 ayahs /
+77,430 words) and **fails loudly** if the Uthmani text differs from the
+previous load.
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `QURANIC_CORPUS_FILE` | `quranic-corpus-morphology.txt` | Path to the morphology TSV (required for roots/POS) |
+| `DATABASE_URL` | `postgresql+asyncpg://qari:qari@localhost:5432/qari` | Target Postgres for `core-api` |
+| `QURAN_COM_BASE_URL` | `https://api.quran.com/api/v4` | Quran.com API root |
+| `ETL_LOAD_CORPUS` | `true` | Parse morphology + extract roots |
+| `ETL_LOAD_TAJWEED` | `true` | Parse tajweed annotations |
+| `ETL_LOAD_AUDIO` | `true` | Fetch reciter audio + segments |
+| `ETL_DB_SCHEMA` | `quran` | Postgres schema for ETL tables |
+| `ETL_MAX_CONCURRENT_SURAHS` | `5` | Fetch concurrency |
+| `ETL_RATE_LIMIT_DELAY` | `0.2` | Min seconds between API requests |
 
 ### Mobile (Flutter)
 
