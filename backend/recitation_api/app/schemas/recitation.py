@@ -23,46 +23,59 @@ class RecitationUploadResponse(BaseModel):
     estimated_wait_sec: int = 30
 
 
-class RecitationWordResult(BaseModel):
-    """Per-word verdict from the ML engine."""
+class PhonemeErrorOut(BaseModel):
+    """Phoneme-level error (mirrors the mobile PhonemeError model)."""
+    phoneme: str
+    expected_phoneme: str
+    actual_phoneme: str
+    position: int
+    severity: str = "minor"
+
+
+class WordVerdictOut(BaseModel):
+    """Per-word verdict — exact shape the Flutter RecitationResult.wordVerdicts
+    expects (see mobile/lib/data/models/recitation_model.dart)."""
+    word: str
+    word_index: int
+    is_correct: bool
+    confidence: float = 1.0
+    expected_text: Optional[str] = None
+    actual_text: Optional[str] = None
+    error_type: Optional[str] = None
+    error_description: Optional[str] = None
+    reference_audio_url: Optional[str] = None
+    user_audio_url: Optional[str] = None
+    phoneme_errors: list[PhonemeErrorOut] = []
+
+
+class RecitationAnalysisResult(BaseModel):
+    """Full analysis result matching the mobile RecitationResult model.
+
+    Scores are normalised to 0..1 to match the mobile (which renders
+    `overallScore * 100`).
+    """
+    session_id: str
     surah_number: int
     ayah_number: int
-    word_position: int
-    expected_text: str
-    detected_text: Optional[str] = None
-    verdict: str
-    confidence: Optional[float] = None
-    error_detail: Optional[str] = None
-    audio_start_sec: Optional[float] = None
-    audio_end_sec: Optional[float] = None
+    overall_score: float
+    pronunciation_score: float = 0.0
+    tajweed_score: float = 0.0
+    fluency_score: float = 0.0
+    accuracy_score: float = 0.0
+    word_verdicts: list[WordVerdictOut] = []
+    reference_audio_url: Optional[str] = None
+    user_audio_url: Optional[str] = None
+    feedback: Optional[str] = None
+    feedback_urdu: Optional[str] = None
+    duration_seconds: int = 0
+    created_at: str
+    confidence: float = 1.0
 
 
-class RecitationSessionResult(BaseModel):
-    """Full recitation session result (polled or WebSocket)."""
-    session_id: uuid.UUID
-    surah_number: int
-    ayah_from: int
-    ayah_to: int
+class RecitationPollResponse(BaseModel):
+    """Wrapper the mobile repository reads: {status, result}."""
     status: str
-    total_words: Optional[int] = None
-    correct_words: Optional[int] = None
-    accuracy_pct: Optional[float] = None
-    error_message: Optional[str] = None
-    audio_duration_sec: Optional[float] = None
-    queued_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    word_results: list[RecitationWordResult] = []
-
-
-class RecitationProgressUpdate(BaseModel):
-    """Real-time progress update sent over WebSocket."""
-    session_id: uuid.UUID
-    status: str  # queued, processing, completed, failed
-    progress_pct: float = 0.0
-    processed_words: int = 0
-    total_words: Optional[int] = None
-    word_results: list[RecitationWordResult] = []
-    accuracy_pct: Optional[float] = None
+    result: Optional[RecitationAnalysisResult] = None
     error_message: Optional[str] = None
 
 

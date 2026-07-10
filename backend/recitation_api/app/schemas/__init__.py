@@ -3,8 +3,7 @@
 from app.schemas.recitation import (
     RecitationUploadRequest,
     RecitationUploadResponse,
-    RecitationWordResult,
-    RecitationSessionResult,
-    RecitationProgressUpdate,
+    RecitationAnalysisResult,
+    RecitationPollResponse,
     HealthResponse,
 )

@@ -110,24 +110,16 @@ async def recitation_websocket(websocket: WebSocket, session_id: str):
 
 
 async def _send_final_result(websocket: WebSocket, r: redis.Redis, session_id: str, session_data: dict) -> None:
-    """Send the final result payload over WebSocket."""
-    # Get all word results
-    word_results_raw = await r.lrange(f"qari:recitation:results:{session_id}", 0, -1)
-    word_results = []
-    for raw in word_results_raw:
-        try:
-            word_results.append(json.loads(raw))
-        except json.JSONDecodeError:
-            continue
+    """Send the final result payload over WebSocket (mobile-shaped)."""
+    status_val = session_data.get("status", "completed")
+    result_raw = await r.get(f"qari:recitation:result:{session_id}")
+    result = json.loads(result_raw) if result_raw else None
 
     final_payload = {
         "session_id": session_id,
-        "status": session_data.get("status", "completed"),
-        "total_words": int(session_data["total_words"]) if "total_words" in session_data else None,
-        "correct_words": int(session_data["correct_words"]) if "correct_words" in session_data else None,
-        "accuracy_pct": float(session_data["accuracy_pct"]) if "accuracy_pct" in session_data else None,
+        "status": status_val,
         "error_message": session_data.get("error_message"),
         "completed_at": session_data.get("completed_at"),
-        "word_results": word_results,
+        "result": result,
     }
     await websocket.send_json(final_payload)

@@ -87,6 +87,37 @@ flutter pub get
 flutter run
 ```
 
+### Recitation engine (recitation-api)
+
+The recitation worker runs the real ML pipeline (`ml/`: Whisper ASR + Wav2Vec2
+forced alignment + scoring). The pipeline needs an **expected-word reference**
+per ayah (normalized text + tajweed positions), resolved from:
+
+1. A file bundle directory (`QARI_REFERENCE_DATA_DIR`, files named `{surah}_{ayah}.json`),
+   or
+2. Lazily from `core-api` (`QARI_CORE_API_BASE_URL`, default `http://localhost:8000`).
+
+Generate the MVP-scope bundle (Al-Fatihah + Juz 30) from a running `core-api`:
+
+```bash
+python scripts/build_reference_bundle.py --core-api http://localhost:8000 \
+    --out /tmp/qari_reference --scope mvp
+# then set QARI_REFERENCE_DATA_DIR=/tmp/qari_reference when starting recitation-api
+```
+
+Env overrides (prefix `QARI_`):
+
+| Var | Default | Purpose |
+|---|---|---|
+| `QARI_ML_USE_STUB` | `false` | Use the deterministic stub (no GPU) instead of the real pipeline |
+| `QARI_REFERENCE_DATA_DIR` | `""` | Prebuilt per-ayah reference JSON directory |
+| `QARI_CORE_API_BASE_URL` | `http://localhost:8000` | Fallback source for reference words/tajweed |
+
+The backend returns results in the exact shape the Flutter `RecitationResult`
+model parses (`{status, result:{overall_score, word_verdicts:[...]}}`). When a
+reference/model is unavailable the engine returns a low-confidence result
+(no red marks) rather than a false verdict.
+
 ## Non-Negotiables
 
 - **No placement test.** Onboarding is two taps: language → starting point.

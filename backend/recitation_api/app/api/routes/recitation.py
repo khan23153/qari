@@ -13,8 +13,8 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.schemas.recitation import (
     RecitationUploadResponse,
-    RecitationSessionResult,
-    RecitationWordResult,
+    RecitationPollResponse,
+    RecitationAnalysisResult,
 )
 import redis.asyncio as redis
 
@@ -106,11 +106,31 @@ def _validate_wav_header(content: bytes) -> tuple[int, int, int]:
 @router.post("/upload", response_model=RecitationUploadResponse, status_code=status.HTTP_202_ACCEPTED)
 async def upload_recitation(
     surah_number: int = Form(..., ge=1, le=114),
-    ayah_from: int = Form(..., ge=1),
-    ayah_to: int = Form(..., ge=ayah_from),
+    ayah_number: Optional[int] = Form(None, ge=1, description="Single ayah (MVP mobile client)."),
+    ayah_from: Optional[int] = Form(None, ge=1),
+    ayah_to: Optional[int] = Form(None, ge=1),
     qari_id: Optional[int] = Form(None),
     audio: UploadFile = File(...),
 ):
+    # Normalise the ayah range: the Flutter client sends a single `ayah_number`,
+    # while the REST contract also supports an explicit `ayah_from`..`ayah_to`.
+    if ayah_number is not None:
+        if ayah_from is None:
+            ayah_from = ayah_number
+        if ayah_to is None:
+            ayah_to = ayah_number
+    if ayah_from is None or ayah_to is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "type": "about:blank",
+                "title": "Invalid Request",
+                "status": 422,
+                "detail": "Provide either 'ayah_number' or both 'ayah_from' and 'ayah_to'",
+            },
+        )
+    if ayah_to < ayah_from:
+        ayah_to = ayah_from
     """Upload a recitation audio file for AI evaluation.
 
     Accepts mono 16kHz WAV files. Returns 202 with a session_id.
@@ -238,9 +258,13 @@ async def upload_recitation(
     )
 
 
-@router.get("/{session_id}", response_model=RecitationSessionResult)
+@router.get("/{session_id}", response_model=RecitationPollResponse)
 async def get_recitation_result(session_id: str):
-    """Poll for recitation results by session_id."""
+    """Poll for recitation results by session_id.
+
+    Returns ``{"status": ..., "result": <RecitationAnalysisResult>}`` — the exact
+    shape the Flutter ``RecitationRepository.getRecitationResult`` parses.
+    """
     r = _get_redis()
 
     # Get session metadata
@@ -256,32 +280,20 @@ async def get_recitation_result(session_id: str):
             },
         )
 
-    # Get word results from Redis list
-    word_results_raw = await r.lrange(f"qari:recitation:results:{session_id}", 0, -1)
-    word_results = []
-    for raw in word_results_raw:
-        try:
-            wr = json.loads(raw)
-            word_results.append(RecitationWordResult(**wr))
-        except (json.JSONDecodeError, ValidationError):
-            continue
-
     status_val = session_data.get("status", "queued")
 
-    result = RecitationSessionResult(
-        session_id=uuid.UUID(session_id),
-        surah_number=int(session_data.get("surah_number", 0)),
-        ayah_from=int(session_data.get("ayah_from", 0)),
-        ayah_to=int(session_data.get("ayah_to", 0)),
-        status=status_val,
-        total_words=int(session_data["total_words"]) if "total_words" in session_data else None,
-        correct_words=int(session_data["correct_words"]) if "correct_words" in session_data else None,
-        accuracy_pct=float(session_data["accuracy_pct"]) if "accuracy_pct" in session_data else None,
-        error_message=session_data.get("error_message"),
-        audio_duration_sec=float(session_data["audio_duration_sec"]) if "audio_duration_sec" in session_data else None,
-        queued_at=session_data.get("queued_at"),
-        completed_at=session_data.get("completed_at"),
-        word_results=word_results,
-    )
+    # The completed analysis blob is stored as a single JSON document.
+    result: Optional[RecitationAnalysisResult] = None
+    if status_val == "completed":
+        raw = await r.get(f"qari:recitation:result:{session_id}")
+        if raw:
+            try:
+                result = RecitationAnalysisResult(**json.loads(raw))
+            except (json.JSONDecodeError, ValidationError) as exc:
+                logger.error("recitation.bad_result_blob", session_id=session_id, error=str(exc))
 
-    return result
+    return RecitationPollResponse(
+        status=status_val,
+        result=result,
+        error_message=session_data.get("error_message"),
+    )

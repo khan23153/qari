@@ -46,6 +46,17 @@ class Settings(BaseSettings):
     # --- Storage (audio files) ---
     audio_storage_path: str = "/tmp/qari_audio"
 
+    # --- Recitation ML engine ---
+    # When True, the worker uses the deterministic stub instead of loading the
+    # real ML pipeline. Useful for local dev without GPU / model weights.
+    ml_use_stub: bool = False
+    # Directory of per-ayah reference JSON files ({surah}_{ayah}.json) consumed
+    # by ml.tajweed.reference_store.ReferenceStore. See scripts/build_reference_bundle.py.
+    reference_data_dir: str = ""
+    # Base URL of core_api, used to lazily fetch reference words/tajweed when a
+    # prebuilt reference file is not present.
+    core_api_base_url: str = "http://localhost:8000"
+
     # --- Worker ---
     worker_enabled: bool = False
     worker_poll_interval_sec: int = 5

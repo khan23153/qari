@@ -18,6 +18,7 @@ import os
 import time
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable, Optional
 
 import redis.asyncio as redis
@@ -27,6 +28,13 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Result Redis key helpers (kept in sync with the route layer).
+SESSION_KEY = "qari:recitation:session:{session_id}"
+RESULT_KEY = "qari:recitation:result:{session_id}"
+
+# Confidence threshold below which the mobile shows NO red marks (spec §3 trust principle).
+LOW_CONFIDENCE_FALLBACK = 0.5
+
 
 # ---------------------------------------------------------------------------
 # Inference callback type
@@ -35,53 +43,349 @@ logger = get_logger(__name__)
 InferenceCallback = Callable[[dict], "asyncio.Future"]
 
 
-async def _default_inference(job: dict) -> dict:
-    """Default inference stub.
+# ---------------------------------------------------------------------------
+# Reference-store resolution (expected Quran words + tajweed positions)
+# ---------------------------------------------------------------------------
 
-    In production, replace this with an HTTP call to the ML engine service:
+_reference_store = None
 
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{settings.ml_engine_url}/infer",
-                json=job,
-                timeout=300,
-            )
-            return resp.json()
 
-    For now, we simulate a result with placeholder verdicts.
+def _get_reference_store():
+    """Lazily build a file-backed ReferenceStore from ``reference_data_dir``.
+
+    Falls back to an empty store; missing ayahs are resolved on demand from
+    core_api (see ``_ensure_reference``).
     """
+    global _reference_store
+    if _reference_store is None:
+        try:
+            from ml.tajweed.reference_store import ReferenceStore
+            data_dir = settings.reference_data_dir or None
+            _reference_store = ReferenceStore(data_dir)
+            logger.info("worker.refstore_loaded", entries=len(_reference_store))
+        except Exception as exc:  # pragma: no cover - ml deps optional in dev
+            logger.warning("worker.refstore_unavailable", error=str(exc))
+            _reference_store = None
+    return _reference_store
+
+
+def _normalize_arabic(text: str) -> str:
+    """Normalize Arabic text for alignment (strip harakat)."""
+    try:
+        from ml.inference.asr import normalize_arabic
+        return normalize_arabic(text)
+    except Exception:
+        # Minimal diacritic strip (Arabic harakat + superscript alef).
+        import re
+        return re.sub(r"[\u064B-\u065F\u0670]", "", text or "")
+
+
+def _ensure_reference(surah: int, ayah: int, qari_id: Optional[str]) -> bool:
+    """Make sure ``(surah, ayah)`` exists in the reference store.
+
+    Tries the file-backed store first, then lazily fetches the word list and
+    tajweed spans from core_api and caches it in memory. Returns True if a
+    reference is available.
+    """
+    store = _get_reference_store()
+    if store is not None and store.has(surah, ayah):
+        return True
+    if store is None:
+        return False
+
+    try:
+        import httpx
+        from ml.tajweed.reference_store import (
+            AyahReference,
+            WordReference,
+            TajweedAnnotation,
+        )
+
+        url = (
+            f"{settings.core_api_base_url}/v1/surahs/{surah}/ayahs"
+            f"?from={ayah}&to={ayah}"
+        )
+        resp = httpx.get(url, timeout=10)
+        resp.raise_for_status()
+        payload = resp.json()
+        ayahs = payload.get("ayahs") or payload.get("data") or []
+        if not ayahs:
+            return False
+        ayah_obj = ayahs[0]
+        words = []
+        for w in ayah_obj.get("words", []):
+            spans = w.get("tajweed_spans") or []
+            tajweed_checks = [
+                TajweedAnnotation(
+                    rule=s.get("rule", ""),
+                    letter=s.get("letter", ""),
+                    position=int(s.get("char_start", 0)),
+                    expected_duration_ms=0,
+                )
+                for s in spans
+            ]
+            words.append(WordReference(
+                word=_normalize_arabic(w.get("text_arabic", "")),
+                phonemes=[],
+                tajweed_checks=tajweed_checks,
+                ref_start_ms=0,
+                ref_end_ms=0,
+            ))
+        ref = AyahReference(
+            surah=surah,
+            ayah=ayah,
+            text=ayah_obj.get("text_arabic", ""),
+            normalized_text=_normalize_arabic(ayah_obj.get("text_arabic", "")),
+            words=words,
+            reference_audio_url=ayah_obj.get("audio_url", ""),
+            reference_qari="",
+        )
+        store.add(ref)
+        logger.info("worker.ref_fetched", surah=surah, ayah=ayah, words=len(words))
+        return True
+    except Exception as exc:
+        logger.warning("worker.ref_fetch_failed", surah=surah, ayah=ayah, error=str(exc))
+        return False
+
+
+def _load_audio(audio_path: str) -> tuple:
+    """Load a WAV file as a (float32 ndarray, sample_rate) tuple."""
+    try:
+        import soundfile as sf
+        audio, sr = sf.read(audio_path, dtype="float32", always_2d=False)
+        if audio.ndim > 1:
+            audio = audio.mean(axis=1)
+        return audio, int(sr)
+    except Exception:
+        pass
+    # Fallback: stdlib wave reader + numpy.
+    import wave
+    import numpy as np
+    with wave.open(audio_path, "rb") as wf:
+        sr = wf.getframerate()
+        n = wf.getnframes()
+        raw = wf.readframes(n)
+        dtype = np.int16 if wf.getsampwidth() == 2 else np.int32
+        audio = np.frombuffer(raw, dtype=dtype).astype(np.float32)
+        peak = np.iinfo(dtype).max
+        audio = audio / peak
+        if wf.getnchannels() > 1:
+            audio = audio.reshape(-1, wf.getnchannels()).mean(axis=1)
+    return audio, int(sr)
+
+
+# ---------------------------------------------------------------------------
+# Inference callbacks
+# ---------------------------------------------------------------------------
+
+async def _default_inference(job: dict) -> dict:
+    """Deterministic stub used when ``QARI_ML_USE_STUB=true`` (local dev).
+
+    Emits the same mobile-shaped result contract as the real engine so the
+    client flow can be exercised without GPU/model weights. It never marks a
+    word incorrect (no false reds).
+    """
+    await asyncio.sleep(1)
     surah = int(job.get("surah_number", 1))
     ayah_from = int(job.get("ayah_from", 1))
     ayah_to = int(job.get("ayah_to", 1))
 
-    # Simulate processing time
-    await asyncio.sleep(2)
-
-    # Generate placeholder word results
-    word_results = []
+    word_verdicts = []
+    idx = 0
     for ayah in range(ayah_from, ayah_to + 1):
-        for pos in range(1, 6):  # assume ~5 words per ayah
-            word_results.append({
-                "surah_number": surah,
-                "ayah_number": ayah,
-                "word_position": pos,
-                "expected_text": f"word_{surah}_{ayah}_{pos}",
-                "detected_text": f"word_{surah}_{ayah}_{pos}",
-                "verdict": "correct",
+        for pos in range(1, 6):
+            word_verdicts.append({
+                "word": f"word_{surah}_{ayah}_{pos}",
+                "word_index": idx,
+                "is_correct": True,
                 "confidence": 0.95,
-                "audio_start_sec": pos * 0.5,
-                "audio_end_sec": (pos + 1) * 0.5,
+                "expected_text": f"word_{surah}_{ayah}_{pos}",
+                "actual_text": f"word_{surah}_{ayah}_{pos}",
+                "error_type": None,
+                "error_description": None,
+                "reference_audio_url": None,
+                "user_audio_url": None,
+                "phoneme_errors": [],
             })
+            idx += 1
 
-    total = len(word_results)
-    correct = sum(1 for w in word_results if w["verdict"] == "correct")
-    accuracy = (correct / total * 100) if total > 0 else 0
+    return _build_result_dict(
+        job=job,
+        session_id=job.get("session_id", ""),
+        surah=surah,
+        ayah=ayah_from,
+        overall=1.0,
+        pronunciation=1.0,
+        tajweed=1.0,
+        fluency=1.0,
+        accuracy=1.0,
+        word_verdicts=word_verdicts,
+        reference_audio_url=None,
+        user_audio_url=job.get("audio_path"),
+        feedback="Stub mode — connect the ML engine for real feedback.",
+        feedback_urdu=None,
+        duration_seconds=int(float(job.get("audio_duration_sec", 0))),
+        confidence=1.0,
+    )
 
+
+async def run_ml_inference(job: dict) -> dict:
+    """Real recitation inference: Whisper ASR + Wav2Vec2 alignment + scoring.
+
+    Lazily imports the ``ml`` package so the worker process starts without GPU
+    dependencies, and degrades gracefully (no red marks) when a reference or
+    model is unavailable — per the spec's trust principle (§3).
+    """
+    from ml.pipeline import RecitationPipeline
+
+    session_id = job.get("session_id", "")
+    surah = int(job.get("surah_number", 1))
+    ayah_from = int(job.get("ayah_from", 1))
+    ayah_to = int(job.get("ayah_to", 1))
+    qari_id = job.get("qari_id")
+    audio_path = job.get("audio_path")
+    user_audio_url = job.get("audio_path")
+    duration_sec = int(float(job.get("audio_duration_sec", 0)))
+
+    if not audio_path or not os.path.exists(audio_path):
+        raise ValueError(f"Audio file missing for session {session_id}")
+
+    audio, sr = _load_audio(audio_path)
+
+    # Build the pipeline once; ReferenceStore is resolved per ayah.
+    store = _get_reference_store()
+    pipeline = RecitationPipeline(reference_store=store) if store is not None else None
+    if pipeline is None:
+        raise ValueError("Reference store unavailable — cannot run inference")
+
+    word_verdicts: list[dict] = []
+    global_idx = 0
+    fluency_total = 0.0
+    tajweed_total = 0.0
+    overall_total = 0.0
+    evaluated = 0
+    evaluated_ayahs = 0
+
+    for ayah in range(ayah_from, ayah_to + 1):
+        # Resolve reference; skip ayahs we cannot evaluate (no false reds).
+        if not _ensure_reference(surah, ayah, qari_id):
+            logger.warning("worker.skip_ayah_no_ref", session_id=session_id, surah=surah, ayah=ayah)
+            continue
+
+        try:
+            ml_result = await asyncio.to_thread(
+                pipeline.analyze, audio, sr, surah, ayah, session_id,
+                user_audio_url=user_audio_url,
+            )
+        except Exception as exc:
+            logger.error("worker.analyze_failed", session_id=session_id, surah=surah, ayah=ayah, error=str(exc))
+            continue
+
+        evaluated_ayahs += 1
+        fluency_total += ml_result.scores.fluency
+        tajweed_total += ml_result.scores.tajweed
+        overall_total += ml_result.scores.overall
+
+        for wr in ml_result.words:
+            verdict = wr.verdict
+            is_correct = verdict == "correct"
+            error_type = None if is_correct else verdict
+            error_description = _describe_errors(wr.tajweed_issues) if not is_correct else None
+            word_verdicts.append({
+                "word": wr.word or wr.reference or "",
+                "word_index": global_idx,
+                "is_correct": is_correct,
+                "confidence": wr.confidence,
+                "expected_text": wr.reference,
+                "actual_text": wr.hypothesis,
+                "error_type": error_type,
+                "error_description": error_description,
+                "reference_audio_url": ml_result.reference_audio_url or None,
+                "user_audio_url": user_audio_url,
+                "phoneme_errors": [],
+            })
+            global_idx += 1
+        evaluated += 1
+
+    if evaluated_ayahs == 0:
+        # Nothing could be evaluated — return a low-confidence result so the
+        # mobile shows the "we couldn't analyse" state (no red marks).
+        return _build_result_dict(
+            job=job, session_id=session_id, surah=surah, ayah=ayah_from,
+            overall=0.0, pronunciation=0.0, tajweed=0.0, fluency=0.0, accuracy=0.0,
+            word_verdicts=[], reference_audio_url=None, user_audio_url=user_audio_url,
+            feedback="We couldn't analyse this recitation with enough confidence.",
+            feedback_urdu=None, duration_seconds=duration_sec,
+            confidence=0.0,
+        )
+
+    n = evaluated_ayahs
+    confidence = 1.0 if evaluated_ayahs >= (ayah_to - ayah_from + 1) else 0.4
+    return _build_result_dict(
+        job=job, session_id=session_id, surah=surah, ayah=ayah_from,
+        overall=overall_total / n / 100.0,
+        pronunciation=fluency_total / n / 100.0,
+        tajweed=tajweed_total / n / 100.0,
+        fluency=fluency_total / n / 100.0,
+        accuracy=fluency_total / n / 100.0,
+        word_verdicts=word_verdicts,
+        reference_audio_url=None,
+        user_audio_url=user_audio_url,
+        feedback="AI feedback complete. Tap red words to compare your recitation.",
+        feedback_urdu=None,
+        duration_seconds=duration_sec,
+        confidence=confidence,
+    )
+
+
+def _describe_errors(tajweed_issues: list) -> Optional[str]:
+    """Build a short human-readable error hint from tajweed issues."""
+    if not tajweed_issues:
+        return "Pronunciation differs from the reference. Listen and try again."
+    parts = []
+    for issue in tajweed_issues[:2]:
+        rule = issue.get("rule") or issue.get("check_type") or "tajweed"
+        parts.append(f"Check your {rule}.")
+    return " ".join(parts) if parts else None
+
+
+def _build_result_dict(
+    *,
+    job: dict,
+    session_id: str,
+    surah: int,
+    ayah: int,
+    overall: float,
+    pronunciation: float,
+    tajweed: float,
+    fluency: float,
+    accuracy: float,
+    word_verdicts: list,
+    reference_audio_url: Optional[str],
+    user_audio_url: Optional[str],
+    feedback: Optional[str],
+    feedback_urdu: Optional[str],
+    duration_seconds: int,
+    confidence: float,
+) -> dict:
+    """Assemble the mobile-shaped result dict (RecitationAnalysisResult)."""
     return {
-        "word_results": word_results,
-        "total_words": total,
-        "correct_words": correct,
-        "accuracy_pct": round(accuracy, 2),
+        "session_id": session_id,
+        "surah_number": surah,
+        "ayah_number": ayah,
+        "overall_score": round(overall, 4),
+        "pronunciation_score": round(pronunciation, 4),
+        "tajweed_score": round(tajweed, 4),
+        "fluency_score": round(fluency, 4),
+        "accuracy_score": round(accuracy, 4),
+        "word_verdicts": word_verdicts,
+        "reference_audio_url": reference_audio_url,
+        "user_audio_url": user_audio_url,
+        "feedback": feedback,
+        "feedback_urdu": feedback_urdu,
+        "duration_seconds": duration_seconds,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "confidence": round(confidence, 4),
     }
 
 
@@ -103,7 +407,7 @@ class InferenceWorker:
         consumer_name: Optional[str] = None,
     ):
         self._redis: Optional[redis.Redis] = None
-        self._inference = inference_callback or _default_inference
+        self._inference = inference_callback or _select_default_inference()
         self._consumer_name = consumer_name or settings.recitation_consumer_name
         self._group = settings.recitation_consumer_group
         self._stream = settings.recitation_stream
@@ -227,25 +531,22 @@ class InferenceWorker:
                 "processed_words": 0,
             })
 
-            # --- Run inference ---
+            # --- Run inference (returns a mobile-shaped result dict) ---
             result = await self._inference(fields)
 
-            # --- Store word results in Redis ---
-            word_results = result.get("word_results", [])
-            results_key = f"qari:recitation:results:{session_id}"
-            for wr in word_results:
-                await self._redis.rpush(results_key, json.dumps(wr))
-            await self._redis.expire(results_key, 86400)
-
-            # --- Update session with final results ---
+            # --- Persist the full analysis result blob ---
             now = datetime.now(timezone.utc).isoformat()
+            await self._redis.set(
+                RESULT_KEY.format(session_id=session_id),
+                json.dumps(result, default=str),
+                ex=86400,
+            )
+
+            word_verdicts = result.get("word_verdicts", [])
             await self._redis.hset(
                 f"qari:recitation:session:{session_id}",
                 mapping={
                     "status": "completed",
-                    "total_words": str(result.get("total_words", len(word_results))),
-                    "correct_words": str(result.get("correct_words", 0)),
-                    "accuracy_pct": str(result.get("accuracy_pct", 0)),
                     "completed_at": now,
                 },
             )
@@ -255,10 +556,10 @@ class InferenceWorker:
                 "session_id": session_id,
                 "status": "completed",
                 "progress_pct": 100.0,
-                "processed_words": len(word_results),
-                "total_words": result.get("total_words", len(word_results)),
-                "accuracy_pct": result.get("accuracy_pct", 0),
-                "word_results": word_results,
+                "processed_words": len(word_verdicts),
+                "total_words": len(word_verdicts),
+                "word_verdicts": word_verdicts,
+                "result": result,
             })
 
             # --- Acknowledge the message ---
@@ -268,8 +569,8 @@ class InferenceWorker:
                 "worker.completed",
                 msg_id=msg_id,
                 session_id=session_id,
-                words=len(word_results),
-                accuracy=result.get("accuracy_pct", 0),
+                words=len(word_verdicts),
+                overall_score=result.get("overall_score"),
             )
 
         except Exception as exc:
@@ -308,6 +609,18 @@ class InferenceWorker:
 # ---------------------------------------------------------------------------
 # Entry point for running the worker as a standalone process
 # ---------------------------------------------------------------------------
+
+def _select_default_inference() -> InferenceCallback:
+    """Pick the default inference callback.
+
+    Uses the real ML pipeline unless ``QARI_ML_USE_STUB=true`` (local dev
+    without GPU/model weights).
+    """
+    if settings.ml_use_stub:
+        logger.info("worker.using_stub")
+        return _default_inference
+    return run_ml_inference
+
 
 async def run_worker() -> None:
     """Run the inference worker. Entry point for `python -m app.workers.inference_worker`."""
