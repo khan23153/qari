@@ -1,5 +1,7 @@
 """Badge service: evaluate and award badges based on user activity."""
 
+from typing import Optional
+
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
