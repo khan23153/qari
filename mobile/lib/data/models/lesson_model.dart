@@ -5,7 +5,7 @@ part 'lesson_model.g.dart';
 
 /// Represents a learning module/lesson in the foundation path.
 @freezed
-class LessonModel with _$LessonModel {
+abstract class LessonModel with _$LessonModel {
   const factory LessonModel({
     @JsonKey(name: 'lesson_id') required int lessonId,
     @JsonKey(name: 'module_number') required int moduleNumber,
@@ -31,7 +31,7 @@ class LessonModel with _$LessonModel {
 
 /// Represents a single concept within a lesson.
 @freezed
-class LessonConcept with _$LessonConcept {
+abstract class LessonConcept with _$LessonConcept {
   const factory LessonConcept({
     required String id,
     required String title,
@@ -51,7 +51,7 @@ class LessonConcept with _$LessonConcept {
 
 /// Represents a quiz question in a lesson.
 @freezed
-class QuizQuestionModel with _$QuizQuestionModel {
+abstract class QuizQuestionModel with _$QuizQuestionModel {
   const factory QuizQuestionModel({
     required String id,
     required QuizType type,
@@ -79,7 +79,7 @@ enum QuizType {
 
 /// Represents a match pair for drag-match questions.
 @freezed
-class MatchPair with _$MatchPair {
+abstract class MatchPair with _$MatchPair {
   const factory MatchPair({
     required String left,
     required String right,

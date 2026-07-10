@@ -5,7 +5,7 @@ part 'surah_model.g.dart';
 
 /// Represents a Surah (chapter) of the Quran.
 @freezed
-class SurahModel with _$SurahModel {
+abstract class SurahModel with _$SurahModel {
   const factory SurahModel({
     @JsonKey(name: 'surah_id') required int surahId,
     @JsonKey(name: 'surah_number') required int surahNumber,

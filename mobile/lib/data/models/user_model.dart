@@ -5,7 +5,7 @@ part 'user_model.g.dart';
 
 /// Represents the authenticated user.
 @freezed
-class UserModel with _$UserModel {
+abstract class UserModel with _$UserModel {
   const factory UserModel({
     @JsonKey(name: 'user_id') required String userId,
     @JsonKey(name: 'email') String? email,
@@ -30,7 +30,7 @@ class UserModel with _$UserModel {
 
 /// Represents the home screen response data.
 @freezed
-class HomeResponse with _$HomeResponse {
+abstract class HomeResponse with _$HomeResponse {
   const factory HomeResponse({
     required UserModel user,
     @JsonKey(name: 'streak_count') @Default(0) int streakCount,
@@ -50,7 +50,7 @@ class HomeResponse with _$HomeResponse {
 
 /// Represents a lesson progress item for the Continue card.
 @freezed
-class LessonProgress with _$LessonProgress {
+abstract class LessonProgress with _$LessonProgress {
   const factory LessonProgress({
     @JsonKey(name: 'lesson_id') required int lessonId,
     required String title,
@@ -66,7 +66,7 @@ class LessonProgress with _$LessonProgress {
 
 /// Represents a node in the learning path map.
 @freezed
-class PathNode with _$PathNode {
+abstract class PathNode with _$PathNode {
   const factory PathNode({
     required String id,
     required String label,
@@ -95,7 +95,7 @@ enum PathNodeType {
 
 /// Represents an achievement/badge.
 @freezed
-class Achievement with _$Achievement {
+abstract class Achievement with _$Achievement {
   const factory Achievement({
     required String id,
     required String title,
@@ -114,7 +114,7 @@ class Achievement with _$Achievement {
 
 /// Represents user statistics.
 @freezed
-class StatsModel with _$StatsModel {
+abstract class StatsModel with _$StatsModel {
   const factory StatsModel({
     @JsonKey(name: 'total_xp') @Default(0) int totalXp,
     @JsonKey(name: 'current_streak') @Default(0) int currentStreak,
@@ -134,7 +134,7 @@ class StatsModel with _$StatsModel {
 
 /// Represents a single day in the streak calendar.
 @freezed
-class StreakDay with _$StreakDay {
+abstract class StreakDay with _$StreakDay {
   const factory StreakDay({
     required DateTime date,
     @JsonKey(name: 'is_active') @Default(false) bool isActive,

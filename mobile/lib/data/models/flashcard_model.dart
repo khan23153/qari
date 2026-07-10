@@ -5,7 +5,7 @@ part 'flashcard_model.g.dart';
 
 /// Represents a flashcard with SM-2 spaced repetition metadata.
 @freezed
-class FlashcardModel with _$FlashcardModel {
+abstract class FlashcardModel with _$FlashcardModel {
   const factory FlashcardModel({
     @JsonKey(name: 'card_id') required int cardId,
     @JsonKey(name: 'user_id') String? userId,
@@ -62,7 +62,7 @@ extension FlashcardModelX on FlashcardModel {
 
 /// Represents a flashcard review session result.
 @freezed
-class FlashcardSessionResult with _$FlashcardSessionResult {
+abstract class FlashcardSessionResult with _$FlashcardSessionResult {
   const factory FlashcardSessionResult({
     @JsonKey(name: 'cards_reviewed') @Default(0) int cardsReviewed,
     @JsonKey(name: 'cards_again') @Default(0) int cardsAgain,

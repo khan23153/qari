@@ -5,7 +5,7 @@ part 'recitation_model.g.dart';
 
 /// Represents the result of an AI recitation analysis.
 @freezed
-class RecitationResult with _$RecitationResult {
+abstract class RecitationResult with _$RecitationResult {
   const factory RecitationResult({
     @JsonKey(name: 'session_id') required String sessionId,
     @JsonKey(name: 'surah_number') required int surahNumber,
@@ -31,7 +31,7 @@ class RecitationResult with _$RecitationResult {
 
 /// Represents the verdict for a single word in a recitation.
 @freezed
-class WordVerdict with _$WordVerdict {
+abstract class WordVerdict with _$WordVerdict {
   const factory WordVerdict({
     required String word,
     @JsonKey(name: 'word_index') required int wordIndex,
@@ -52,7 +52,7 @@ class WordVerdict with _$WordVerdict {
 
 /// Represents a phoneme-level error.
 @freezed
-class PhonemeError with _$PhonemeError {
+abstract class PhonemeError with _$PhonemeError {
   const factory PhonemeError({
     required String phoneme,
     @JsonKey(name: 'expected_phoneme') required String expectedPhoneme,

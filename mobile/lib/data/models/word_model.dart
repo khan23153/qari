@@ -5,7 +5,7 @@ part 'word_model.g.dart';
 
 /// Represents a single word in an ayah with grammar and tajweed metadata.
 @freezed
-class WordModel with _$WordModel {
+abstract class WordModel with _$WordModel {
   const factory WordModel({
     @JsonKey(name: 'word_id') required int wordId,
     @JsonKey(name: 'surah_number') required int surahNumber,
@@ -33,7 +33,7 @@ class WordModel with _$WordModel {
 
 /// Represents a tajweed rule span within a word.
 @freezed
-class TajweedSpan with _$TajweedSpan {
+abstract class TajweedSpan with _$TajweedSpan {
   const factory TajweedSpan({
     required int start,
     required int end,
@@ -48,7 +48,7 @@ class TajweedSpan with _$TajweedSpan {
 
 /// Represents a complete ayah with all its words.
 @freezed
-class AyahModel with _$AyahModel {
+abstract class AyahModel with _$AyahModel {
   const factory AyahModel({
     @JsonKey(name: 'ayah_id') required int ayahId,
     @JsonKey(name: 'surah_number') required int surahNumber,
