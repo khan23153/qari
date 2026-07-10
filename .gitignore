@@ -49,3 +49,4 @@ secrets/
 
 # Docker
 infra/data/
+infra/docker-compose.override.yml

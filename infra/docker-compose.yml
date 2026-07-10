@@ -1,8 +1,7 @@
-version: "3.9"
-
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: qari
       POSTGRES_PASSWORD: qari
@@ -19,6 +18,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
@@ -33,12 +33,14 @@ services:
     build:
       context: ../backend/core_api
       dockerfile: Dockerfile
+    restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://qari:qari@postgres:5432/qari
-      REDIS_URL: redis://redis:6379/0
-      ENV: dev
+      QARI_DATABASE_URL: postgresql+asyncpg://qari:qari@postgres:5432/qari
+      QARI_REDIS_URL: redis://redis:6379/0
+      QARI_ENVIRONMENT: dev
+      QARI_CORS_ORIGINS: http://20.244.30.169
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,12 +54,14 @@ services:
     build:
       context: ../backend/recitation_api
       dockerfile: Dockerfile
+    restart: unless-stopped
     ports:
       - "8001:8001"
     environment:
-      REDIS_URL: redis://redis:6379/1
-      CORE_API_URL: http://core-api:8000/v1
-      ENV: dev
+      QARI_REDIS_URL: redis://redis:6379/1
+      QARI_CORE_API_BASE_URL: http://core-api:8000
+      QARI_ENVIRONMENT: dev
+      QARI_CORS_ORIGINS: http://20.244.30.169
     depends_on:
       redis:
         condition: service_healthy
@@ -69,25 +73,21 @@ services:
     build:
       context: ../backend/recitation_api
       dockerfile: Dockerfile
+    restart: unless-stopped
     environment:
-      REDIS_URL: redis://redis:6379/1
-      ENV: dev
+      QARI_REDIS_URL: redis://redis:6379/1
+      QARI_ENVIRONMENT: dev
+      QARI_ML_USE_STUB: "true"
     depends_on:
       redis:
         condition: service_healthy
     volumes:
       - ../backend/recitation_api:/app
     command: python -m app.workers.inference_worker
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
 
   minio:
     image: minio/minio:latest
+    restart: unless-stopped
     ports:
       - "9000:9000"
       - "9001:9001"
