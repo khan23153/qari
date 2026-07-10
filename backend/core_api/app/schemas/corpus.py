@@ -9,7 +9,7 @@ regeneration.
 
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 
 # --- Qari ---
@@ -26,26 +26,34 @@ class QariBrief(BaseModel):
 # --- Surah ---
 
 class SurahBrief(BaseModel):
-    """Surah metadata for list views (mobile-compatible keys)."""
+    """Surah metadata for list views (mobile-compatible keys).
+
+    Field names bind to the ORM ``Surah`` attributes; the mobile-facing
+    JSON keys are applied via ``serialization_alias``.
+    """
     model_config = ConfigDict(from_attributes=True, populate_by_name=True, serialize_by_alias=True)
 
-    surah_id: int = Field(serialization_alias="surah_id")
+    id: int = Field(serialization_alias="surah_id")
     surah_number: int
-    name: str = Field(serialization_alias="name")
     name_arabic: str
-    name_english: Optional[str] = Field(default=None, serialization_alias="name_english")
-    name_translation: Optional[str] = None
-    revelation_type: str = Field(serialization_alias="revelation_type")
+    name_translation_en: Optional[str] = Field(default=None, serialization_alias="name_english")
+    name_transliteration: Optional[str] = Field(default=None, serialization_alias="name_translation")
+    revelation_place: str = Field(serialization_alias="revelation_type")
     ayah_count: int
     revelation_order: int
     page_start: Optional[int] = None
     page_end: Optional[int] = None
 
+    @computed_field
+    def name(self) -> Optional[str]:
+        """Romanized display name (mobile ``name`` key)."""
+        return self.name_transliteration
+
 
 class SurahDetail(SurahBrief):
     """Full surah metadata with context story."""
     juz_list: Optional[list] = None
-    context_story: Optional[str] = None
+    context_story_en: Optional[str] = Field(default=None, serialization_alias="context_story")
 
 
 # --- Word ---

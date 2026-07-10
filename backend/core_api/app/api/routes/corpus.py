@@ -65,15 +65,14 @@ async def list_surahs(
 
     out = [
         SurahBrief(
-            surah_id=s.surah_number,
+            id=s.id,
             surah_number=s.surah_number,
-            name=s.name_arabic,
             name_arabic=s.name_arabic,
-            name_english=_surah_name_translation(s, lang.value),
-            name_translation=_surah_name_translation(s, lang.value),
-            revelation_type=s.revelation_place,
-            revelation_order=s.revelation_order,
+            name_translation_en=_surah_name_translation(s, lang.value),
+            name_transliteration=s.name_transliteration,
+            revelation_place=s.revelation_place,
             ayah_count=s.ayah_count,
+            revelation_order=s.revelation_order,
             page_start=s.page_start,
             page_end=s.page_start,
         )

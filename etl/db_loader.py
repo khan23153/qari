@@ -36,16 +36,25 @@ metadata = sa.MetaData()
 
 surahs_table = sa.Table(
     "surahs", metadata,
-    sa.Column("id", sa.Integer, primary_key=True),  # surah number 1-114
-    sa.Column("name_arabic", sa.String(50), nullable=False),
-    sa.Column("name_simple", sa.String(50), nullable=False),
-    sa.Column("name_english", sa.String(100)),
-    sa.Column("revelation_place", sa.String(20)),  # meccan / medinan
-    sa.Column("revelation_order", sa.Integer),
-    sa.Column("verses_count", sa.Integer, nullable=False),
-    sa.Column("bismillah_pre", sa.Boolean, default=True),
-    sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
-    schema="quran",
+    sa.Column("id", sa.Integer, primary_key=True),  # equals surah number 1-114
+    sa.Column("surah_number", sa.SmallInteger, nullable=False),
+    sa.Column("name_arabic", sa.String(100), nullable=False),
+    sa.Column("name_transliteration", sa.String(200), nullable=False),
+    sa.Column("name_translation_en", sa.String(200), nullable=True),
+    sa.Column("name_translation_ur", sa.String(200), nullable=True),
+    sa.Column("name_translation_hi_latn", sa.String(200), nullable=True),
+    sa.Column("revelation_place", sa.String(20), nullable=False),
+    sa.Column("revelation_order", sa.SmallInteger, nullable=False),
+    sa.Column("ayah_count", sa.SmallInteger, nullable=False),
+    sa.Column("page_start", sa.SmallInteger, nullable=True),
+    sa.Column("juz_list", sa.JSON, nullable=True),
+    sa.Column("context_story_en", sa.Text, nullable=True),
+    sa.Column("context_story_ur", sa.Text, nullable=True),
+    sa.Column("context_story_hi_latn", sa.Text, nullable=True),
+    sa.Column("created_at", sa.TIMESTAMP(timezone=True), nullable=False,
+              server_default=sa.func.now()),
+    sa.UniqueConstraint("surah_number", name="uq_surahs_surah_number"),
+    schema="public",
 )
 
 ayahs_table = sa.Table(
@@ -62,7 +71,7 @@ ayahs_table = sa.Table(
     sa.Column("audio_duration", sa.Float),
     sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
     sa.UniqueConstraint("surah_id", "ayah_number", name="uq_ayahs_surah_ayah"),
-    schema="quran",
+    schema="public",
 )
 
 words_table = sa.Table(
@@ -84,7 +93,7 @@ words_table = sa.Table(
     sa.Column("audio_url", sa.Text),
     sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
     sa.UniqueConstraint("verse_key", "word_number", name="uq_words_verse_word"),
-    schema="quran",
+    schema="public",
 )
 
 roots_table = sa.Table(
@@ -95,7 +104,7 @@ roots_table = sa.Table(
     sa.Column("occurrence_count", sa.Integer, default=0),
     sa.Column("unique_lemmas", sa.JSON),  # list of lemma strings
     sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
-    schema="quran",
+    schema="public",
 )
 
 tajweed_table = sa.Table(
@@ -112,7 +121,7 @@ tajweed_table = sa.Table(
     sa.Column("char_end", sa.Integer),
     sa.Column("word_indices", sa.JSON),  # list of int
     sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
-    schema="quran",
+    schema="public",
 )
 
 qaris_table = sa.Table(
@@ -124,7 +133,7 @@ qaris_table = sa.Table(
     sa.Column("relative_path", sa.String(500)),
     sa.Column("file_formats", sa.JSON),
     sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
-    schema="quran",
+    schema="public",
 )
 
 checksums_table = sa.Table(
@@ -135,7 +144,7 @@ checksums_table = sa.Table(
     sa.Column("text_uthmani_checksum", sa.String(64), nullable=False),
     sa.Column("text_imlaei_checksum", sa.String(64)),
     sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
-    schema="quran",
+    schema="public",
 )
 
 
@@ -203,16 +212,39 @@ class DatabaseLoader:
             return 0
 
         rows: List[Dict[str, Any]] = []
+        # quran.com returns the *city* of revelation (makkah/madinah);
+        # core-api's check constraint expects the *type* (meccan/medinan).
+        place_map = {
+            "makkah": "meccan",
+            "mecca": "meccan",
+            "madinah": "medinan",
+            "medina": "medinan",
+        }
         for s in surahs:
+            surah_num = s.get("id") or s.get("chapter_number")
+            translated = s.get("translated_name") or {}
+            if isinstance(translated, dict):
+                name_en = translated.get("name", "")
+            else:
+                name_en = s.get("name_english", "")
+            raw_place = (s.get("revelation_place") or "").lower()
+            revelation_place = place_map.get(raw_place, "meccan")
             rows.append({
-                "id": s.get("id") or s.get("chapter_number"),
+                "id": surah_num,
+                "surah_number": surah_num,
                 "name_arabic": s.get("name_arabic", ""),
-                "name_simple": s.get("name_simple", s.get("name_complex", "")),
-                "name_english": s.get("translated_name", {}).get("name", "") if isinstance(s.get("translated_name"), dict) else s.get("english_name", ""),
-                "revelation_place": s.get("revelation_place", ""),
+                "name_transliteration": s.get("name_simple", s.get("name_complex", "")),
+                "name_translation_en": name_en,
+                "name_translation_ur": None,
+                "name_translation_hi_latn": None,
+                "revelation_place": revelation_place,
                 "revelation_order": s.get("revelation_order"),
-                "verses_count": s.get("verses_count", 0),
-                "bismillah_pre": s.get("bismillah_pre", True),
+                "ayah_count": s.get("verses_count", 0),
+                "page_start": None,
+                "juz_list": None,
+                "context_story_en": None,
+                "context_story_ur": None,
+                "context_story_hi_latn": None,
             })
 
         stmt = pg_insert(surahs_table).values(rows)
