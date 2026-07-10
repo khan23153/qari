@@ -112,20 +112,21 @@ def create_app() -> FastAPI:
     # --- Metrics middleware ---
     @app.middleware("http")
     async def metrics_middleware(request: Request, call_next):
+        import time
+
         ACTIVE_REQUESTS.inc()
         method = request.method
         endpoint = request.url.path
-        REQUEST_LATENCY.labels(method=method, endpoint=endpoint).observe(0)  # placeholder
-        import time
         start = time.time()
         try:
             response = await call_next(request)
             duration = time.time() - start
+            REQUEST_LATENCY.labels(method=method, endpoint=endpoint).observe(duration)
             REQUEST_COUNT.labels(
                 method=method,
                 endpoint=endpoint,
                 status=str(response.status_code),
-            ).observe(duration)
+            ).inc()
             return response
         finally:
             ACTIVE_REQUESTS.dec()
