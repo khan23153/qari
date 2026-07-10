@@ -7,6 +7,7 @@ from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.deps import get_db
 from app.core.exceptions import NotFoundError
 from app.models.content import Lesson, QuizQuestion
 from app.schemas.content import LessonBrief, LessonDetail, QuizQuestionOut
