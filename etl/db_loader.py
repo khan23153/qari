@@ -59,80 +59,90 @@ surahs_table = sa.Table(
 
 ayahs_table = sa.Table(
     "ayahs", metadata,
-    sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
-    sa.Column("surah_id", sa.Integer, sa.ForeignKey("quran.surahs.id"), nullable=False),
-    sa.Column("ayah_number", sa.Integer, nullable=False),
-    sa.Column("verse_key", sa.String(15), unique=True, nullable=False),  # "2:255"
-    sa.Column("text_uthmani", sa.Text, nullable=False),
-    sa.Column("text_imlaei", sa.Text),
-    sa.Column("text_uthmani_simple", sa.Text),
-    sa.Column("translations", sa.JSON),  # {edition_id: text}
-    sa.Column("audio_url", sa.Text),
-    sa.Column("audio_duration", sa.Float),
-    sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
-    sa.UniqueConstraint("surah_id", "ayah_number", name="uq_ayahs_surah_ayah"),
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("surah_id", sa.Integer, sa.ForeignKey("public.surahs.id", ondelete="CASCADE"), nullable=False),
+    sa.Column("surah_number", sa.SmallInteger, nullable=False),
+    sa.Column("ayah_number", sa.SmallInteger, nullable=False),
+    sa.Column("text_arabic", sa.Text, nullable=False),
+    sa.Column("text_translation_en", sa.Text, nullable=True),
+    sa.Column("text_translation_ur", sa.Text, nullable=True),
+    sa.Column("text_translation_hi_latn", sa.Text, nullable=True),
+    sa.Column("text_transliteration", sa.Text, nullable=True),
+    sa.Column("juz", sa.SmallInteger, nullable=True),
+    sa.Column("page", sa.SmallInteger, nullable=True),
+    sa.Column("ruku", sa.SmallInteger, nullable=True),
+    sa.Column("hizb_quarter", sa.SmallInteger, nullable=True),
+    sa.Column("sajda", sa.Boolean, nullable=True),
+    sa.Column("audio_url", sa.String(500), nullable=True),
+    sa.Column("qari_id", sa.Integer, sa.ForeignKey("public.qaris.id", ondelete="SET NULL"), nullable=True),
+    sa.Column("created_at", sa.TIMESTAMP(timezone=True), nullable=False, server_default=sa.func.now()),
+    sa.UniqueConstraint("surah_number", "ayah_number", name="uq_ayahs_surah_ayah"),
     schema="public",
 )
 
 words_table = sa.Table(
     "words", metadata,
-    sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
-    sa.Column("surah_id", sa.Integer, nullable=False),
-    sa.Column("ayah_number", sa.Integer, nullable=False),
-    sa.Column("word_number", sa.Integer, nullable=False),
-    sa.Column("verse_key", sa.String(15), nullable=False),
-    sa.Column("position", sa.Integer, nullable=False),  # global word position
-    sa.Column("arabic_text", sa.Text),
-    sa.Column("translation", sa.Text),
-    sa.Column("transliteration", sa.Text),
-    sa.Column("pos_tag", sa.String(20)),
-    sa.Column("pos_group", sa.String(10)),  # ism / fil / harf
-    sa.Column("lemma", sa.Text),
-    sa.Column("root", sa.Text),
-    sa.Column("features", sa.JSON),
-    sa.Column("audio_url", sa.Text),
-    sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
-    sa.UniqueConstraint("verse_key", "word_number", name="uq_words_verse_word"),
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("ayah_id", sa.Integer, sa.ForeignKey("public.ayahs.id", ondelete="CASCADE"), nullable=False),
+    sa.Column("surah_number", sa.SmallInteger, nullable=False),
+    sa.Column("ayah_number", sa.SmallInteger, nullable=False),
+    sa.Column("word_position", sa.SmallInteger, nullable=False),
+    sa.Column("text_arabic", sa.String(200), nullable=False),
+    sa.Column("text_transliteration", sa.String(200), nullable=True),
+    sa.Column("translation_en", sa.String(500), nullable=True),
+    sa.Column("translation_ur", sa.String(500), nullable=True),
+    sa.Column("translation_hi_latn", sa.String(500), nullable=True),
+    sa.Column("root_id", sa.Integer, sa.ForeignKey("public.roots.id", ondelete="SET NULL"), nullable=True),
+    sa.Column("pos_group", sa.String(30), nullable=True),
+    sa.Column("pos_detail", sa.String(100), nullable=True),
+    sa.Column("morphology_features", sa.JSON, nullable=True),
+    sa.Column("audio_url", sa.String(500), nullable=True),
+    sa.Column("created_at", sa.TIMESTAMP(timezone=True), nullable=False, server_default=sa.func.now()),
+    sa.UniqueConstraint("surah_number", "ayah_number", "word_position", name="uq_words_surah_ayah_pos"),
     schema="public",
 )
 
 roots_table = sa.Table(
     "roots", metadata,
-    sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
-    sa.Column("root_arabic", sa.Text, unique=True, nullable=False),
-    sa.Column("root_transliteration", sa.String(50)),
-    sa.Column("occurrence_count", sa.Integer, default=0),
-    sa.Column("unique_lemmas", sa.JSON),  # list of lemma strings
-    sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("root_arabic", sa.Text, nullable=False),
+    sa.Column("root_transliteration", sa.String(100), nullable=False),
+    sa.Column("meaning_en", sa.Text, nullable=True),
+    sa.Column("meaning_ur", sa.Text, nullable=True),
+    sa.Column("meaning_hi_latn", sa.Text, nullable=True),
+    sa.Column("occurrence_count", sa.Integer, nullable=False, server_default=sa.text("0")),
+    sa.Column("created_at", sa.TIMESTAMP(timezone=True), nullable=False, server_default=sa.func.now()),
+    sa.UniqueConstraint("root_arabic", name="uq_roots_root_arabic"),
     schema="public",
 )
 
 tajweed_table = sa.Table(
     "tajweed_annotations", metadata,
-    sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
-    sa.Column("surah_id", sa.Integer, nullable=False),
-    sa.Column("ayah_number", sa.Integer, nullable=False),
-    sa.Column("verse_key", sa.String(15), nullable=False),
-    sa.Column("rule_id", sa.Integer, nullable=False),
-    sa.Column("rule_name", sa.String(50), nullable=False),
-    sa.Column("description", sa.Text),
-    sa.Column("text_fragment", sa.Text),
-    sa.Column("char_start", sa.Integer),
-    sa.Column("char_end", sa.Integer),
-    sa.Column("word_indices", sa.JSON),  # list of int
-    sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("word_id", sa.Integer, sa.ForeignKey("public.words.id", ondelete="CASCADE"), nullable=False),
+    sa.Column("ayah_id", sa.Integer, sa.ForeignKey("public.ayahs.id", ondelete="CASCADE"), nullable=False),
+    sa.Column("rule_category", sa.String(50), nullable=False),
+    sa.Column("rule_name", sa.String(100), nullable=False),
+    sa.Column("rule_name_arabic", sa.String(100), nullable=True),
+    sa.Column("description_en", sa.Text, nullable=True),
+    sa.Column("description_ur", sa.Text, nullable=True),
+    sa.Column("description_hi_latn", sa.Text, nullable=True),
+    sa.Column("char_start", sa.SmallInteger, nullable=True),
+    sa.Column("char_end", sa.SmallInteger, nullable=True),
+    sa.Column("created_at", sa.TIMESTAMP(timezone=True), nullable=False, server_default=sa.func.now()),
     schema="public",
 )
 
 qaris_table = sa.Table(
     "qaris", metadata,
-    sa.Column("id", sa.Integer, primary_key=True),  # Quran.com reciter ID
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
     sa.Column("name", sa.String(200), nullable=False),
-    sa.Column("arabic_name", sa.String(200)),
-    sa.Column("english_name", sa.String(200)),
-    sa.Column("relative_path", sa.String(500)),
-    sa.Column("file_formats", sa.JSON),
-    sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.func.now()),
+    sa.Column("arabic_name", sa.String(200), nullable=True),
+    sa.Column("style", sa.String(50), nullable=True),
+    sa.Column("audio_base_url", sa.String(500), nullable=True),
+    sa.Column("is_active", sa.Boolean, nullable=False, server_default=sa.text("true")),
+    sa.Column("created_at", sa.TIMESTAMP(timezone=True), nullable=False, server_default=sa.func.now()),
+    sa.UniqueConstraint("name", name="uq_qaris_name"),
     schema="public",
 )
 
@@ -270,7 +280,7 @@ class DatabaseLoader:
         db: AsyncSession,
         ayahs: List[Dict[str, Any]],
     ) -> int:
-        """Upsert ayahs with text, translations, and audio metadata.
+        """Upsert ayahs (verses) with Arabic text, translations and metadata.
 
         Parameters
         ----------
@@ -278,62 +288,84 @@ class DatabaseLoader:
             Async session.
         ayahs:
             List of ayah dicts from ``QuranComClient.get_ayahs()``.
-            Each dict should have: verse_key, surah_id (or verse_number),
-            text_uthmani, text_imlaei, translations, audio_url, etc.
-
-        Returns
-        -------
-        Number of rows upserted.
+            Each dict has: verse_key, verse_number, text_uthmani,
+            text_imlaei, translations (list of {resource_id, text}),
+            juz, page, ruku, hizbQuarter, sajda, audio, etc.
         """
         if not ayahs:
             return 0
 
+        # Translation resource IDs → language column.
+        EN_IDS = {131, 20, 149}
+        UR_IDS = {85}
+
+        def _to_int(v: Any) -> Optional[int]:
+            try:
+                return int(v)
+            except (TypeError, ValueError):
+                return None
+
         rows: List[Dict[str, Any]] = []
         for a in ayahs:
             verse_key = a.get("verse_key", "")
-            # Parse surah and ayah from verse_key "2:255"
             parts = verse_key.split(":")
-            surah_id = int(parts[0]) if len(parts) == 2 else a.get("surah_id", 0)
-            ayah_num = int(parts[1]) if len(parts) == 2 else a.get("ayah_number", 0)
+            surah_num = int(parts[0]) if len(parts) == 2 else a.get("surah_id", 0)
+            ayah_num = int(parts[1]) if len(parts) == 2 else _to_int(a.get("verse_number")) or 0
 
-            # Extract translations: API returns list of {resource_id: ..., text: ...}
             translations: Dict[str, str] = {}
-            raw_translations = a.get("translations", [])
-            if isinstance(raw_translations, list):
-                for t in raw_translations:
+            raw = a.get("translations", [])
+            if isinstance(raw, list):
+                for t in raw:
                     if isinstance(t, dict):
-                        resource_id = str(t.get("resource_id", t.get("id", "")))
+                        rid = t.get("resource_id", t.get("id"))
                         text = t.get("text", "")
-                        if resource_id and text:
-                            translations[resource_id] = text
-            elif isinstance(raw_translations, dict):
-                translations = {str(k): v for k, v in raw_translations.items()}
+                        if rid is not None and text:
+                            translations[str(rid)] = text
+            elif isinstance(raw, dict):
+                translations = {str(k): v for k, v in raw.items() if v}
+
+            en = next((translations[str(i)] for i in EN_IDS if str(i) in translations), None)
+            ur = next((translations[str(i)] for i in UR_IDS if str(i) in translations), None)
+
+            audio_url = None
+            audio = a.get("audio")
+            if isinstance(audio, dict):
+                audio_url = audio.get("url")
+
+            sajda = a.get("sajda")
+            if not isinstance(sajda, bool):
+                sajda = False
 
             rows.append({
-                "surah_id": surah_id,
+                "surah_id": surah_num,
+                "surah_number": surah_num,
                 "ayah_number": ayah_num,
-                "verse_key": verse_key,
-                "text_uthmani": a.get("text_uthmani", ""),
-                "text_imlaei": a.get("text_imlaei", ""),
-                "text_uthmani_simple": a.get("text_uthmani_simple", ""),
-                "translations": translations,
-                "audio_url": a.get("audio_url", ""),
-                "audio_duration": a.get("audio_duration", 0),
+                "text_arabic": a.get("text_uthmani", "") or a.get("text_imlaei", ""),
+                "text_translation_en": en,
+                "text_translation_ur": ur,
+                "text_translation_hi_latn": None,
+                "text_transliteration": None,
+                "juz": _to_int(a.get("juz")),
+                "page": _to_int(a.get("page")),
+                "ruku": _to_int(a.get("ruku")),
+                "hizb_quarter": _to_int(a.get("hizbQuarter")),
+                "sajda": sajda,
+                "audio_url": audio_url,
+                "qari_id": _to_int(a.get("qari_id")),
             })
 
-        # Batch upsert in chunks to avoid parameter limits
         chunk_size = 200
+        update_cols = [
+            c.name for c in ayahs_table.columns
+            if c.name not in ("id", "created_at")
+        ]
         total = 0
         for i in range(0, len(rows), chunk_size):
             chunk = rows[i : i + chunk_size]
             stmt = pg_insert(ayahs_table).values(chunk)
-            update_cols = {
-                c.name: stmt.excluded[c.name]
-                for c in ayahs_table.columns
-                if c.name not in ("id",)
-            }
             stmt = stmt.on_conflict_do_update(
-                index_elements=["verse_key"], set_=update_cols
+                index_elements=["surah_number", "ayah_number"],
+                set_={c: stmt.excluded[c] for c in update_cols},
             )
             await db.execute(stmt)
             total += len(chunk)
@@ -351,66 +383,109 @@ class DatabaseLoader:
         db: AsyncSession,
         words: List[Dict[str, Any]],
     ) -> int:
-        """Upsert words with morphology, POS, and root data.
+        """Upsert words with morphology, POS, and root linkage.
 
-        Parameters
-        ----------
-        db:
-            Async session.
-        words:
-            List of word dicts.  Each should have: verse_key, word_number,
-            arabic_text, translation, transliteration, pos_tag, pos_group,
-            lemma, root, features, audio_url.
-
-        Returns
-        -------
-        Number of rows upserted.
+        Resolves ``ayah_id`` (FK → ayahs) and ``root_id`` (FK → roots)
+        from the database before inserting.
         """
         if not words:
             return 0
 
+        ayah_res = await db.execute(
+            sa.text(f"SELECT id, surah_number, ayah_number FROM {self.schema}.ayahs")
+        )
+        ayah_map: Dict[tuple, int] = {}
+        for row in ayah_res.fetchall():
+            ayah_map[(row[1], row[2])] = row[0]
+
+        root_res = await db.execute(
+            sa.text(f"SELECT id, root_arabic FROM {self.schema}.roots")
+        )
+        root_map: Dict[str, int] = {}
+        for row in root_res.fetchall():
+            root_map[row[1]] = row[0]
+
+        def _to_int(v: Any) -> int:
+            try:
+                return int(v)
+            except (TypeError, ValueError):
+                return 0
+
         rows: List[Dict[str, Any]] = []
+        skipped = 0
         for w in words:
             verse_key = w.get("verse_key", "")
             parts = verse_key.split(":")
-            surah_id = int(parts[0]) if len(parts) == 2 else w.get("surah", 0)
+            surah_num = int(parts[0]) if len(parts) == 2 else w.get("surah", 0)
             ayah_num = int(parts[1]) if len(parts) == 2 else w.get("ayah", 0)
 
+            ayah_id = ayah_map.get((surah_num, ayah_num))
+            if ayah_id is None:
+                skipped += 1
+                continue
+
+            loc = w.get("location")
+            if isinstance(loc, dict):
+                word_position = loc.get("word", loc.get("position"))
+            else:
+                word_position = None
+            if word_position is None:
+                word_position = w.get("word_number", w.get("position", 0))
+
+            translation = w.get("translation")
+            if isinstance(translation, dict):
+                translation_en = translation.get("text")
+            else:
+                translation_en = translation
+
+            transliteration = w.get("transliteration")
+            if isinstance(transliteration, dict):
+                transliteration = transliteration.get("text")
+
+            root_id = None
+            root = w.get("root")
+            if root:
+                root_id = root_map.get(root)
+
+            features = w.get("features")
+            if not isinstance(features, dict):
+                features = None
+
             rows.append({
-                "surah_id": surah_id,
+                "ayah_id": ayah_id,
+                "surah_number": surah_num,
                 "ayah_number": ayah_num,
-                "word_number": w.get("word", w.get("word_number", 0)),
-                "verse_key": verse_key,
-                "position": w.get("position", 0),
-                "arabic_text": w.get("form", w.get("arabic_text", "")),
-                "translation": w.get("translation", ""),
-                "transliteration": w.get("transliteration", ""),
-                "pos_tag": w.get("pos_tag", ""),
-                "pos_group": w.get("pos_group", ""),
-                "lemma": w.get("lemma"),
-                "root": w.get("root"),
-                "features": w.get("features", {}),
-                "audio_url": w.get("audio_url", ""),
+                "word_position": _to_int(word_position),
+                "text_arabic": w.get("text_uthmani") or w.get("text") or w.get("form") or "",
+                "text_transliteration": transliteration,
+                "translation_en": translation_en,
+                "translation_ur": None,
+                "translation_hi_latn": None,
+                "root_id": root_id,
+                "pos_group": w.get("pos_group"),
+                "pos_detail": w.get("pos_tag"),
+                "morphology_features": features,
+                "audio_url": w.get("audio_url"),
             })
 
         chunk_size = 500
+        update_cols = [
+            c.name for c in words_table.columns
+            if c.name not in ("id", "created_at")
+        ]
         total = 0
         for i in range(0, len(rows), chunk_size):
             chunk = rows[i : i + chunk_size]
             stmt = pg_insert(words_table).values(chunk)
-            update_cols = {
-                c.name: stmt.excluded[c.name]
-                for c in words_table.columns
-                if c.name not in ("id",)
-            }
             stmt = stmt.on_conflict_do_update(
-                index_elements=["verse_key", "word_number"], set_=update_cols
+                index_elements=["surah_number", "ayah_number", "word_position"],
+                set_={c: stmt.excluded[c] for c in update_cols},
             )
             await db.execute(stmt)
             total += len(chunk)
 
         await db.commit()
-        logger.info("loaded_words", count=total)
+        logger.info("loaded_words", count=total, skipped_ayahs=skipped)
         return total
 
     # ------------------------------------------------------------------
@@ -422,20 +497,7 @@ class DatabaseLoader:
         db: AsyncSession,
         roots: List[Dict[str, Any]],
     ) -> int:
-        """Upsert root entries.
-
-        Parameters
-        ----------
-        db:
-            Async session.
-        roots:
-            List of root dicts from ``CorpusParser.extract_roots()``.
-            Each has: root, transliteration, occurrence_count, unique_lemmas.
-
-        Returns
-        -------
-        Number of rows upserted.
-        """
+        """Upsert root entries (Arabic root + transliteration + counts)."""
         if not roots:
             return 0
 
@@ -444,22 +506,24 @@ class DatabaseLoader:
             rows.append({
                 "root_arabic": r.get("root", ""),
                 "root_transliteration": r.get("transliteration", ""),
+                "meaning_en": None,
+                "meaning_ur": None,
+                "meaning_hi_latn": None,
                 "occurrence_count": r.get("occurrence_count", 0),
-                "unique_lemmas": r.get("unique_lemmas", []),
             })
 
         chunk_size = 500
+        update_cols = [
+            c.name for c in roots_table.columns
+            if c.name not in ("id", "created_at")
+        ]
         total = 0
         for i in range(0, len(rows), chunk_size):
             chunk = rows[i : i + chunk_size]
             stmt = pg_insert(roots_table).values(chunk)
-            update_cols = {
-                c.name: stmt.excluded[c.name]
-                for c in roots_table.columns
-                if c.name not in ("id",)
-            }
             stmt = stmt.on_conflict_do_update(
-                index_elements=["root_arabic"], set_=update_cols
+                index_elements=["root_arabic"],
+                set_={c: stmt.excluded[c] for c in update_cols},
             )
             await db.execute(stmt)
             total += len(chunk)
@@ -477,65 +541,110 @@ class DatabaseLoader:
         db: AsyncSession,
         annotations: List[Dict[str, Any]],
     ) -> int:
-        """Upsert tajweed annotations.
+        """Upsert tajweed annotations, resolving word_id and ayah_id FKs.
 
         Parameters
         ----------
         db:
             Async session.
         annotations:
-            List of annotation dicts from ``TajweedParser.parse_ayah()``.
-            Each should have: surah, ayah, rule_id, rule_name, description,
-            text_fragment, char_start, char_end, word_indices.
-
-        Returns
-        -------
-        Number of rows upserted.
+            List of parsed-ayah dicts from ``TajweedParser.parse_ayah()``,
+            each with keys: surah, ayah, annotations (list of rule dicts
+            with rule_id, rule_name, description, char_start, char_end,
+            word_indices).
         """
         if not annotations:
             return 0
 
+        ayah_res = await db.execute(
+            sa.text(f"SELECT id, surah_number, ayah_number FROM {self.schema}.ayahs")
+        )
+        ayah_map: Dict[tuple, int] = {}
+        for row in ayah_res.fetchall():
+            ayah_map[(row[1], row[2])] = row[0]
+
+        word_res = await db.execute(
+            sa.text(
+                f"SELECT id, surah_number, ayah_number, word_position, text_arabic "
+                f"FROM {self.schema}.words "
+                f"ORDER BY surah_number, ayah_number, word_position"
+            )
+        )
+        words_by_ayah: Dict[tuple, List[tuple]] = {}
+        for row in word_res.fetchall():
+            words_by_ayah.setdefault((row[1], row[2]), []).append(
+                (row[3], row[0], row[4] or "")
+            )
+
         rows: List[Dict[str, Any]] = []
-        for ann in annotations:
-            surah = ann.get("surah", 0)
-            ayah = ann.get("ayah", 0)
-            verse_key = ann.get("verse_key", f"{surah}:{ayah}")
-
-            # The annotation may be nested inside a per-ayah result dict
-            ann_list = ann.get("annotations", [ann]) if "annotations" in ann else [ann]
-
-            for a in ann_list:
+        skipped = 0
+        for parsed in annotations:
+            surah = parsed.get("surah", 0)
+            ayah = parsed.get("ayah", 0)
+            ayah_id = ayah_map.get((surah, ayah))
+            if ayah_id is None:
+                skipped += 1
+                continue
+            ayah_words = words_by_ayah.get((surah, ayah), [])
+            for ann in parsed.get("annotations", []):
+                word_id = self._resolve_tajweed_word(ann, ayah_words)
+                if word_id is None:
+                    word_id = ayah_words[0][1] if ayah_words else None
+                if word_id is None:
+                    continue
+                rule_name = ann.get("rule_name", "")
                 rows.append({
-                    "surah_id": surah,
-                    "ayah_number": ayah,
-                    "verse_key": verse_key,
-                    "rule_id": a.get("rule_id", 0),
-                    "rule_name": a.get("rule_name", ""),
-                    "description": a.get("description", ""),
-                    "text_fragment": a.get("text_fragment", ""),
-                    "char_start": a.get("char_start", 0),
-                    "char_end": a.get("char_end", 0),
-                    "word_indices": a.get("word_indices", []),
+                    "word_id": word_id,
+                    "ayah_id": ayah_id,
+                    "rule_category": ann.get("rule_category") or rule_name,
+                    "rule_name": rule_name,
+                    "rule_name_arabic": ann.get("rule_name_arabic"),
+                    "description_en": ann.get("description_en")
+                    or ann.get("description", ""),
+                    "description_ur": ann.get("description_ur"),
+                    "description_hi_latn": ann.get("description_hi_latn"),
+                    "char_start": ann.get("char_start"),
+                    "char_end": ann.get("char_end"),
                 })
+
+        # Idempotent reload: clear existing annotations before re-inserting.
+        await db.execute(sa.text(f"DELETE FROM {self.schema}.tajweed_annotations"))
 
         chunk_size = 500
         total = 0
         for i in range(0, len(rows), chunk_size):
             chunk = rows[i : i + chunk_size]
-            # Tajweed annotations are replaced wholesale on each load
-            # (delete + insert would be cleaner, but upsert by all columns
-            #  except id works for idempotency)
             stmt = pg_insert(tajweed_table).values(chunk)
-            # No unique constraint to conflict on — use on_conflict_do_nothing
-            # to avoid duplicates on re-run.  For a true upsert, a unique
-            # constraint on (verse_key, rule_id, char_start) would be needed.
-            stmt = stmt.on_conflict_do_nothing()
             await db.execute(stmt)
             total += len(chunk)
 
         await db.commit()
-        logger.info("loaded_tajweed", count=total)
+        logger.info("loaded_tajweed", count=total, skipped_ayahs=skipped)
         return total
+
+    @staticmethod
+    def _resolve_tajweed_word(
+        ann: Dict[str, Any], ayah_words: List[tuple]
+    ) -> Optional[int]:
+        """Find the word id a tajweed annotation's char range falls in."""
+        if not ayah_words:
+            return None
+        indices = ann.get("word_indices")
+        if indices:
+            idx = int(indices[0])
+            if 0 <= idx < len(ayah_words):
+                return ayah_words[idx][1]
+        char_start = ann.get("char_start")
+        if char_start is None:
+            return None
+        pos = 0
+        for _wpos, wid, wtext in ayah_words:
+            start = pos
+            end = pos + len(wtext)
+            if start <= char_start < end:
+                return wid
+            pos = end + 1
+        return None
 
     # ------------------------------------------------------------------
     # Qaris
@@ -564,13 +673,16 @@ class DatabaseLoader:
 
         rows: List[Dict[str, Any]] = []
         for q in qaris:
+            qid = q.get("id")
+            if qid is None:
+                continue
             rows.append({
-                "id": q.get("id"),
+                "id": qid,
                 "name": q.get("name", q.get("reciter_name", "")),
                 "arabic_name": q.get("arabic_name", ""),
-                "english_name": q.get("english_name", q.get("name", "")),
-                "relative_path": q.get("relative_path", ""),
-                "file_formats": q.get("file_formats", []),
+                "style": q.get("style"),
+                "audio_base_url": q.get("audio_url") or q.get("relative_path", ""),
+                "is_active": True,
             })
 
         stmt = pg_insert(qaris_table).values(rows)

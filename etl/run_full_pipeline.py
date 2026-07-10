@@ -233,14 +233,26 @@ async def run_full_pipeline(
                 all_ayahs.extend(ayahs)
 
                 # Word-by-word translations
+                # `get_word_translations` returns a FLAT list of word dicts,
+                # each already stamped with its parent `verse_key`.
+                local_words_by_ayah: Dict[int, List[Dict[str, Any]]] = {}
                 try:
                     word_data = await client.get_word_translations(surah_num)
-                    for w in word_data:
-                        # Word data comes as per-verse with nested words
-                        verse_key = w.get("verse_key", "")
-                        for word in w.get("words", []):
-                            word["verse_key"] = verse_key
-                            all_words.append(word)
+                    for word in word_data:
+                        vk = word.get("verse_key", "")
+                        vparts = vk.split(":")
+                        try:
+                            a_num = (
+                                int(vparts[1]) if len(vparts) == 2 else 0
+                            )
+                        except (ValueError, TypeError):
+                            a_num = 0
+                        word.setdefault(
+                            "form",
+                            word.get("text_uthmani") or word.get("text", ""),
+                        )
+                        all_words.append(word)
+                        local_words_by_ayah.setdefault(a_num, []).append(word)
                 except QuranComError as exc:
                     result.warnings.append(
                         f"Failed to fetch word translations for surah {surah_num}: {exc}"
@@ -249,13 +261,17 @@ async def run_full_pipeline(
                 # Tajweed text
                 if settings.load_tajweed:
                     try:
+
                         tajweed_verses = await client.get_tajweed_text(surah_num)
                         for tv in tajweed_verses:
                             ayah_num = tv.get("verse_number", 0)
                             tajweed_text = tv.get("text_uthmani_tajweed", "")
                             verse_key = tv.get("verse_key", f"{surah_num}:{ayah_num}")
                             parsed = tajweed_parser.parse_ayah(
-                                surah_num, ayah_num, tajweed_text
+                                surah_num,
+                                ayah_num,
+                                tajweed_text,
+                                local_words_by_ayah.get(ayah_num),
                             )
                             parsed["verse_key"] = verse_key
                             all_tajweed.append(parsed)
@@ -363,15 +379,15 @@ async def run_full_pipeline(
                 # Load ayahs
                 await loader.load_ayahs(db, all_ayahs)
 
-                # Load words
-                await loader.load_words(db, all_words)
-
-                # Load roots (only if corpus parsing actually produced any)
+                # Load roots (must precede words so root_id resolves)
                 if roots:
                     await loader.load_roots(db, roots)
 
-                # Load tajweed
-                if settings.load_tajweed:
+                # Load words
+                await loader.load_words(db, all_words)
+
+                # Load tajweed (must follow words so word_id resolves)
+                if settings.load_tajweed and all_tajweed:
                     await loader.load_tajweed(db, all_tajweed)
 
                 # Load qaris

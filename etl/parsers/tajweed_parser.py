@@ -2,22 +2,19 @@
 Tajweed annotation parser.
 
 Quran.com provides a ``text_uthmani_tajweed`` field that embeds HTML-like
-markup tags into the Uthmani Arabic text.  Each tag encodes a tajweed rule
-and wraps the letters it applies to:
+markup into the Uthmani Arabic text.  Each tajweed rule is wrapped in a
+``<tajweed>`` tag carrying a ``class`` attribute naming the rule, and the
+tag wraps the letters the rule applies to::
 
-    <tajweed-rule-id>...letters...</tajweed-rule-id>
+    <tajweed class=ham_wasl>ٱ</tajweed>
+    <tajweed class=madda_normal>ـٰ</tajweed>
+    <tajweed class=ikhafa>...</tajweed>
 
-Rule IDs (from Quran.com / Tanzil.net):
+(The legacy Tanzil markup used numeric tags ``<1>..</1>``; Quran.com v4
+uses the descriptive ``class`` names listed in :data:`TAJWEED_CLASSES`.)
 
-    1  – ghunnah (nasalisation, 2-harakat)
-    2  – qalqalah (echoing / bouncing sound)
-    3  – ikhfa   (concealment)
-    4  – idgham  (merging)
-    5  – iqlab   (conversion)
-    6  – madd_2  (elongation, 2 harakat — normal)
-    7  – madd_4_5 (elongation, 4-5 harakat — due to hamza)
-    8  – madd_6  (elongation, 6 harakat — due to sukoon)
-    9  – madd_2_necessary (necessary elongation, 2 harakat)
+Verse-end markers appear as ``<span class=end>١</span>`` (the ayah number)
+and are stripped entirely so the plain text aligns with the word forms.
 
 The parser strips the markup, extracts each annotation with its rule,
 the Arabic text fragment it covers, and maps the annotation to the
@@ -35,42 +32,162 @@ logger = structlog.get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Tajweed rule mapping
+# Tajweed rule mapping (Quran.com v4 / Tanzil class names)
 # ---------------------------------------------------------------------------
+#
+# Each entry maps a markup ``class`` to its category, English/Arabic names,
+# and descriptions in English, Urdu, and Romanised Hindi.
 
-TAJWEED_RULES: Dict[int, str] = {
-    1: "ghunnah",
-    2: "qalqalah",
-    3: "ikhfa",
-    4: "idgham",
-    5: "iqlab",
-    6: "madd_2",
-    7: "madd_4_5",
-    8: "madd_6",
-    9: "madd_2_necessary",
+TAJWEED_CLASSES: Dict[str, Dict[str, str]] = {
+    "ham_wasl": {
+        "category": "hamza",
+        "name_en": "Hamzat al-Wasl",
+        "name_ar": "همزة الوصل",
+        "desc_en": "Connecting hamza that is silent when the word is preceded by another.",
+        "desc_ur": "وہ ہمزہ جو ادائیگی میں خاموش رہتا ہے اور صرف وصل کے لیے ہوتا ہے۔",
+        "desc_hi": "Woh hamza jo adaigi mein khamosh rehta hai aur wasl ke liye hota hai.",
+    },
+    "laam_shamsiyah": {
+        "category": "laam",
+        "name_en": "Lam Shamsiyyah",
+        "name_ar": "اللام الشمسية",
+        "desc_en": "Sun-letter lam that is merged into the following sun letter.",
+        "desc_ur": "شمسی حرف کے ساتھ لام جو شمسی حرف میں مدغم ہو جاتی ہے۔",
+        "desc_hi": "Shamsi harf ke sath lam jo shamsi harf mein idgham ho jati hai.",
+    },
+    "madda_normal": {
+        "category": "madd",
+        "name_en": "Madd Tabii (Natural)",
+        "name_ar": "المد الطبيعي",
+        "desc_en": "Natural elongation of two harakat.",
+        "desc_ur": "قدرتی مد جو دو حرکات تک ہوتی ہے۔",
+        "desc_hi": "Qudrati madd jo do harakat tak hoti hai.",
+    },
+    "madda_permissible": {
+        "category": "madd",
+        "name_en": "Madd Ja'iz (Permissible)",
+        "name_ar": "المد الجائز",
+        "desc_en": "Permissible elongation of two to four harakat due to a hamza.",
+        "desc_ur": "جوازی مد جو دو سے چار حرکات تک ہو سکتی ہے۔",
+        "desc_hi": "Jaiz madd jo do se char harakat tak ho sakti hai.",
+    },
+    "madda_obligatory": {
+        "category": "madd",
+        "name_en": "Madd Wajib (Obligatory)",
+        "name_ar": "المد الواجب",
+        "desc_en": "Obligatory elongation of four to five harakat due to a hamza.",
+        "desc_ur": "واجب مد جو چار سے پانچ حرکات تک ہوتی ہے۔",
+        "desc_hi": "Wajib madd jo char se panch harakat tak hoti hai.",
+    },
+    "madda_necessary": {
+        "category": "madd",
+        "name_en": "Madd Lazim (Necessary)",
+        "name_ar": "المد اللازم",
+        "desc_en": "Necessary elongation of six harakat due to a sukoon.",
+        "desc_ur": "لازمی مد جو چھ حرکات تک ہوتی ہے۔",
+        "desc_hi": "Lazmi madd jo chhah harakat tak hoti hai.",
+    },
+    "slnt": {
+        "category": "madd",
+        "name_en": "Madd 'Arid (Silent/Weak)",
+        "name_ar": "المد العارض",
+        "desc_en": "Incidental elongation that appears only at a stopping pause.",
+        "desc_ur": "عارضی مد جو صرف وقف کے وقت طویل ہو جاتی ہے۔",
+        "desc_hi": "Aarzi madd jo sirf waqf ke waqt taweel ho jati hai.",
+    },
+    "ghunnah": {
+        "category": "ghunnah",
+        "name_en": "Ghunnah (Nasalisation)",
+        "name_ar": "الغنة",
+        "desc_en": "Nasal resonance of two harakat on mim/nun with shadda.",
+        "desc_ur": "نون یا میم کی تشدید کے ساتھ ناک سے آواز کا نکلنا۔",
+        "desc_hi": "Noon ya meem ki tashdeed ke sath naak se awaz ka nikalna.",
+    },
+    "ikhafa": {
+        "category": "noon",
+        "name_en": "Ikhfa (Concealment)",
+        "name_ar": "الإخفاء",
+        "desc_en": "Concealment of noon/tanween before certain letters.",
+        "desc_ur": "نون یا تنوین کو کچھ حروف کے سامنے چھپا کر ادا کرنا۔",
+        "desc_hi": "Noon ya tanween ko kuch huroof ke samne chhupa kar ada karna.",
+    },
+    "ikhafa_shafawi": {
+        "category": "mim",
+        "name_en": "Ikhfa Shafawi (Labial Concealment)",
+        "name_ar": "الإخفاء الشفوي",
+        "desc_en": "Concealment of mim before ba.",
+        "desc_ur": "میم کے بعد آنے والے باء کو چھپا کر ادا کرنا۔",
+        "desc_hi": "Meem ke baad aane wale baa ko chhupa kar ada karna.",
+    },
+    "qalaqah": {
+        "category": "qalqalah",
+        "name_en": "Qalqalah (Echoing)",
+        "name_ar": "القلقلة",
+        "desc_en": "Bouncing/echoing sound on qaf, ta, ba, jim, dal.",
+        "desc_ur": "قاف، طاء، باء، جیم، دال پر وقف کے ساتھ آواز کا واپس آنے کا اثر۔",
+        "desc_hi": "Qaf, taa, baa, jeem, dal par waqf ke sath awaz ka wapas aane ka asar.",
+    },
+    "idgham_ghunnah": {
+        "category": "noon",
+        "name_en": "Idgham bi Ghunnah (Merging with Nasalisation)",
+        "name_ar": "الإدغام بغنة",
+        "desc_en": "Merging of noon/tanween into ya, waw, mim, nun, lam, ra with ghunnah.",
+        "desc_ur": "نون یا تنوین کو یاء، واو، میم، نون، لم، راء میں بغنّہ ملا کر ادا کرنا۔",
+        "desc_hi": "Noon ya tanween ko ya, waw, meem, noon, lam, ra mein bi-ghunnah mila kar ada karna.",
+    },
+    "idgham_wo_ghunnah": {
+        "category": "noon",
+        "name_en": "Idgham bila Ghunnah (Merging without Nasalisation)",
+        "name_ar": "الإدغام بغير غنة",
+        "desc_en": "Merging of noon/tanween into similar/near letters without ghunnah.",
+        "desc_ur": "نون یا تنوین کو بغیر غنّہ کے ملا کر ادا کرنا۔",
+        "desc_hi": "Noon ya tanween ko baghair ghunnah ke mila kar ada karna.",
+    },
+    "idgham_shafawi": {
+        "category": "mim",
+        "name_en": "Idgham Shafawi (Labial Merging)",
+        "name_ar": "الإدغام الشفوي",
+        "desc_en": "Merging of mim into a following mim.",
+        "desc_ur": "میم کے بعد آنے والی میم کو ملا کر ادا کرنا۔",
+        "desc_hi": "Meem ke baad aane wali meem ko mila kar ada karna.",
+    },
+    "iqlab": {
+        "category": "noon",
+        "name_en": "Iqlab (Conversion)",
+        "name_ar": "الإقلاب",
+        "desc_en": "Conversion of noon/tanween into mim before ba.",
+        "desc_ur": "نون یا تنوین کو باء کے سامنے میم میں بدلنا۔",
+        "desc_hi": "Noon ya tanween ko baa ke samne meem mein badalna.",
+    },
+    "idgham_mutajanisayn": {
+        "category": "noon",
+        "name_en": "Idgham Mutajanisayn (Similar Letters)",
+        "name_ar": "الإدغام المتجانسين",
+        "desc_en": "Merging of noon/tanween into letters of the same articulation point.",
+        "desc_ur": "نون یا تنوین کا ہم مخرج حروف میں ملنا۔",
+        "desc_hi": "Noon ya tanween ka ham-makhraj huroof mein milna.",
+    },
 }
 
-# Reverse lookup: rule name → id
-TAJWEED_RULE_IDS: Dict[str, int] = {v: k for k, v in TAJWEED_RULES.items()}
-
-# Human-readable descriptions for each rule
-TAJWEED_DESCRIPTIONS: Dict[int, str] = {
-    1: "Ghunnah: nasalisation lasting two harakat on mim/nun with shadda",
-    2: "Qalqalah: bouncing/echoing sound on letters qutb jad, qalqala sugra",
-    3: "Ikhfa: concealment of noon/tanween before certain letters",
-    4: "Idgham: merging of noon/tanween into ya, waw, mim, nun, lam, ra",
-    5: "Iqlab: conversion of noon/tanween to mim before ba",
-    6: "Madd Tabii: natural elongation of two harakat",
-    7: "Madd Muttasil: elongation of 4-5 harakat due to hamza",
-    8: "Madd Lazim: obligatory elongation of 6 harakat due to sukoon",
-    9: "Madd Lazim Kalimi: necessary elongation of 2 harakat",
+# Reverse lookup: class name → info (avoids repeated dict lookups)
+_DEFAULT_RULE = {
+    "category": "other",
+    "name_en": "Unknown",
+    "name_ar": "",
+    "desc_en": "",
+    "desc_ur": "",
+    "desc_hi": "",
 }
 
-# Regex to match <n>...</n> tags where n is a digit 1-9
-_TAG_RE = re.compile(r"<(\d)>(.*?)</\1>", re.DOTALL)
 
-# Regex to find all tags (including self-closing or malformed) for stripping
-_ALL_TAG_RE = re.compile(r"</?\d+>")
+# Regex to match <tajweed class=X>...</tajweed> tags
+_TAG_RE = re.compile(r"<tajweed class=([^>\s]+)>(.*?)</tajweed>", re.DOTALL)
+
+# Regex to match verse-end spans (e.g. <span class=end>١</span>) — stripped whole
+_SPAN_RE = re.compile(r"<span[^>]*>.*?</span>", re.DOTALL)
+
+# Regex to remove tajweed tag markers while keeping their content
+_TAJWEED_MARKUP_RE = re.compile(r"</?tajweed[^>]*>")
 
 
 class TajweedParser:
@@ -117,7 +234,8 @@ class TajweedParser:
 
             surah, ayah,
             plain_text (markup stripped),
-            annotations (list of dicts with rule_id, rule_name, description,
+            annotations (list of dicts with rule_category, rule_name,
+                         rule_name_arabic, description_en/ur/hi_latn,
                          text_fragment, char_start, char_end, word_indices),
         """
         self._stats["ayahs"] += 1
@@ -151,8 +269,14 @@ class TajweedParser:
 
     @staticmethod
     def _strip_markup(text: str) -> str:
-        """Remove all tajweed markup tags, returning plain Uthmani text."""
-        return _ALL_TAG_RE.sub("", text)
+        """Remove all tajweed markup, returning plain Uthmani text.
+
+        Verse-end ``<span class=end>..</span>`` markers are removed entirely
+        (including their digit) so the result aligns with the word forms.
+        """
+        text = _SPAN_RE.sub("", text)
+        text = _TAJWEED_MARKUP_RE.sub("", text)
+        return text
 
     # ------------------------------------------------------------------
     # Annotation extraction
@@ -171,14 +295,13 @@ class TajweedParser:
         """
         annotations: List[Dict[str, Any]] = []
 
-        # Build a mapping from positions in the tagged text to positions
-        # in the plain text, then extract each tag's content.
         for match in _TAG_RE.finditer(tajweed_text):
-            rule_id = int(match.group(1))
+            class_name = match.group(1)
             fragment = match.group(2)
 
-            rule_name = TAJWEED_RULES.get(rule_id, f"unknown_{rule_id}")
-            description = TAJWEED_DESCRIPTIONS.get(rule_id, "")
+            info = TAJWEED_CLASSES.get(class_name, _DEFAULT_RULE)
+            rule_name = info["name_en"] or class_name
+            description_en = info["desc_en"]
 
             # Compute the character offset of this fragment in the plain text.
             # Everything before this match in the tagged text, minus tags,
@@ -189,9 +312,15 @@ class TajweedParser:
             char_end = char_start + len(fragment)
 
             annotations.append({
-                "rule_id": rule_id,
+                "rule_category": info["category"],
                 "rule_name": rule_name,
-                "description": description,
+                "rule_name_arabic": info["name_ar"],
+                "description_en": description_en,
+                "description_ur": info["desc_ur"],
+                "description_hi_latn": info["desc_hi"],
+                # Backwards-compatible aliases consumed by loaders
+                "rule_id": class_name,
+                "description": description_en,
                 "text_fragment": fragment,
                 "char_start": char_start,
                 "char_end": char_end,
@@ -218,7 +347,11 @@ class TajweedParser:
             return annotations
 
         # Build word boundaries in the plain text
-        word_forms = [w.get("form", "") for w in words]
+        word_forms = [
+            w.get("form") or w.get("text_uthmani") or w.get("text_arabic")
+            or w.get("text") or ""
+            for w in words
+        ]
         word_boundaries: List[Tuple[int, int]] = []
         pos = 0
         for form in word_forms:

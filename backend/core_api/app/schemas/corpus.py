@@ -63,7 +63,9 @@ class TajweedAnnotationOut(BaseModel):
     rule_category: str
     rule_name: str
     rule_name_arabic: Optional[str] = None
-    description: Optional[str] = None
+    description_en: Optional[str] = None
+    description_ur: Optional[str] = None
+    description_hi_latn: Optional[str] = None
     char_start: Optional[int] = None
     char_end: Optional[int] = None
     model_config = ConfigDict(from_attributes=True)

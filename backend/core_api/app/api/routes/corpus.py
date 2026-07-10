@@ -168,7 +168,6 @@ async def get_surah_ayahs(
     )
     ayahs = list(result.scalars().all())
 
-    localized_ayah = _ayah_translation(a, lang.value)
     out = [
         AyahOut(
             ayah_id=a.id,
@@ -178,10 +177,10 @@ async def get_surah_ayahs(
             text_arabic=a.text_arabic,
             ayah_text_simple=a.text_transliteration,
             text_transliteration=a.text_transliteration,
-            translation_en=localized_ayah,
-            translation_ur=localized_ayah,
-            translation_hi=localized_ayah,
-            text_translation=localized_ayah,
+            translation_en=_ayah_translation(a, lang.value),
+            translation_ur=_ayah_translation(a, lang.value),
+            translation_hi=_ayah_translation(a, lang.value),
+            text_translation=_ayah_translation(a, lang.value),
             juz=a.juz,
             page=a.page,
             sajda=a.sajda,
@@ -301,7 +300,9 @@ async def get_word_detail(
                 rule_category=t.rule_category,
                 rule_name=t.rule_name,
                 rule_name_arabic=t.rule_name_arabic,
-                description=_tajweed_description(t, lang.value),
+                description_en=t.description_en,
+                description_ur=t.description_ur,
+                description_hi_latn=t.description_hi_latn,
                 char_start=t.char_start,
                 char_end=t.char_end,
             )
