@@ -60,7 +60,7 @@ dependencies:
   share_plus: ^9.0.0
 
   # Internationalization
-  intl: ^0.19.0
+  intl: ^0.20.0
   bidi: ^2.0.13
 
   # Utils
