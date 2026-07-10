@@ -7,7 +7,7 @@ from app.schemas.corpus import (
     WordBrief, WordDetail, WordOccurrence,
 )
 from app.schemas.content import (
-    BadgeOut, BadgeAwarded as BadgeAwardedSchema, LessonBrief, LessonDetail,
+    BadgeOut, LessonBrief, LessonDetail,
     QuizQuestionOut, UserBadgeOut,
 )
 from app.schemas.user import (
@@ -18,4 +18,5 @@ from app.schemas.user import (
     OnboardingRequest, OnboardingResponse, RecentBadge,
     RecitationSessionOut, RecitationWordResultOut,
     ScholarQuestionCreate, ScholarQuestionOut, UserOut,
+    BadgeAwarded as BadgeAwardedSchema,
 )
