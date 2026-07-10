@@ -51,6 +51,7 @@ class LocalStorageService {
   static const _kUserId = 'user_id';
   static const _kDailyGoal = 'daily_goal';
   static const _kStreakCount = 'streak_count';
+  static const _kDataVersion = 'backend_data_version';
 
   // ─── Onboarding ──────────────────────────────────────────────────────────
   Future<bool> isOnboardingComplete() async {
@@ -213,6 +214,20 @@ class LocalStorageService {
   Future<void> setStreakCount(int count) async {
     await ensureInitialized();
     await _prefs.setInt(_kStreakCount, count);
+  }
+
+  // ─── Backend data version ─────────────────────────────────────────────────
+  /// Bumped on the backend whenever corpus/content changes. The app compares
+  /// this against the release manifest so it can refresh cached content when
+  /// the backend data changes (the "auto-update content" behaviour).
+  Future<int> getBackendDataVersion() async {
+    await ensureInitialized();
+    return _prefs.getInt(_kDataVersion) ?? 0;
+  }
+
+  Future<void> setBackendDataVersion(int version) async {
+    await ensureInitialized();
+    await _prefs.setInt(_kDataVersion, version);
   }
 
   // ─── Clear All ───────────────────────────────────────────────────────────

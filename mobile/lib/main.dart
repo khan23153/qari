@@ -7,6 +7,9 @@ import 'core/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
 import 'core/providers.dart';
 import 'data/services/local_storage_service.dart';
+import 'data/services/api_client.dart';
+import 'features/update/app_update_service.dart';
+import 'features/update/app_update_dialog.dart';
 import 'features/onboarding/presentation/pages/language_select_page.dart';
 import 'features/home/presentation/pages/home_page.dart';
 
@@ -44,6 +47,8 @@ class _QariAppState extends ConsumerState<QariApp> {
   bool _hasSelectedLanguage = false;
   bool _hasSelectedPath = false;
   bool _isLoading = true;
+  bool _updateShown = false;
+  final AppUpdateService _updateService = AppUpdateService(ApiClient());
 
   @override
   void initState() {
@@ -60,6 +65,55 @@ class _QariAppState extends ConsumerState<QariApp> {
       _hasSelectedPath = path != null;
       _isLoading = false;
     });
+    _checkForUpdate();
+  }
+
+  /// Ask the backend whether a newer app build is available and, if so,
+  /// show the OTA update dialog.  Fails soft — never blocks the app.
+  Future<void> _checkForUpdate() async {
+    if (_updateShown) return;
+    final decision = await _updateService.checkForUpdate();
+    if (decision == null || !mounted) return;
+    _updateShown = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: !decision.mandatory,
+        builder: (_) => AppUpdateDialog(
+          service: _updateService,
+          release: decision.release,
+          mandatory: decision.mandatory,
+        ),
+      );
+    });
+    // Independently of a binary update, detect backend *content* changes so
+    // the app auto-refreshes its cached data when the backend is updated.
+    _checkBackendDataVersion(decision.release.dataVersion);
+  }
+
+  /// If the backend's ``data_version`` advanced past what we last saw, the
+  /// corpus/content changed server-side — bump our stored version and let the
+  /// user know content was refreshed.  Content is fetched live, so this just
+  /// ensures caches/in-flight reads pick up the new data.
+  Future<void> _checkBackendDataVersion(int latest) async {
+    if (latest <= 0) return;
+    final storage = LocalStorageService();
+    final seen = await storage.getBackendDataVersion();
+    if (latest > seen) {
+      await storage.setBackendDataVersion(latest);
+      if (seen > 0 && mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('New content is available — refreshing.'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        });
+      }
+    }
   }
 
   @override
