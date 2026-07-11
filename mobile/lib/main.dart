@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,26 +16,50 @@ import 'features/onboarding/presentation/pages/language_select_page.dart';
 import 'features/home/presentation/pages/home_page.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  // Catch async/Dart errors and show them instead of hard-crashing.
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
 
-  // Lock orientation to portrait for consistent Quran reading
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-  ]);
+    FlutterError.onError = (details) {
+      debugPrint('FlutterError: ${details.exception}\n${details.stack}');
+    };
 
-  // Initialize Firebase
-  try {
-    await Firebase.initializeApp();
-  } catch (e) {
-    // Firebase may not be configured in dev — continue without it
-    debugPrint('Firebase init skipped: $e');
-  }
+    // Lock orientation to portrait for consistent Quran reading
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+    ]);
 
-  runApp(
-    const ProviderScope(
-      child: QariApp(),
-    ),
-  );
+    // Initialize Firebase (safe — may be unconfigured)
+    try {
+      await Firebase.initializeApp();
+    } catch (e) {
+      debugPrint('Firebase init skipped: $e');
+    }
+
+    runApp(
+      const ProviderScope(
+        child: QariApp(),
+      ),
+    );
+  }, (error, stack) {
+    debugPrint('Uncaught error: $error\n$stack');
+    runApp(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          body: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'App error:\n\n$error\n\n$stack',
+                style: const TextStyle(fontSize: 13, color: Colors.red),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  });
 }
 
 class QariApp extends ConsumerStatefulWidget {
