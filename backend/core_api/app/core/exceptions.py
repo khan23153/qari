@@ -8,6 +8,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+import structlog
+
+logger = structlog.get_logger(__name__)
+
 
 class ProblemException(Exception):
     """Raised to produce an RFC 7807 problem+json response."""
@@ -150,10 +154,20 @@ async def validation_exception_handler(
 
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Catch-all for unhandled exceptions → 500 problem+json."""
+    # Always log the full traceback so failures are diagnosable.
+    logger.error("unhandled_exception", path=request.url.path, exc_info=exc)
+
+    from app.core.config import settings
+
+    detail = "An unexpected error occurred"
+    # Surface the underlying error message outside production to aid debugging.
+    if not settings.is_production:
+        detail = f"{type(exc).__name__}: {exc}"
+
     return _problem_response(
         status=500,
         title="Internal Server Error",
-        detail="An unexpected error occurred",
+        detail=detail,
         instance=str(request.url.path),
     )
 

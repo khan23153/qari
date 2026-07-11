@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 /// Central configuration for the Qari app.
@@ -5,7 +6,34 @@ class AppConstants {
   AppConstants._();
 
   // ─── API ────────────────────────────────────────────────────────────────
-  static const String baseUrl = 'https://api.qari.app/v1';
+  /// Base URL for the core API.
+  ///
+  /// Release builds use the production Cloudflare Tunnel:
+  ///   https://api.qari.app/v1  →  /v1/auth/signup
+  ///
+  /// Debug/profile builds default to a locally-running backend so the app works
+  /// out of the box without internet:
+  ///   • Android emulator  → http://10.0.2.2:8000/v1  (10.0.2.2 = host loopback)
+  ///   • iOS sim / desktop → http://localhost:8000/v1
+  /// The `/v1` prefix is required (the backend mounts every route under `/v1`).
+  /// The network security config already permits cleartext traffic to
+  /// localhost / 10.0.2.2.
+  ///
+  /// Override either mode at build/run time, e.g.:
+  ///   flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000/v1
+  static String get baseUrl {
+    if (kReleaseMode) {
+      return const String.fromEnvironment(
+        'API_BASE_URL',
+        defaultValue: 'https://api.qari.app/v1',
+      );
+    }
+    const env = String.fromEnvironment('API_BASE_URL');
+    if (env.isNotEmpty) return env;
+    return defaultTargetPlatform == TargetPlatform.android
+        ? 'http://10.0.2.2:8000/v1'
+        : 'http://localhost:8000/v1';
+  }
   static const String audioCdnUrl = 'https://audio.qari.app';
   static const int apiTimeoutSeconds = 30;
 
