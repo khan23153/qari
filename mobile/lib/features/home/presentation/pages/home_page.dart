@@ -12,6 +12,8 @@ import '../widgets/continue_card.dart';
 import '../widgets/daily_goal_ring.dart';
 import '../widgets/learning_path_map.dart';
 import '../../../flashcards/presentation/pages/flashcard_page.dart';
+import '../../../qibla/presentation/pages/qibla_page.dart';
+import '../../../tasbih/presentation/pages/tasbih_page.dart';
 import '../../../../core/theme/serene_decorations.dart';
 
 /// S3: Home screen with bottom nav (4 tabs: Home, Quran, Practice, Profile).
@@ -30,8 +32,8 @@ class _HomePageState extends ConsumerState<HomePage> {
   final List<Widget> _pages = const [
     HomeTab(),
     SurahListPage(),
-    SizedBox.shrink(), // Practice tab — handled specially via FAB
-    ProfilePage(),
+    QiblaPage(),
+    TasbihPage(),
   ];
 
   @override
@@ -71,8 +73,8 @@ class _HomePageState extends ConsumerState<HomePage> {
               _navItem(Icons.home_rounded, 'Home', 0),
               _navItem(Icons.menu_book_rounded, 'Quran', 1),
               const SizedBox(width: 48), // Space for FAB
-              _navItem(Icons.mic_rounded, 'Practice', 2),
-              _navItem(Icons.person_rounded, 'Profile', 3),
+              _navItem(Icons.explore_rounded, 'Qibla', 2),
+              _navItem(Icons.auto_awesome_rounded, 'Tasbih', 3),
             ],
           ),
         ),
@@ -88,7 +90,6 @@ class _HomePageState extends ConsumerState<HomePage> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () async {
-          if (index == 2) return; // Practice handled by FAB
           await Haptics.vibrate(HapticsType.selection);
           setState(() => _currentIndex = index);
         },
@@ -213,6 +214,18 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                           fontWeight: FontWeight.w800,
                         ),
                         textDirection: isUrdu ? TextDirection.rtl : TextDirection.ltr,
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const ProfilePage(),
+                          ),
+                        ),
+                        icon: Icon(
+                          Icons.person_rounded,
+                          color: theme.colorScheme.primary,
+                        ),
+                        tooltip: 'Profile',
                       ),
                       const Spacer(),
                       Container(
