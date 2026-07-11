@@ -38,6 +38,21 @@ class AuthExchangeResponse(BaseModel):
     is_onboarded: bool
 
 
+# --- Email / password auth ---
+
+class SignupRequest(BaseModel):
+    """Create a new account with email + password."""
+    email: str = Field(..., pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", max_length=320)
+    password: str = Field(..., min_length=8, max_length=128)
+    display_name: Optional[str] = Field(None, max_length=200)
+
+
+class LoginRequest(BaseModel):
+    """Authenticate with email + password."""
+    email: str = Field(..., pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", max_length=320)
+    password: str = Field(..., min_length=1, max_length=128)
+
+
 # --- Home aggregation ---
 
 class HomeResponse(BaseModel):

@@ -62,7 +62,7 @@ class _LessonPlayerPageState extends ConsumerState<LessonPlayerPage> {
       _correctAnswers++;
       Haptics.vibrate(HapticsType.medium);
     } else {
-      Haptics.heavyImpact();
+      Haptics.vibrate(HapticsType.heavy);
     }
     // Auto-advance after a short delay (the quiz widget shows feedback first)
     Future.delayed(const Duration(milliseconds: 1200), () {

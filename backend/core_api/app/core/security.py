@@ -1,5 +1,7 @@
-"""Security: Firebase token verification and backend JWT creation/verification."""
+"""Security: Firebase token verification, password hashing, and backend JWT creation/verification."""
 
+import hashlib
+import hmac
 import json
 import os
 import time
@@ -77,10 +79,51 @@ def verify_firebase_token(token: str) -> Optional[dict[str, Any]]:
 # Backend JWT
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Password hashing (PBKDF2-HMAC-SHA256, dependency-free)
+# ---------------------------------------------------------------------------
+
+_PBKDF2_ALGO = "pbkdf2_sha256"
+_PBKDF2_ITERATIONS = 100_000
+
+
+def hash_password(plain: str, *, iterations: int = _PBKDF2_ITERATIONS) -> str:
+    """Hash a plaintext password and return a self-describing encoded string.
+
+    Format: ``pbkdf2_sha256$<iterations>$<salt_hex>$<hash_hex>``
+    """
+    salt = os.urandom(16)
+    dk = hashlib.pbkdf2_hmac("sha256", plain.encode("utf-8"), salt, iterations)
+    return f"{_PBKDF2_ALGO}${iterations}${salt.hex()}${dk.hex()}"
+
+
+def verify_password(plain: str, stored: Optional[str]) -> bool:
+    """Verify *plain* against a stored ``hash_password`` string.
+
+    Uses a constant-time comparison and returns ``False`` on any malformed
+    input rather than raising.
+    """
+    if not stored:
+        return False
+    try:
+        algo, iters_s, salt_hex, hash_hex = stored.split("$")
+    except ValueError:
+        return False
+    if algo != _PBKDF2_ALGO:
+        return False
+    try:
+        iterations = int(iters_s)
+        salt = bytes.fromhex(salt_hex)
+    except ValueError:
+        return False
+    dk = hashlib.pbkdf2_hmac("sha256", plain.encode("utf-8"), salt, iterations)
+    return hmac.compare_digest(dk.hex(), hash_hex)
+
+
 class TokenData(BaseModel):
     """Payload embedded in the backend JWT."""
     sub: str          # user UUID
-    firebase_uid: str
+    firebase_uid: str = ""
     email: Optional[str] = None
     exp: int
 
@@ -88,7 +131,7 @@ class TokenData(BaseModel):
 def create_access_token(
     *,
     user_id: str,
-    firebase_uid: str,
+    firebase_uid: str = "",
     email: Optional[str] = None,
 ) -> str:
     """Create a signed backend JWT for *user_id*."""

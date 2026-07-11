@@ -40,6 +40,7 @@ class LocalStorageService {
   static const _kOnboardingComplete = 'onboarding_complete';
   static const _kSelectedLanguage = 'selected_language';
   static const _kSelectedPath = 'selected_path';
+  static const _kIsOnboarded = 'is_onboarded';
   static const _kThemeMode = 'theme_mode';
   static const _kFontScale = 'font_scale';
   static const _kSelectedQari = 'selected_qari';
@@ -62,6 +63,17 @@ class LocalStorageService {
   Future<void> setOnboardingComplete(bool value) async {
     await ensureInitialized();
     await _prefs.setBool(_kOnboardingComplete, value);
+  }
+
+  /// Whether the server-side onboarding (language + path) is finished.
+  Future<bool> isOnboarded() async {
+    await ensureInitialized();
+    return _prefs.getBool(_kIsOnboarded) ?? false;
+  }
+
+  Future<void> setIsOnboarded(bool value) async {
+    await ensureInitialized();
+    await _prefs.setBool(_kIsOnboarded, value);
   }
 
   // ─── Language ────────────────────────────────────────────────────────────

@@ -8,7 +8,7 @@ import '../../../../core/providers.dart';
 import '../../../../data/services/local_storage_service.dart';
 import 'path_select_page.dart';
 
-/// S1: Language Select — 3 large cards (English, اردو, Hinglish).
+/// S1: Language Select — 3 large cards (English, اردو, العربية).
 /// No login required. Each label shown in its own language/script.
 class LanguageSelectPage extends ConsumerStatefulWidget {
   const LanguageSelectPage({super.key});
@@ -96,6 +96,18 @@ class _LanguageSelectPageState extends ConsumerState<LanguageSelectPage> {
                 style: TextStyle(
                   fontSize: 16,
                   fontFamily: AppConstants.urduFontFamily,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+                textAlign: TextAlign.center,
+                textDirection: TextDirection.rtl,
+              )
+                  .animate()
+                  .fadeIn(delay: 500.ms, duration: 500.ms),
+              Text(
+                'اختر لغتك',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontFamily: AppConstants.arabicFontFamily,
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 ),
                 textAlign: TextAlign.center,
@@ -247,8 +259,8 @@ class _LanguageCard extends StatelessWidget {
         return '🇬🇧';
       case 'ur':
         return '🇵🇰';
-      case 'hi_latn':
-        return '🇮🇳';
+      case 'ar':
+        return '🇸🇦';
       default:
         return '🌐';
     }

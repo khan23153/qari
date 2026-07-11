@@ -16,8 +16,9 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
-    firebase_uid: Mapped[str] = mapped_column(String(128), nullable=False)
+    firebase_uid: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     email: Mapped[Optional[str]] = mapped_column(String(320), nullable=True)
+    password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     display_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     app_language: Mapped[str] = mapped_column(String(10), nullable=False, default="en")
     starting_path: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
@@ -43,9 +44,10 @@ class User(Base):
     scholar_questions: Mapped[list["ScholarQuestion"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
     __table_args__ = (
-        CheckConstraint("app_language IN ('en','ur','hi_latn')", name="ck_users_app_language"),
+        CheckConstraint("app_language IN ('en','ur','hi_latn','ar')", name="ck_users_app_language"),
         CheckConstraint(
-            "starting_path IS NULL OR starting_path IN ('beginner','intermediate','advanced','tajweed_focus','memorization')",
+            "starting_path IS NULL OR starting_path IN "
+            "('beginner','intermediate','advanced','tajweed_focus','memorization','foundation','quran_direct')",
             name="ck_users_starting_path",
         ),
         CheckConstraint("total_xp >= 0", name="ck_users_total_xp_nonneg"),
@@ -54,6 +56,22 @@ class User(Base):
         CheckConstraint("freeze_credits >= 0", name="ck_users_freeze_credits_nonneg"),
         UniqueConstraint("firebase_uid", name="uq_users_firebase_uid"),
     )
+
+    # --- Password helpers (email/password auth) ---
+
+    def set_password(self, plain: str) -> None:
+        """Hash *plain* and store it on ``password_hash``."""
+        from app.core.security import hash_password
+
+        self.password_hash = hash_password(plain)
+
+    def verify_password(self, plain: str) -> bool:
+        """Return ``True`` if *plain* matches the stored password hash."""
+        from app.core.security import verify_password as _verify
+
+        if not self.password_hash:
+            return False
+        return _verify(plain, self.password_hash)
 
 
 class UserLessonProgress(Base):

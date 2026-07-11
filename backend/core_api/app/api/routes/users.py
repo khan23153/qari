@@ -12,6 +12,7 @@ from app.core.deps import get_current_user, get_db
 from app.core.exceptions import NotFoundError, ProblemException, ConflictError
 from app.core.logging import get_logger
 from app.core.security import create_access_token, verify_firebase_token
+from app.core.config import settings
 from app.models.content import Lesson
 from app.models.corpus import Surah
 from app.models.user import (
@@ -23,6 +24,7 @@ from app.schemas.user import (
     AuthExchangeRequest, AuthExchangeResponse, HomeResponse,
     NextLesson, DueFlashcardBrief, ContinueReading, RecentBadge,
     OnboardingRequest, OnboardingResponse, UserOut,
+    SignupRequest, LoginRequest,
 )
 from app.services.redis_service import cache_get, cache_set, cache_delete
 from app.services.streak_service import update_streak
@@ -74,7 +76,80 @@ async def complete_onboarding(
 
 
 # ---------------------------------------------------------------------------
-# Auth exchange
+# Email / password auth
+# ---------------------------------------------------------------------------
+
+def _issue_token(user: User) -> AuthExchangeResponse:
+    """Build a JWT auth response for an existing user."""
+    token = create_access_token(
+        user_id=str(user.id),
+        firebase_uid=user.firebase_uid or "",
+        email=user.email,
+    )
+    return AuthExchangeResponse(
+        access_token=token,
+        expires_in=settings.jwt_access_token_expire_minutes * 60,
+        user_id=user.id,
+        is_onboarded=user.is_onboarded,
+    )
+
+
+@router.post("/auth/signup", response_model=AuthExchangeResponse)
+async def signup(
+    body: SignupRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new account with email + password.
+
+    The new user starts completely fresh: zero XP, zero progress, and is
+    *not* onboarded yet.
+    """
+    existing = await db.execute(select(User).where(User.email == body.email))
+    if existing.scalar_one_or_none() is not None:
+        raise ConflictError("An account with this email already exists")
+
+    user = User(
+        email=body.email,
+        display_name=body.display_name,
+        is_onboarded=False,
+    )
+    user.set_password(body.password)
+    db.add(user)
+    await db.flush()
+
+    # Create the companion stats row so downstream aggregation works.
+    db.add(UserStats(user_id=user.id))
+
+    await db.commit()
+    await db.refresh(user)
+    logger.info("auth.signup", user_id=str(user.id))
+    return _issue_token(user)
+
+
+@router.post("/auth/login", response_model=AuthExchangeResponse)
+async def login(
+    body: LoginRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Authenticate with email + password and return a JWT."""
+    result = await db.execute(select(User).where(User.email == body.email))
+    user = result.scalar_one_or_none()
+
+    # Constant-ish response: don't reveal whether the email exists.
+    if user is None or not user.verify_password(body.password):
+        raise ProblemException(
+            status=401,
+            title="Unauthorized",
+            detail="Invalid email or password",
+        )
+
+    await db.commit()
+    logger.info("auth.login", user_id=str(user.id))
+    return _issue_token(user)
+
+
+# ---------------------------------------------------------------------------
+# Auth exchange (Firebase)
 # ---------------------------------------------------------------------------
 
 @router.post("/users/auth/exchange", response_model=AuthExchangeResponse)

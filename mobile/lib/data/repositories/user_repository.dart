@@ -37,10 +37,23 @@ class UserRepository {
     }
   }
 
-  /// Completes onboarding.
-  Future<void> completeOnboarding() async {
+  /// Completes onboarding by sending the chosen language + learning path.
+  ///
+  /// The backend [startingPath] values are the canonical ones
+  /// ('foundation', 'quran_direct', ...); the UI [LearningPath] enum maps
+  /// onto these directly by name.
+  Future<void> finishOnboarding({
+    required String appLanguage,
+    required String startingPath,
+  }) async {
     try {
-      await _client.post('/users/onboarding/complete');
+      await _client.post(
+        '/users/onboarding',
+        data: {
+          'app_language': appLanguage,
+          'starting_path': startingPath,
+        },
+      );
     } on DioException catch (e) {
       throw ApiException.fromDioError(e);
     }

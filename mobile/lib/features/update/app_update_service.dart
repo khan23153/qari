@@ -24,7 +24,7 @@ class AppRelease {
 
   factory AppRelease.fromJson(Map<String, dynamic> j) {
     final notes = <String, String>{};
-    for (final key in const ['notes_en', 'notes_ur', 'notes_hi']) {
+    for (final key in const ['notes_en', 'notes_ur', 'notes_ar']) {
       final value = j[key];
       if (value is String && value.isNotEmpty) {
         notes[key.split('_').last] = value;

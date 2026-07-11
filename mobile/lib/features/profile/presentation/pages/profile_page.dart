@@ -11,6 +11,9 @@ import '../widgets/streak_calendar.dart';
 import '../widgets/badges_grid.dart';
 import '../widgets/settings_section.dart';
 import 'attribution_page.dart';
+import '../../../onboarding/presentation/pages/language_select_page.dart';
+import '../../../auth/presentation/pages/login_page.dart';
+import '../../../home/presentation/pages/home_page.dart';
 
 /// S11: Profile/Settings — streak calendar, badges grid, stats,
 /// language switcher, qari picker, font-size slider with live Arabic preview,
@@ -145,6 +148,62 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     await storage.setGrammarColorsEnabled(_grammarColors);
   }
 
+  Future<void> _resetLocalData() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Reset & Start Fresh?'),
+        content: const Text(
+          'This erases all your local progress, settings, and account data on '
+          'this device and restarts onboarding from zero. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Reset Everything'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    await Haptics.vibrate(HapticsType.success);
+    final storage = LocalStorageService();
+    await storage.clearAll();
+
+    // Reset in-memory app state back to defaults.
+    ref.read(appLocaleProvider.notifier).state = const Locale('en');
+    ref.read(themeModeProvider.notifier).state = ThemeMode.system;
+
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => LoginPage(
+          onAuthenticated: (result) {
+            if (!mounted) return;
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(
+                builder: (_) => result.isOnboarded
+                    ? const HomePage()
+                    : const LanguageSelectPage(),
+              ),
+              (route) => false,
+            );
+          },
+        ),
+      ),
+      (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -206,6 +265,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 onGrammarColorsChanged: _toggleGrammarColors,
                 tajweedColors: _tajweedColors,
                 onTajweedColorsChanged: _toggleTajweedColors,
+                onResetLocalData: _resetLocalData,
                 theme: theme,
               ),
 

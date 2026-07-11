@@ -58,7 +58,7 @@ abstract class QuizQuestionModel with _$QuizQuestionModel {
     required String question,
     @JsonKey(name: 'question_arabic') String? questionArabic,
     @JsonKey(name: 'options') @Default([]) List<String> options,
-    @JsonKey(name: 'correct_answer') required String correctAnswer,
+    @JsonKey(name: 'correct_answer') String? correctAnswer,
     @JsonKey(name: 'match_pairs') List<MatchPair>? matchPairs,
     @JsonKey(name: 'blank_answer') String? blankAnswer,
     @JsonKey(name: 'explanation') String? explanation,

@@ -90,7 +90,7 @@ _QuizQuestionModel _$QuizQuestionModelFromJson(Map<String, dynamic> json) =>
               ?.map((e) => e as String)
               .toList() ??
           const [],
-      correctAnswer: json['correct_answer'] as String,
+      correctAnswer: json['correct_answer'] as String?,
       matchPairs: (json['match_pairs'] as List<dynamic>?)
           ?.map((e) => MatchPair.fromJson(e as Map<String, dynamic>))
           .toList(),

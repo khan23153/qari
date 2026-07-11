@@ -22,6 +22,7 @@ class SettingsSection extends StatelessWidget {
   final ValueChanged<bool> onGrammarColorsChanged;
   final bool tajweedColors;
   final ValueChanged<bool> onTajweedColorsChanged;
+  final VoidCallback onResetLocalData;
   final ThemeData theme;
 
   const SettingsSection({
@@ -40,6 +41,7 @@ class SettingsSection extends StatelessWidget {
     required this.onGrammarColorsChanged,
     required this.tajweedColors,
     required this.onTajweedColorsChanged,
+    required this.onResetLocalData,
     required this.theme,
   });
 
@@ -245,6 +247,29 @@ class SettingsSection extends StatelessWidget {
             onTap: () async {
               await Haptics.vibrate(HapticsType.selection);
               // Navigate to download manager
+            },
+          ),
+
+          const Divider(height: 32),
+
+          // ─── Reset / Start Fresh ────────────────────────────────────
+          ListTile(
+            leading: Icon(
+              Icons.restart_alt_rounded,
+              color: theme.colorScheme.error,
+            ),
+            title: Text(
+              'Reset & Start Fresh',
+              style: TextStyle(color: theme.colorScheme.error),
+            ),
+            subtitle: const Text(
+              'Erase all local progress and start onboarding from zero',
+            ),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            contentPadding: EdgeInsets.zero,
+            onTap: () async {
+              await Haptics.vibrate(HapticsType.warning);
+              onResetLocalData();
             },
           ),
         ],

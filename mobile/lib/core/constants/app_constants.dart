@@ -28,17 +28,24 @@ class AppConstants {
       locale: Locale('ur'),
     ),
     AppLanguage(
-      code: 'hi_latn',
-      name: 'Hinglish',
-      nativeName: 'Hinglish',
-      script: 'Latin',
-      textDirection: TextDirection.ltr,
-      locale: Locale('hi'),
+      code: 'ar',
+      name: 'Arabic',
+      nativeName: 'العربية',
+      script: 'Arabic',
+      textDirection: TextDirection.rtl,
+      locale: Locale('ar'),
     ),
   ];
 
   static List<Locale> get supportedLocales =>
       supportedLanguages.map((l) => l.locale).toList();
+
+  /// Resolves a stored language code to its [Locale], defaulting to English.
+  static Locale localeForCode(String? code) {
+    if (code == null) return const Locale('en');
+    final match = supportedLanguages.where((l) => l.code == code);
+    return match.isNotEmpty ? match.first.locale : const Locale('en');
+  }
 
   // ─── Quran ──────────────────────────────────────────────────────────────
   static const int totalSurahs = 114;
@@ -55,6 +62,9 @@ class AppConstants {
   // UI font
   static const String uiFontFamily = 'NotoSans';
   static const String urduFontFamily = 'NotoNastaliqUrdu';
+  // Arabic UI font (clean sans for buttons/menus/labels). The bundled
+  // Uthmanic font (arabicFontFamily) is reserved for actual Quran text.
+  static const String arabicUiFontFamily = 'NotoSansArabic';
 
   // ─── Grammar Color Coding ───────────────────────────────────────────────
   /// pos_group -> (color, underlineStyle)

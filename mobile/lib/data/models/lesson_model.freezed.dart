@@ -1380,7 +1380,7 @@ mixin _$QuizQuestionModel {
   @JsonKey(name: 'options')
   List<String> get options;
   @JsonKey(name: 'correct_answer')
-  String get correctAnswer;
+  String? get correctAnswer;
   @JsonKey(name: 'match_pairs')
   List<MatchPair>? get matchPairs;
   @JsonKey(name: 'blank_answer')
@@ -1457,7 +1457,7 @@ abstract mixin class $QuizQuestionModelCopyWith<$Res> {
       String question,
       @JsonKey(name: 'question_arabic') String? questionArabic,
       @JsonKey(name: 'options') List<String> options,
-      @JsonKey(name: 'correct_answer') String correctAnswer,
+      @JsonKey(name: 'correct_answer') String? correctAnswer,
       @JsonKey(name: 'match_pairs') List<MatchPair>? matchPairs,
       @JsonKey(name: 'blank_answer') String? blankAnswer,
       @JsonKey(name: 'explanation') String? explanation,
@@ -1482,7 +1482,7 @@ class _$QuizQuestionModelCopyWithImpl<$Res>
     Object? question = null,
     Object? questionArabic = freezed,
     Object? options = null,
-    Object? correctAnswer = null,
+    Object? correctAnswer = freezed,
     Object? matchPairs = freezed,
     Object? blankAnswer = freezed,
     Object? explanation = freezed,
@@ -1509,10 +1509,10 @@ class _$QuizQuestionModelCopyWithImpl<$Res>
           ? _self.options
           : options // ignore: cast_nullable_to_non_nullable
               as List<String>,
-      correctAnswer: null == correctAnswer
+      correctAnswer: freezed == correctAnswer
           ? _self.correctAnswer
           : correctAnswer // ignore: cast_nullable_to_non_nullable
-              as String,
+              as String?,
       matchPairs: freezed == matchPairs
           ? _self.matchPairs
           : matchPairs // ignore: cast_nullable_to_non_nullable
@@ -1632,7 +1632,7 @@ extension QuizQuestionModelPatterns on QuizQuestionModel {
             String question,
             @JsonKey(name: 'question_arabic') String? questionArabic,
             @JsonKey(name: 'options') List<String> options,
-            @JsonKey(name: 'correct_answer') String correctAnswer,
+            @JsonKey(name: 'correct_answer') String? correctAnswer,
             @JsonKey(name: 'match_pairs') List<MatchPair>? matchPairs,
             @JsonKey(name: 'blank_answer') String? blankAnswer,
             @JsonKey(name: 'explanation') String? explanation,
@@ -1680,7 +1680,7 @@ extension QuizQuestionModelPatterns on QuizQuestionModel {
             String question,
             @JsonKey(name: 'question_arabic') String? questionArabic,
             @JsonKey(name: 'options') List<String> options,
-            @JsonKey(name: 'correct_answer') String correctAnswer,
+            @JsonKey(name: 'correct_answer') String? correctAnswer,
             @JsonKey(name: 'match_pairs') List<MatchPair>? matchPairs,
             @JsonKey(name: 'blank_answer') String? blankAnswer,
             @JsonKey(name: 'explanation') String? explanation,
@@ -1726,7 +1726,7 @@ extension QuizQuestionModelPatterns on QuizQuestionModel {
             String question,
             @JsonKey(name: 'question_arabic') String? questionArabic,
             @JsonKey(name: 'options') List<String> options,
-            @JsonKey(name: 'correct_answer') String correctAnswer,
+            @JsonKey(name: 'correct_answer') String? correctAnswer,
             @JsonKey(name: 'match_pairs') List<MatchPair>? matchPairs,
             @JsonKey(name: 'blank_answer') String? blankAnswer,
             @JsonKey(name: 'explanation') String? explanation,
@@ -1762,7 +1762,7 @@ class _QuizQuestionModel implements QuizQuestionModel {
       required this.question,
       @JsonKey(name: 'question_arabic') this.questionArabic,
       @JsonKey(name: 'options') final List<String> options = const [],
-      @JsonKey(name: 'correct_answer') required this.correctAnswer,
+      @JsonKey(name: 'correct_answer') this.correctAnswer,
       @JsonKey(name: 'match_pairs') final List<MatchPair>? matchPairs,
       @JsonKey(name: 'blank_answer') this.blankAnswer,
       @JsonKey(name: 'explanation') this.explanation,
@@ -1792,7 +1792,7 @@ class _QuizQuestionModel implements QuizQuestionModel {
 
   @override
   @JsonKey(name: 'correct_answer')
-  final String correctAnswer;
+  final String? correctAnswer;
   final List<MatchPair>? _matchPairs;
   @override
   @JsonKey(name: 'match_pairs')
@@ -1887,7 +1887,7 @@ abstract mixin class _$QuizQuestionModelCopyWith<$Res>
       String question,
       @JsonKey(name: 'question_arabic') String? questionArabic,
       @JsonKey(name: 'options') List<String> options,
-      @JsonKey(name: 'correct_answer') String correctAnswer,
+      @JsonKey(name: 'correct_answer') String? correctAnswer,
       @JsonKey(name: 'match_pairs') List<MatchPair>? matchPairs,
       @JsonKey(name: 'blank_answer') String? blankAnswer,
       @JsonKey(name: 'explanation') String? explanation,
@@ -1912,7 +1912,7 @@ class __$QuizQuestionModelCopyWithImpl<$Res>
     Object? question = null,
     Object? questionArabic = freezed,
     Object? options = null,
-    Object? correctAnswer = null,
+    Object? correctAnswer = freezed,
     Object? matchPairs = freezed,
     Object? blankAnswer = freezed,
     Object? explanation = freezed,
@@ -1939,10 +1939,10 @@ class __$QuizQuestionModelCopyWithImpl<$Res>
           ? _self._options
           : options // ignore: cast_nullable_to_non_nullable
               as List<String>,
-      correctAnswer: null == correctAnswer
+      correctAnswer: freezed == correctAnswer
           ? _self.correctAnswer
           : correctAnswer // ignore: cast_nullable_to_non_nullable
-              as String,
+              as String?,
       matchPairs: freezed == matchPairs
           ? _self._matchPairs
           : matchPairs // ignore: cast_nullable_to_non_nullable

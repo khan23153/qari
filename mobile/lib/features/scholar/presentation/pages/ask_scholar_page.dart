@@ -235,7 +235,6 @@ class _AskScholarPageState extends ConsumerState<AskScholarPage> {
                         maxLines: 6,
                         decoration: const InputDecoration(
                           hintText: 'Type your question here...',
-                          alignHintWithText: true,
                         ),
                       )
                     else

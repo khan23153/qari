@@ -10,8 +10,10 @@ import 'core/constants/app_constants.dart';
 import 'core/providers.dart';
 import 'data/services/local_storage_service.dart';
 import 'data/services/api_client.dart';
+import 'data/models/auth_model.dart';
 import 'features/update/app_update_service.dart';
 import 'features/update/app_update_dialog.dart';
+import 'features/auth/presentation/pages/login_page.dart';
 import 'features/onboarding/presentation/pages/language_select_page.dart';
 import 'features/home/presentation/pages/home_page.dart';
 
@@ -70,28 +72,52 @@ class QariApp extends ConsumerStatefulWidget {
 }
 
 class _QariAppState extends ConsumerState<QariApp> {
-  bool _hasSelectedLanguage = false;
-  bool _hasSelectedPath = false;
   bool _isLoading = true;
+  Widget? _initialPage;
   bool _updateShown = false;
   final AppUpdateService _updateService = AppUpdateService(ApiClient());
 
   @override
   void initState() {
     super.initState();
-    _checkOnboardingStatus();
+    _checkAuthStatus();
   }
 
-  Future<void> _checkOnboardingStatus() async {
+  /// Decide the entry screen:
+  ///   • no auth token            → Login
+  ///   • token but not onboarded → Language select (then path select)
+  ///   • token + onboarded       → Home
+  Future<void> _checkAuthStatus() async {
     final storage = LocalStorageService();
+    final token = await storage.getAuthToken();
     final lang = await storage.getSelectedLanguage();
-    final path = await storage.getSelectedPath();
+    // Apply the persisted language (defaults to English) so the choice
+    // survives app restarts.
+    ref.read(appLocaleProvider.notifier).state = AppConstants.localeForCode(lang);
+
+    Widget page;
+    if (token == null || token.isEmpty) {
+      page = LoginPage(onAuthenticated: _handleAuthenticated);
+    } else if (!(await storage.isOnboarded())) {
+      page = const LanguageSelectPage();
+    } else {
+      page = const HomePage();
+    }
+
     setState(() {
-      _hasSelectedLanguage = lang != null;
-      _hasSelectedPath = path != null;
+      _initialPage = page;
       _isLoading = false;
     });
     _checkForUpdate();
+  }
+
+  /// Called after a successful signup/login. Routes based on onboarding state.
+  void _handleAuthenticated(AuthResult result) {
+    if (!mounted) return;
+    setState(() {
+      _initialPage =
+          result.isOnboarded ? const HomePage() : const LanguageSelectPage();
+    });
   }
 
   /// Ask the backend whether a newer app build is available and, if so,
@@ -172,9 +198,7 @@ class _QariAppState extends ConsumerState<QariApp> {
         DefaultMaterialLocalizations.delegate,
         DefaultWidgetsLocalizations.delegate,
       ],
-      home: _hasSelectedLanguage && _hasSelectedPath
-          ? const HomePage()
-          : const LanguageSelectPage(),
+      home: _initialPage ?? const HomePage(),
     );
   }
 }

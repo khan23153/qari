@@ -7,6 +7,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../data/models/lesson_model.dart';
 import '../widgets/grammar_card_widget.dart';
 import '../widgets/quiz_widget.dart';
+import 'lesson_player_page.dart';
 
 /// S4: Lesson list page — shows available lessons in a module.
 class LessonListPage extends ConsumerStatefulWidget {

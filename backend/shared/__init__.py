@@ -70,6 +70,7 @@ class AppLanguage(str, enum.Enum):
     """Supported UI / content languages."""
     en = "en"
     ur = "ur"
+    ar = "ar"
     hi_latn = "hi_latn"
 
 
@@ -80,6 +81,8 @@ class StartingPath(str, enum.Enum):
     advanced = "advanced"
     tajweed_focus = "tajweed_focus"
     memorization = "memorization"
+    foundation = "foundation"
+    quran_direct = "quran_direct"
 
 
 class POSGroup(str, enum.Enum):

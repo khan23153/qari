@@ -6,10 +6,11 @@ import 'package:haptic_feedback/haptic_feedback.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../data/services/local_storage_service.dart';
+import '../../../../data/repositories/user_repository.dart';
 import '../../../home/presentation/pages/home_page.dart';
 
 /// S2: Welcome/Path Select — Warm illustration + two large stacked buttons.
-/// 'Zero Se Shuru Karein' (foundation) / 'Direct Quran Par Jayein' (quran_direct).
+/// 'Start from scratch' (foundation) / 'Jump to Quran' (quran_direct).
 class PathSelectPage extends ConsumerStatefulWidget {
   final AppLanguage selectedLanguage;
 
@@ -32,6 +33,21 @@ class _PathSelectPageState extends ConsumerState<PathSelectPage> {
     await storage.setSelectedPath(path.name);
     await storage.setOnboardingComplete(true);
 
+    // Persist the onboarding choice server-side so all progress, XP, and
+    // learning data is linked to the signed-in user (fresh users start at 0).
+    try {
+      final lang = await storage.getSelectedLanguage() ?? 'en';
+      await UserRepository().finishOnboarding(
+        appLanguage: lang,
+        startingPath: _backendPath(path),
+      );
+      await storage.setIsOnboarded(true);
+    } catch (e) {
+      // If the sync fails we still let the user in; the choice is stored
+      // locally and retried on the next launch via the home refresh.
+      debugPrint('onboarding sync failed: $e');
+    }
+
     await Future.delayed(const Duration(milliseconds: 400));
 
     if (!mounted) return;
@@ -40,6 +56,16 @@ class _PathSelectPageState extends ConsumerState<PathSelectPage> {
       MaterialPageRoute(builder: (_) => const HomePage()),
       (route) => false,
     );
+  }
+
+  /// Map the UI [LearningPath] to the backend's starting_path enum value.
+  String _backendPath(LearningPath path) {
+    switch (path) {
+      case LearningPath.foundation:
+        return 'foundation';
+      case LearningPath.quranDirect:
+        return 'quran_direct';
+    }
   }
 
   @override
@@ -133,7 +159,7 @@ class _PathSelectPageState extends ConsumerState<PathSelectPage> {
               // ─── Path Buttons ────────────────────────────────────────
               _PathButton(
                 icon: Icons.foundation_rounded,
-                title: isUrdu ? 'صفر سے شروع کریں' : 'Zero Se Shuru Karein',
+                title: isUrdu ? 'صفر سے شروع کریں' : 'Start from scratch',
                 subtitle: isUrdu
                     ? 'بنیادی عربی گرائمر سے آغاز'
                     : 'Start from foundation — learn Arabic grammar step by step',
@@ -149,7 +175,7 @@ class _PathSelectPageState extends ConsumerState<PathSelectPage> {
                 icon: Icons.menu_book_rounded,
                 title: isUrdu
                     ? 'براہ راست قرآن پڑھیں'
-                    : 'Direct Quran Par Jayein',
+                    : 'Jump to Quran',
                 subtitle: isUrdu
                     ? 'براہ راست قرآن پڑھنا شروع کریں'
                     : 'Jump straight into reading the Quran with AI assistance',
@@ -166,7 +192,7 @@ class _PathSelectPageState extends ConsumerState<PathSelectPage> {
               Text(
                 isUrdu
                     ? 'آپ بعد میں کبھی بھی تبدیل کر سکتے ہیں'
-                    : 'Aap baad mein kabhi bhi switch kar sakte hain',
+                    : 'You can switch anytime later',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
                   fontStyle: FontStyle.italic,
