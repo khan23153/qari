@@ -5,7 +5,7 @@ class AppConstants {
   AppConstants._();
 
   // ─── API ────────────────────────────────────────────────────────────────
-  static const String baseUrl = 'http://20.244.30.169/v1';
+  static const String baseUrl = 'https://api.qari.app/v1';
   static const String audioCdnUrl = 'https://audio.qari.app';
   static const int apiTimeoutSeconds = 30;
 

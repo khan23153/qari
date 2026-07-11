@@ -1,17 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- The staging/VPS backend (and OTA APK host) is served over self-signed
-         HTTPS on 20.244.30.169 / api.qari.app. We trust our embedded CA
-         (res/raw/qari_ca.pem) for those hosts and still allow cleartext so
-         the rest of the app's HTTP API traffic keeps working during the
-         transition. Switch to a strict, CA-only config once real TLS is used. -->
+    <!-- api.qari.app is reached through the Cloudflare Tunnel. Cloudflare
+         terminates TLS with its own publicly-trusted certificate, so we use
+         the default system trust store (no custom CA pin). -->
+    <domain-config>
+        <domain includeSubdomains="true">api.qari.app</domain>
+    </domain-config>
+
+    <!-- Direct-to-VPS access (fallback / OTA over the raw IP) uses the
+         self-signed qari_ca. Cleartext is allowed for local dev. -->
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">20.244.30.169</domain>
-        <domain includeSubdomains="true">api.qari.app</domain>
-        <domain includeSubdomains="true">localhost</domain>
-        <domain includeSubdomains="true">10.0.2.2</domain>
         <trust-anchors>
             <certificates src="@raw/qari_ca" />
         </trust-anchors>
+    </domain-config>
+
+    <!-- Dev: emulator / local backend over cleartext. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
     </domain-config>
 </network-security-config>

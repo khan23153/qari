@@ -1,11 +1,11 @@
 {
-  "version": "1.0.0",
-  "version_code": 1,
+  "version": "1.0.1",
+  "version_code": 5,
   "min_version": "1.0.0",
   "min_version_code": 1,
-  "apk_url": "https://20.244.30.169/v1/app/download",
+  "apk_url": "https://api.qari.app/v1/app/download",
   "force_update": false,
-  "notes_en": "Debug: surface launch errors on screen.",
+  "notes_en": "Fix: route API+OTA via api.qari.app (Cloudflare Tunnel); consistent signing; versionCode bumped.",
   "notes_ur": "دستخط شدہ ریلیز، HTTPS اوور۔دی۔ایئر۔",
   "notes_hi": "Qari app ka pahla version.",
   "data_version": 1
