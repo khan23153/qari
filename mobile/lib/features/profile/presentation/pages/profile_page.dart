@@ -4,6 +4,7 @@ import 'package:haptic_feedback/haptic_feedback.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/theme/serene_decorations.dart';
 import '../../../../core/providers.dart';
 import '../../../../data/services/local_storage_service.dart';
 import '../../../../data/services/audio_service.dart';
@@ -209,8 +210,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
+      body: SereneBackground(
+        child: SafeArea(
+          child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -300,6 +302,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

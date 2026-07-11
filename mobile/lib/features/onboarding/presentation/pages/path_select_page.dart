@@ -5,6 +5,7 @@ import 'package:haptic_feedback/haptic_feedback.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/theme/serene_decorations.dart';
 import '../../../../data/services/local_storage_service.dart';
 import '../../../../data/repositories/user_repository.dart';
 import '../../../home/presentation/pages/home_page.dart';
@@ -74,8 +75,9 @@ class _PathSelectPageState extends ConsumerState<PathSelectPage> {
     final isUrdu = widget.selectedLanguage.code == 'ur';
 
     return Scaffold(
-      body: SafeArea(
-        child: Padding(
+      body: SereneBackground(
+        child: SafeArea(
+          child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -206,6 +208,7 @@ class _PathSelectPageState extends ConsumerState<PathSelectPage> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

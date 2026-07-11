@@ -4,6 +4,7 @@ import 'package:haptic_feedback/haptic_feedback.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/theme/serene_decorations.dart';
 import '../../../../data/services/local_storage_service.dart';
 import '../pages/quran_reader_page.dart';
 
@@ -58,8 +59,9 @@ class _SurahListPageState extends ConsumerState<SurahListPage> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      body: SafeArea(
-        child: Column(
+      body: SereneBackground(
+        child: SafeArea(
+          child: Column(
           children: [
             // ─── Header ───────────────────────────────────────────────
             Padding(
@@ -122,6 +124,7 @@ class _SurahListPageState extends ConsumerState<SurahListPage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

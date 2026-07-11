@@ -12,6 +12,7 @@ import '../widgets/continue_card.dart';
 import '../widgets/daily_goal_ring.dart';
 import '../widgets/learning_path_map.dart';
 import '../../../flashcards/presentation/pages/flashcard_page.dart';
+import '../../../../core/theme/serene_decorations.dart';
 
 /// S3: Home screen with bottom nav (4 tabs: Home, Quran, Practice, Profile).
 /// Home tab shows streak, XP, continue card, flashcards due, daily goal ring,
@@ -190,8 +191,9 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     final isUrdu = _selectedLanguage == 'ur';
 
     return Scaffold(
-      body: SafeArea(
-        child: RefreshIndicator(
+      body: SereneBackground(
+        child: SafeArea(
+          child: RefreshIndicator(
           onRefresh: () async {
             await Haptics.vibrate(HapticsType.medium);
             // Trigger refresh — in production this would call the API
@@ -327,6 +329,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

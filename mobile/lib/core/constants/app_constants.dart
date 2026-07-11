@@ -198,7 +198,7 @@ class AppConstants {
   // ─── UI ─────────────────────────────────────────────────────────────────
   static const int bottomNavTabCount = 4;
   static const double bottomNavElevation = 8.0;
-  static const double cardBorderRadius = 16.0;
+  static const double cardBorderRadius = 24.0;
   static const double sheetBorderRadius = 24.0;
 }
 

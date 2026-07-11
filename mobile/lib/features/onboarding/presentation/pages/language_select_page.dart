@@ -6,6 +6,7 @@ import 'package:haptic_feedback/haptic_feedback.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/providers.dart';
 import '../../../../data/services/local_storage_service.dart';
+import '../../../../core/theme/serene_decorations.dart';
 import 'path_select_page.dart';
 
 /// S1: Language Select — 3 large cards (English, اردو, العربية).
@@ -55,8 +56,9 @@ class _LanguageSelectPageState extends ConsumerState<LanguageSelectPage> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      body: SafeArea(
-        child: Padding(
+      body: SereneBackground(
+        child: SafeArea(
+          child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -141,6 +143,7 @@ class _LanguageSelectPageState extends ConsumerState<LanguageSelectPage> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

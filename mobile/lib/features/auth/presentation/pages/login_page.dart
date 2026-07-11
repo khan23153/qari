@@ -8,6 +8,7 @@ import '../../../../data/services/api_client.dart';
 import '../../../../data/repositories/auth_repository.dart';
 import '../../../../data/models/auth_model.dart';
 import 'signup_page.dart';
+import '../../../../core/theme/serene_decorations.dart';
 
 /// Login screen — email + password. On success calls [onAuthenticated].
 class LoginPage extends ConsumerStatefulWidget {
@@ -71,71 +72,76 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Icon(
-                    Icons.menu_book_rounded,
-                    size: 64,
-                    color: theme.colorScheme.primary,
-                  ).animate().fadeIn(duration: 600.ms).slideY(begin: -0.2, end: 0),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Welcome back',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Log in to continue your Quran journey',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 32),
-                  _AuthForm(
-                    formKey: _formKey,
-                    emailController: _emailController,
-                    passwordController: _passwordController,
-                    isLoading: _isLoading,
-                    error: _error,
-                    onSubmit: _submit,
-                    submitLabel: 'Log In',
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+      body: SereneBackground(
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+              child: SereneGlass(
+                padding: const EdgeInsets.all(28),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      Icon(
+                        Icons.menu_book_rounded,
+                        size: 64,
+                        color: theme.colorScheme.primary,
+                      ).animate().fadeIn(duration: 600.ms).slideY(begin: -0.2, end: 0),
+                      const SizedBox(height: 16),
                       Text(
-                        "Don't have an account?",
-                        style: theme.textTheme.bodySmall?.copyWith(
+                        'Welcome back',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Log in to continue your Quran journey',
+                        style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                         ),
+                        textAlign: TextAlign.center,
                       ),
-                      TextButton(
-                        onPressed: _isLoading
-                            ? null
-                            : () => Navigator.of(context).pushReplacement(
-                                  MaterialPageRoute(
-                                    builder: (_) => SignupPage(
-                                      onAuthenticated: widget.onAuthenticated,
+                      const SizedBox(height: 32),
+                      _AuthForm(
+                        formKey: _formKey,
+                        emailController: _emailController,
+                        passwordController: _passwordController,
+                        isLoading: _isLoading,
+                        error: _error,
+                        onSubmit: _submit,
+                        submitLabel: 'Log In',
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            "Don't have an account?",
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _isLoading
+                                ? null
+                                : () => Navigator.of(context).pushReplacement(
+                                      MaterialPageRoute(
+                                        builder: (_) => SignupPage(
+                                          onAuthenticated: widget.onAuthenticated,
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                ),
-                        child: const Text('Sign Up'),
+                            child: const Text('Sign Up'),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
             ),
           ),

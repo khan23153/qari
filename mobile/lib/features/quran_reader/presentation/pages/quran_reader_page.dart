@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/theme/serene_decorations.dart';
 import '../../../../data/models/word_model.dart';
 import '../../../../data/models/surah_model.dart';
 import '../../../../data/services/local_storage_service.dart';
@@ -209,8 +210,9 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      body: SafeArea(
-        child: Column(
+      body: SereneBackground(
+        child: SafeArea(
+          child: Column(
           children: [
             // ─── Sticky Header ────────────────────────────────────────
             _buildStickyHeader(theme),
@@ -256,6 +258,7 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

@@ -1,73 +1,85 @@
 import 'package:flutter/material.dart';
 import '../constants/app_constants.dart';
 
-/// Centralized theme definitions for the Qari app.
-/// Supports Light, Dark (AMOLED black), and High-contrast themes.
-/// All themes meet WCAG AA minimum contrast ratios.
+/// Centralized theme definitions for the Qari app — the "Serene Path" design
+/// system. Spiritual Minimalism: warm cream/amber in light mode, contemplative
+/// charcoal/amber in dark mode, glassmorphism, soft UI, generous radii.
+///
+/// Design rule: avoid pure black and pure white — every tone is tinted with the
+/// brand's warm amber/cream so the app keeps a cohesive spiritual temperature.
 class AppTheme {
   AppTheme._();
 
-  // ─── Color Palettes ─────────────────────────────────────────────────────
+  // ─── Brand Palette (Serene Path) ─────────────────────────────────────────
 
-  static const Color _primaryLight = Color(0xFF1B5E20);
-  static const Color _primaryDark = Color(0xFF66BB6A);
-  static const Color _primaryHighContrast = Color(0xFF00E676);
-  static const Color _secondaryLight = Color(0xFFD32F2F);
-  static const Color _secondaryDark = Color(0xFFEF5350);
-  static const Color _secondaryHighContrast = Color(0xFFFF1744);
+  /// Warm amber-bronze — the signature accent used for primary actions,
+  /// active nav and brand marks in light mode.
+  static const Color amberLight = Color(0xFF9C5A1C);
+  static const Color amberLightSoft = Color(0xFFB3742A);
+  static const Color onAmberLight = Color(0xFFFDF6EA);
 
-  // ─── Light Theme ────────────────────────────────────────────────────────
+  /// Glowing amber filament — used for primary actions / active states in dark
+  /// mode. Paired with a dark label so it reads like a lit ember.
+  static const Color amberDark = Color(0xFFD98C3C);
+  static const Color amberDarkSoft = Color(0xFFE3AE62);
+  static const Color onAmberDark = Color(0xFF1C130A);
+
+  /// High-contrast accessibility accent (amber-bronze on white/black).
+  static const Color amberHighContrast = Color(0xFF7A440E);
+
+  // ─── Light Theme (Warm Sunrise) ──────────────────────────────────────────
   static ThemeData get lightTheme => ThemeData(
         useMaterial3: true,
         brightness: Brightness.light,
-        primaryColor: _primaryLight,
-        scaffoldBackgroundColor: const Color(0xFFFAFAFA),
+        primaryColor: amberLight,
+        scaffoldBackgroundColor: const Color(0xFFFDF9E9),
         colorScheme: const ColorScheme.light(
-          primary: _primaryLight,
-          onPrimary: Colors.white,
-          secondary: _secondaryLight,
-          onSecondary: Colors.white,
-          surface: Colors.white,
-          onSurface: Color(0xFF1C1B1F),
-          error: Color(0xFFB3261E),
-          onError: Colors.white,
-          outline: Color(0xFF79747E),
+          primary: amberLight,
+          onPrimary: onAmberLight,
+          secondary: amberLightSoft,
+          onSecondary: onAmberLight,
+          surface: Color(0xFFFCF6EA),
+          onSurface: Color(0xFF3B2F23),
+          error: Color(0xFFB23A2E),
+          onError: onAmberLight,
+          outline: Color(0xFFD9C7A3),
+          surfaceContainerHighest: Color(0xFFF3E7CF),
         ),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.white,
-          foregroundColor: Color(0xFF1C1B1F),
+          backgroundColor: Color(0xFFFCF6EA),
+          foregroundColor: Color(0xFF3B2F23),
           elevation: 0,
           centerTitle: true,
           titleTextStyle: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF1C1B1F),
+            color: Color(0xFF3B2F23),
           ),
         ),
         cardTheme: CardThemeData(
-          elevation: 1,
+          elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppConstants.cardBorderRadius),
           ),
-          color: Colors.white,
+          color: const Color(0xFFFCF6EA),
           surfaceTintColor: Colors.transparent,
         ),
         bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-          backgroundColor: Colors.white,
-          selectedItemColor: _primaryLight,
-          unselectedItemColor: Color(0xFF757575),
+          backgroundColor: Color(0xFFFCF6EA),
+          selectedItemColor: amberLight,
+          unselectedItemColor: Color(0xFF8A7A66),
           type: BottomNavigationBarType.fixed,
           elevation: AppConstants.bottomNavElevation,
         ),
         dividerTheme: const DividerThemeData(
-          color: Color(0xFFE0E0E0),
+          color: Color(0xFFE7D8BC),
           thickness: 1,
         ),
         textTheme: _buildTextTheme(Brightness.light),
         inputDecorationTheme: _buildInputTheme(Brightness.light),
         bottomSheetTheme: BottomSheetThemeData(
-          backgroundColor: Colors.white,
-          modalBackgroundColor: Colors.white,
+          backgroundColor: const Color(0xFFFCF6EA),
+          modalBackgroundColor: const Color(0xFFFCF6EA),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(
               top: Radius.circular(AppConstants.sheetBorderRadius),
@@ -75,43 +87,75 @@ class AppTheme {
           ),
         ),
         sliderTheme: SliderThemeData(
-          activeTrackColor: _primaryLight,
-          inactiveTrackColor: _primaryLight.withValues(alpha: 0.2),
-          thumbColor: _primaryLight,
-          overlayColor: _primaryLight.withValues(alpha: 0.12),
+          activeTrackColor: amberLight,
+          inactiveTrackColor: amberLight.withValues(alpha: 0.2),
+          thumbColor: amberLight,
+          overlayColor: amberLight.withValues(alpha: 0.12),
         ),
         progressIndicatorTheme: const ProgressIndicatorThemeData(
-          color: _primaryLight,
-          linearTrackColor: Color(0xFFE8F5E9),
+          color: amberLight,
+          linearTrackColor: Color(0xFFF0E2C6),
+        ),
+        chipTheme: ChipThemeData(
+          backgroundColor: const Color(0xFFF3E7CF),
+          selectedColor: amberLight.withValues(alpha: 0.18),
+          labelStyle: const TextStyle(color: Color(0xFF3B2F23)),
+          secondaryLabelStyle: const TextStyle(color: Color(0xFF3B2F23)),
+          brightness: Brightness.light,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+        ),
+        floatingActionButtonTheme: const FloatingActionButtonThemeData(
+          foregroundColor: onAmberLight,
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: amberLight,
+            foregroundColor: onAmberLight,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            backgroundColor: amberLight,
+            foregroundColor: onAmberLight,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
         ),
       );
 
-  // ─── Dark Theme (AMOLED Black) ──────────────────────────────────────────
+  // ─── Dark Theme (Contemplative Night) ────────────────────────────────────
   static ThemeData get darkTheme => ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,
-        primaryColor: _primaryDark,
-        scaffoldBackgroundColor: Colors.black,
+        primaryColor: amberDark,
+        scaffoldBackgroundColor: const Color(0xFF15110C),
         colorScheme: const ColorScheme.dark(
-          primary: _primaryDark,
-          onPrimary: Colors.black,
-          secondary: _secondaryDark,
-          onSecondary: Colors.black,
-          surface: Color(0xFF121212),
-          onSurface: Color(0xFFE6E1E5),
-          error: Color(0xFFF2B8B5),
-          onError: Colors.black,
-          outline: Color(0xFF938F99),
+          primary: amberDark,
+          onPrimary: onAmberDark,
+          secondary: amberDarkSoft,
+          onSecondary: onAmberDark,
+          surface: Color(0xFF211A12),
+          onSurface: Color(0xFFF2ECE4),
+          error: Color(0xFFE57373),
+          onError: onAmberDark,
+          outline: Color(0xFF3D3225),
+          surfaceContainerHighest: Color(0xFF2C2318),
         ),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.black,
-          foregroundColor: Color(0xFFE6E1E5),
+          backgroundColor: Color(0xFF211A12),
+          foregroundColor: Color(0xFFF2ECE4),
           elevation: 0,
           centerTitle: true,
           titleTextStyle: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w600,
-            color: Color(0xFFE6E1E5),
+            color: Color(0xFFF2ECE4),
           ),
         ),
         cardTheme: CardThemeData(
@@ -119,25 +163,25 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppConstants.cardBorderRadius),
           ),
-          color: const Color(0xFF1E1E1E),
+          color: const Color(0xFF211A12),
           surfaceTintColor: Colors.transparent,
         ),
         bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-          backgroundColor: Colors.black,
-          selectedItemColor: _primaryDark,
-          unselectedItemColor: Color(0xFF757575),
+          backgroundColor: Color(0xFF211A12),
+          selectedItemColor: amberDark,
+          unselectedItemColor: Color(0xFF8E8174),
           type: BottomNavigationBarType.fixed,
           elevation: AppConstants.bottomNavElevation,
         ),
         dividerTheme: const DividerThemeData(
-          color: Color(0xFF333333),
+          color: Color(0xFF33291C),
           thickness: 1,
         ),
         textTheme: _buildTextTheme(Brightness.dark),
         inputDecorationTheme: _buildInputTheme(Brightness.dark),
         bottomSheetTheme: BottomSheetThemeData(
-          backgroundColor: const Color(0xFF1E1E1E),
-          modalBackgroundColor: const Color(0xFF1E1E1E),
+          backgroundColor: const Color(0xFF211A12),
+          modalBackgroundColor: const Color(0xFF211A12),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(
               top: Radius.circular(AppConstants.sheetBorderRadius),
@@ -145,36 +189,67 @@ class AppTheme {
           ),
         ),
         sliderTheme: SliderThemeData(
-          activeTrackColor: _primaryDark,
-          inactiveTrackColor: _primaryDark.withValues(alpha: 0.2),
-          thumbColor: _primaryDark,
-          overlayColor: _primaryDark.withValues(alpha: 0.12),
+          activeTrackColor: amberDark,
+          inactiveTrackColor: amberDark.withValues(alpha: 0.2),
+          thumbColor: amberDark,
+          overlayColor: amberDark.withValues(alpha: 0.12),
         ),
         progressIndicatorTheme: const ProgressIndicatorThemeData(
-          color: _primaryDark,
-          linearTrackColor: Color(0xFF1B3A1B),
+          color: amberDark,
+          linearTrackColor: Color(0xFF3A2E1D),
+        ),
+        chipTheme: ChipThemeData(
+          backgroundColor: const Color(0xFF2C2318),
+          selectedColor: amberDark.withValues(alpha: 0.22),
+          labelStyle: const TextStyle(color: Color(0xFFF2ECE4)),
+          secondaryLabelStyle: const TextStyle(color: Color(0xFFF2ECE4)),
+          brightness: Brightness.dark,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+        ),
+        floatingActionButtonTheme: const FloatingActionButtonThemeData(
+          foregroundColor: onAmberDark,
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: amberDark,
+            foregroundColor: onAmberDark,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            backgroundColor: amberDark,
+            foregroundColor: onAmberDark,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
         ),
       );
 
-  // ─── High-Contrast Theme ────────────────────────────────────────────────
+  // ─── High-Contrast Theme (accessibility) ─────────────────────────────────
   static ThemeData get highContrastTheme => ThemeData(
         useMaterial3: true,
         brightness: Brightness.light,
-        primaryColor: Colors.black,
-        scaffoldBackgroundColor: Colors.white,
+        primaryColor: amberHighContrast,
+        scaffoldBackgroundColor: const Color(0xFFFBF7EF),
         colorScheme: const ColorScheme.light(
-          primary: Colors.black,
+          primary: amberHighContrast,
           onPrimary: Colors.white,
-          secondary: Color(0xFFD32F2F),
+          secondary: Color(0xFF7A440E),
           onSecondary: Colors.white,
-          surface: Colors.white,
+          surface: Color(0xFFFBF7EF),
           onSurface: Colors.black,
           error: Color(0xFFB71C1C),
           onError: Colors.white,
           outline: Colors.black,
         ),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.white,
+          backgroundColor: Color(0xFFFBF7EF),
           foregroundColor: Colors.black,
           elevation: 0,
           centerTitle: true,
@@ -190,13 +265,13 @@ class AppTheme {
             borderRadius: BorderRadius.circular(AppConstants.cardBorderRadius),
             side: const BorderSide(color: Colors.black, width: 2),
           ),
-          color: Colors.white,
+          color: Color(0xFFFBF7EF),
           surfaceTintColor: Colors.transparent,
         ),
         bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-          backgroundColor: Colors.white,
-          selectedItemColor: Colors.black,
-          unselectedItemColor: Color(0xFF666666),
+          backgroundColor: Color(0xFFFBF7EF),
+          selectedItemColor: amberHighContrast,
+          unselectedItemColor: Color(0xFF5A5048),
           type: BottomNavigationBarType.fixed,
           elevation: 0,
         ),
@@ -207,8 +282,8 @@ class AppTheme {
         textTheme: _buildHighContrastTextTheme(),
         inputDecorationTheme: _buildInputTheme(Brightness.light, highContrast: true),
         bottomSheetTheme: BottomSheetThemeData(
-          backgroundColor: Colors.white,
-          modalBackgroundColor: Colors.white,
+          backgroundColor: Color(0xFFFBF7EF),
+          modalBackgroundColor: Color(0xFFFBF7EF),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(
               top: Radius.circular(AppConstants.sheetBorderRadius),
@@ -217,20 +292,24 @@ class AppTheme {
           ),
         ),
         sliderTheme: const SliderThemeData(
-          activeTrackColor: Colors.black,
+          activeTrackColor: amberHighContrast,
           inactiveTrackColor: Color(0xFFCCCCCC),
-          thumbColor: Colors.black,
+          thumbColor: amberHighContrast,
         ),
         progressIndicatorTheme: const ProgressIndicatorThemeData(
-          color: Colors.black,
+          color: amberHighContrast,
           linearTrackColor: Color(0xFFCCCCCC),
         ),
       );
 
   // ─── Text Themes ────────────────────────────────────────────────────────
   static TextTheme _buildTextTheme(Brightness brightness) {
-    final baseColor =
-        brightness == Brightness.light ? const Color(0xFF1C1B1F) : const Color(0xFFE6E1E5);
+    final baseColor = brightness == Brightness.light
+        ? const Color(0xFF3B2F23)
+        : const Color(0xFFF2ECE4);
+    final muted = brightness == Brightness.light
+        ? const Color(0xFF6B5C49)
+        : const Color(0xFFC9BCA9);
     return TextTheme(
       displayLarge: TextStyle(fontSize: 32, fontWeight: FontWeight.w700, color: baseColor),
       displayMedium: TextStyle(fontSize: 28, fontWeight: FontWeight.w600, color: baseColor),
@@ -243,10 +322,10 @@ class AppTheme {
       titleSmall: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: baseColor),
       bodyLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.w400, color: baseColor),
       bodyMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.w400, color: baseColor),
-      bodySmall: TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: baseColor.withValues(alpha: 0.8)),
+      bodySmall: TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: muted),
       labelLarge: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: baseColor),
       labelMedium: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: baseColor),
-      labelSmall: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: baseColor.withValues(alpha: 0.7)),
+      labelSmall: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: muted),
     );
   }
 
@@ -276,21 +355,22 @@ class AppTheme {
     final outlineColor = highContrast
         ? Colors.black
         : brightness == Brightness.light
-            ? const Color(0xFF79747E)
-            : const Color(0xFF938F99);
+            ? const Color(0xFFD9C7A3)
+            : const Color(0xFF5A4B38);
+    final accent = highContrast ? Colors.black : amberLight;
     return InputDecorationTheme(
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide(color: outlineColor, width: highContrast ? 2 : 1),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide(color: outlineColor, width: highContrast ? 2 : 1),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide(
-          color: highContrast ? Colors.black : _primaryLight,
+          color: highContrast ? Colors.black : amberLight,
           width: 2,
         ),
       ),
@@ -298,8 +378,8 @@ class AppTheme {
       fillColor: highContrast
           ? Colors.white
           : brightness == Brightness.light
-              ? const Color(0xFFF5F5F5)
-              : const Color(0xFF2C2C2C),
+              ? const Color(0xFFF6ECDC)
+              : const Color(0xFF2A2117),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     );
   }
