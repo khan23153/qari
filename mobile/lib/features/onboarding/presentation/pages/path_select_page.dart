@@ -33,6 +33,11 @@ class _PathSelectPageState extends ConsumerState<PathSelectPage> {
     final storage = LocalStorageService();
     await storage.setSelectedPath(path.name);
     await storage.setOnboardingComplete(true);
+    // Persist the local "has completed onboarding" flag immediately so the app
+    // routes the user straight to Home on the next launch even if the server
+    // sync below fails (e.g. offline). This is the source of truth used by
+    // main.dart's auth check.
+    await storage.setIsOnboarded(true);
 
     // Persist the onboarding choice server-side so all progress, XP, and
     // learning data is linked to the signed-in user (fresh users start at 0).
@@ -42,7 +47,6 @@ class _PathSelectPageState extends ConsumerState<PathSelectPage> {
         appLanguage: lang,
         startingPath: _backendPath(path),
       );
-      await storage.setIsOnboarded(true);
     } catch (e) {
       // If the sync fails we still let the user in; the choice is stored
       // locally and retried on the next launch via the home refresh.

@@ -1,13 +1,21 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:flutter_compass/flutter_compass.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/serene_decorations.dart';
 
 /// Qibla screen — the hero is a glowing amber compass that points to the
 /// direction of prayer. Uses the "Serene Path" glass + glow primitives.
+///
+/// The Qibla bearing is computed from the device's real GPS location, and the
+/// compass dial is rotated in real time by the magnetometer (via
+/// [FlutterCompass]) so the needle always settles on the Qibla as the user
+/// turns the phone.
 class QiblaPage extends ConsumerStatefulWidget {
   const QiblaPage({super.key});
 
@@ -17,13 +25,18 @@ class QiblaPage extends ConsumerStatefulWidget {
 
 class _QiblaPageState extends ConsumerState<QiblaPage>
     with TickerProviderStateMixin {
-  /// Illustrative Qibla bearing (degrees from North). In production this is
-  /// derived from the device's location vs. the Kaaba's coordinates.
-  static const double _qiblaBearing = 255.0;
+  /// Qibla bearing in degrees from North (computed from device location).
+  double _qiblaBearing = 0.0;
+
+  /// Current device heading from the magnetometer (0 = North).
+  double _deviceHeading = 0.0;
+
+  bool _isLoading = true;
+  bool _hasLocation = false;
+  String? _error;
 
   late final AnimationController _pulse;
-  late final AnimationController _sweep;
-  late final Animation<double> _bearing;
+  StreamSubscription<CompassEvent>? _compassSubscription;
 
   @override
   void initState() {
@@ -32,20 +45,85 @@ class _QiblaPageState extends ConsumerState<QiblaPage>
       vsync: this,
       duration: const Duration(milliseconds: 1600),
     )..repeat(reverse: true);
-    _sweep = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1300),
-    );
-    _bearing = Tween<double>(begin: 0, end: _qiblaBearing).animate(
-      CurvedAnimation(parent: _sweep, curve: Curves.easeOutCubic),
-    );
-    _sweep.forward();
+    _initQibla();
   }
+
+  /// Requests location permission, resolves the device position, computes the
+  /// Qibla bearing, and subscribes to live compass (magnetometer) updates.
+  Future<void> _initQibla() async {
+    setState(() => _isLoading = true);
+
+    // 1. GPS permission — Qibla cannot be calculated without a location.
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = 'Location permission is required to find the Qibla '
+              'direction. Please enable it in your device settings.';
+        });
+      }
+      return;
+    }
+
+    // 2. Resolve the device location and compute the Qibla bearing.
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 15),
+        ),
+      );
+      _qiblaBearing = _computeQiblaBearing(
+        position.latitude,
+        position.longitude,
+      );
+      _hasLocation = true;
+    } catch (e) {
+      // Fall back to an approximate bearing so the compass still renders.
+      _qiblaBearing = 255.0;
+      if (mounted) {
+        setState(() {
+          _error = 'Could not determine your location. Showing an '
+              'approximate Qibla direction.';
+        });
+      }
+    }
+
+    // 3. Live magnetometer updates — rotate the dial as the phone turns.
+    _compassSubscription = FlutterCompass.events?.listen((event) {
+      if (event.heading != null && mounted) {
+        setState(() => _deviceHeading = event.heading!);
+      }
+    });
+
+    if (mounted) setState(() => _isLoading = false);
+  }
+
+  /// Great-circle initial bearing from the user's location to the Kaaba.
+  double _computeQiblaBearing(double lat, double lon) {
+    const kaabaLat = 21.4225 * math.pi / 180;
+    const kaabaLon = 39.8262 * math.pi / 180;
+    final pLat = lat * math.pi / 180;
+    final pLon = lon * math.pi / 180;
+    final dLon = kaabaLon - pLon;
+    final y = math.sin(dLon) * math.cos(kaabaLat);
+    final x = math.cos(pLat) * math.sin(kaabaLat) -
+        math.sin(pLat) * math.cos(kaabaLat) * math.cos(dLon);
+    final brng = math.atan2(y, x);
+    return (brng * 180 / math.pi + 360) % 360;
+  }
+
+  Future<void> _retry() => _initQibla();
 
   @override
   void dispose() {
     _pulse.dispose();
-    _sweep.dispose();
+    _compassSubscription?.cancel();
     super.dispose();
   }
 
@@ -80,14 +158,53 @@ class _QiblaPageState extends ConsumerState<QiblaPage>
                   ),
                 ),
               ),
+              if (_error != null)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.error.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color:
+                              theme.colorScheme.error.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline_rounded,
+                              color: theme.colorScheme.error, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _error!,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.error,
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _retry,
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 28),
                   child: Center(
-                    child: QiblaCompass(
-                      bearing: _bearing,
-                      pulse: _pulse,
-                    ),
+                    child: _isLoading
+                        ? const CircularProgressIndicator()
+                        : QiblaCompass(
+                            bearing: _qiblaBearing,
+                            deviceHeading: _deviceHeading,
+                            pulse: _pulse,
+                          ),
                   ),
                 ),
               ),
@@ -113,7 +230,9 @@ class _QiblaPageState extends ConsumerState<QiblaPage>
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Rotate until the glowing needle settles on Qibla.',
+                          _hasLocation
+                              ? 'Rotate until the glowing needle settles on Qibla.'
+                              : 'Rotate until the glowing needle settles on Qibla.',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                           ),
@@ -134,15 +253,18 @@ class _QiblaPageState extends ConsumerState<QiblaPage>
 }
 
 /// The glowing amber Qibla compass — concentric amber rings, minimalist
-/// cardinal markers, a luminous needle that sweeps to the Qibla bearing, and a
-/// pulsing central orb.
+/// cardinal markers, a luminous needle that points to the Qibla bearing, and a
+/// pulsing central orb. The whole dial rotates with the device heading so the
+/// needle always points at the real-world Qibla.
 class QiblaCompass extends StatelessWidget {
-  final Animation<double> bearing;
+  final double bearing;
+  final double deviceHeading;
   final Animation<double> pulse;
 
   const QiblaCompass({
     super.key,
     required this.bearing,
+    required this.deviceHeading,
     required this.pulse,
   });
 
@@ -158,78 +280,84 @@ class QiblaCompass extends StatelessWidget {
         return SizedBox(
           width: size,
           height: size,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              // Ambient amber glow
-              AnimatedBuilder(
-                animation: pulse,
-                builder: (_, __) => Container(
-                  width: size,
-                  height: size,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: amber.withValues(alpha: 0.22 + 0.22 * pulse.value),
-                        blurRadius: 40 + 30 * pulse.value,
-                        spreadRadius: 2,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              // Dial
-              AnimatedBuilder(
-                animation: Listenable.merge([bearing, pulse]),
-                builder: (_, __) => CustomPaint(
-                  size: Size(size, size),
-                  painter: _CompassPainter(
-                    bearing: bearing.value,
-                    glow: pulse.value,
-                    amber: amber,
-                    isDark: isDark,
-                  ),
-                ),
-              ),
-              // Central glowing orb
-              AnimatedBuilder(
-                animation: pulse,
-                builder: (_, __) {
-                  final orbSize = size * (0.15 + 0.02 * pulse.value);
-                  return Container(
-                    width: orbSize,
-                    height: orbSize,
+          // Rotate the dial by the negative device heading so North aligns
+          // with the real world — the needle (drawn at [bearing]) then points
+          // at the actual Qibla direction as the user turns the phone.
+          child: Transform.rotate(
+            angle: -deviceHeading * math.pi / 180,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Ambient amber glow
+                AnimatedBuilder(
+                  animation: pulse,
+                  builder: (_, __) => Container(
+                    width: size,
+                    height: size,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        colors: [
-                          amber.withValues(alpha: 0.95),
-                          amber.withValues(alpha: 0.2),
-                        ],
-                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: amber.withValues(alpha: 0.5),
-                          blurRadius: 20,
+                          color: amber.withValues(alpha: 0.22 + 0.22 * pulse.value),
+                          blurRadius: 40 + 30 * pulse.value,
                           spreadRadius: 2,
                         ),
                       ],
                     ),
-                    child: Center(
-                      child: Container(
-                        width: orbSize * 0.4,
-                        height: orbSize * 0.4,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isDark ? SereneColors.charcoal : Colors.white,
+                  ),
+                ),
+                // Dial
+                AnimatedBuilder(
+                  animation: pulse,
+                  builder: (_, __) => CustomPaint(
+                    size: Size(size, size),
+                    painter: _CompassPainter(
+                      bearing: bearing,
+                      glow: pulse.value,
+                      amber: amber,
+                      isDark: isDark,
+                    ),
+                  ),
+                ),
+                // Central glowing orb
+                AnimatedBuilder(
+                  animation: pulse,
+                  builder: (_, __) {
+                    final orbSize = size * (0.15 + 0.02 * pulse.value);
+                    return Container(
+                      width: orbSize,
+                      height: orbSize,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            amber.withValues(alpha: 0.95),
+                            amber.withValues(alpha: 0.2),
+                          ],
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: amber.withValues(alpha: 0.5),
+                            blurRadius: 20,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: Container(
+                          width: orbSize * 0.4,
+                          height: orbSize * 0.4,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: isDark ? SereneColors.charcoal : Colors.white,
+                          ),
                         ),
                       ),
-                    ),
-                  );
-                },
-              ),
-            ],
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -309,7 +437,7 @@ class _CompassPainter extends CustomPainter {
     drawLabel('S', c + Offset(0, r * ring));
     drawLabel('W', c + Offset(-r * ring, 0));
 
-    // Needle — sweeps to the Qibla bearing
+    // Needle — points to the Qibla bearing.
     canvas.save();
     canvas.translate(c.dx, c.dy);
     canvas.rotate(bearing * math.pi / 180);

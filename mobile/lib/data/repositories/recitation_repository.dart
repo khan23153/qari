@@ -31,6 +31,9 @@ class RecitationRepository {
         },
         idempotencyKey: idempotencyKey,
         onProgress: onProgress,
+        timeout: Duration(
+          seconds: AppConstants.recitationApiTimeoutSeconds,
+        ),
       );
       final data = response.data as Map<String, dynamic>;
       return data['session_id'] as String;

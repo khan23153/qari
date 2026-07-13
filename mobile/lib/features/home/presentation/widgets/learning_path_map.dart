@@ -3,14 +3,21 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:haptic_feedback/haptic_feedback.dart';
 
 import '../../../../core/constants/app_constants.dart';
+import '../../../../data/models/user_model.dart';
 
 /// Learning path map — Duolingo-style vertical path with nodes.
 /// Shows completed, current, and locked lessons as a winding path.
+///
+/// When [nodes] (server data) is provided it is rendered; otherwise a static
+/// sample path is shown. Tapping an unlocked node invokes [onNodeTap].
 class LearningPathMap extends StatelessWidget {
-  const LearningPathMap({super.key});
+  final List<PathNode>? nodes;
+  final ValueChanged<PathNode>? onNodeTap;
 
-  // Sample path nodes for demonstration
-  static const _pathNodes = [
+  const LearningPathMap({super.key, this.nodes, this.onNodeTap});
+
+  // Sample path nodes for demonstration when no server data is available.
+  static const _sampleNodes = [
     _PathNodeData(id: '1', label: 'Arabic Letters', type: 'lesson', state: 'completed', xp: 10),
     _PathNodeData(id: '2', label: 'Harakat', type: 'lesson', state: 'completed', xp: 10),
     _PathNodeData(id: '3', label: 'Quiz 1', type: 'quiz', state: 'completed', xp: 15),
@@ -23,11 +30,37 @@ class LearningPathMap extends StatelessWidget {
     _PathNodeData(id: '10', label: 'Bonus: Root Words', type: 'bonus', state: 'locked', xp: 20),
   ];
 
+  List<_PathNodeData> get _displayNodes {
+    final serverNodes = nodes;
+    if (serverNodes != null && serverNodes.isNotEmpty) {
+      return serverNodes
+          .map(
+            (n) => _PathNodeData(
+              id: n.id,
+              label: n.label,
+              type: n.type.name,
+              state: n.isLocked
+                  ? 'locked'
+                  : n.isCompleted
+                      ? 'completed'
+                      : 'current',
+              xp: n.xpReward,
+            ),
+          )
+          .toList();
+    }
+    return _sampleNodes;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final items = _displayNodes;
     return Column(
-      children: List.generate(_pathNodes.length, (index) {
-        final node = _pathNodes[index];
+      children: List.generate(items.length, (index) {
+        final node = items[index];
+        final sourceNode = (nodes != null && index < nodes!.length)
+            ? nodes![index]
+            : null;
         // Zigzag pattern: offset left, center, right
         final alignment = index % 3 == 0
             ? Alignment.centerLeft
@@ -37,8 +70,13 @@ class LearningPathMap extends StatelessWidget {
 
         return Column(
           children: [
-            _PathNode(node: node, alignment: alignment),
-            if (index < _pathNodes.length - 1) _PathConnector(),
+            _PathNode(
+              node: node,
+              alignment: alignment,
+              sourceNode: sourceNode,
+              onNodeTap: onNodeTap,
+            ),
+            if (index < items.length - 1) _PathConnector(),
           ],
         );
       }),
@@ -67,8 +105,15 @@ class _PathNodeData {
 class _PathNode extends StatelessWidget {
   final _PathNodeData node;
   final Alignment alignment;
+  final PathNode? sourceNode;
+  final ValueChanged<PathNode>? onNodeTap;
 
-  const _PathNode({required this.node, required this.alignment});
+  const _PathNode({
+    required this.node,
+    required this.alignment,
+    this.sourceNode,
+    this.onNodeTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -102,14 +147,17 @@ class _PathNode extends StatelessWidget {
       icon = Icons.lock_rounded;
     }
 
+    final tappable = !isLocked && sourceNode != null && onNodeTap != null;
+
     return Align(
       alignment: alignment,
       child: GestureDetector(
-        onTap: () async {
-          if (isLocked) return;
-          await Haptics.vibrate(HapticsType.selection);
-          // Navigate to lesson
-        },
+        onTap: tappable
+            ? () async {
+                await Haptics.vibrate(HapticsType.selection);
+                onNodeTap!(sourceNode!);
+              }
+            : null,
         child: Column(
           children: [
             // Node circle

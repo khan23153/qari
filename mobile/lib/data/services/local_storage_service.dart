@@ -247,4 +247,17 @@ class LocalStorageService {
     await ensureInitialized();
     await _prefs.clear();
   }
+
+  // ─── Clear Cached Progress ───────────────────────────────────────────────
+  /// Removes only the locally cached *progress/state* values (streak, daily
+  /// goal, cached backend data version) so a freshly authenticated user lands
+  /// on a clean slate and the home/profile screens refetch real server data.
+  /// Auth token, user id, onboarding flag, theme and other preferences are
+  /// intentionally preserved.
+  Future<void> clearProgressCache() async {
+    await ensureInitialized();
+    await _prefs.remove(_kStreakCount);
+    await _prefs.remove(_kDailyGoal);
+    await _prefs.remove(_kDataVersion);
+  }
 }

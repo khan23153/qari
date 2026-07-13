@@ -371,16 +371,18 @@ class _WordTapTarget extends StatelessWidget {
 
     if (grammarColorsEnabled) {
       final config = AppTheme.getGrammarConfig(word.posGroup);
-      textColor = config.color;
+      textColor = AppTheme.ensureContrast(config.color, Theme.of(context).brightness);
       decoration = AppTheme.toTextDecoration(config.underlineStyle);
-      decorationColor = config.color;
+      decorationColor = textColor;
       decorationStyle = config.underlineStyle == UnderlineStyle.dotted
           ? TextDecorationStyle.dotted
           : TextDecorationStyle.solid;
     } else if (tajweedColorsEnabled && word.tajweedSpans != null) {
       // For tajweed, we'd render per-span colors; here we use the first span's rule
       if (word.tajweedSpans!.isNotEmpty) {
-        textColor = AppTheme.getTajweedColor(word.tajweedSpans!.first.rule);
+        final tajColor =
+            AppTheme.getTajweedColor(word.tajweedSpans!.first.rule);
+        textColor = AppTheme.ensureContrast(tajColor, Theme.of(context).brightness);
       }
     }
 

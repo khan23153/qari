@@ -45,14 +45,16 @@ class RecordingService {
     try {
       final tempDir = await getTemporaryDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final filePath = '${tempDir.path}/recitation_$timestamp.m4a';
+      // The recitation AI backend only accepts 16kHz mono 16-bit WAV audio
+      // (it decodes via soundfile/wave), so record in that exact format.
+      final filePath = '${tempDir.path}/recitation_$timestamp.wav';
 
       await _recorder.start(
         const RecordConfig(
-          encoder: AudioEncoder.aacLc,
-          bitRate: 128000,
-          sampleRate: 44100,
+          encoder: AudioEncoder.wav,
+          sampleRate: 16000,
           numChannels: 1,
+          bitRate: 256000,
         ),
         path: filePath,
       );

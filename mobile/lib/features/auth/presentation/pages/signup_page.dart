@@ -57,15 +57,19 @@ class _SignupPageState extends ConsumerState<SignupPage> {
       await storage.setAuthToken(result.accessToken);
       await storage.setUserId(result.userId);
       await storage.setIsOnboarded(result.isOnboarded);
+      // A brand-new account starts with zero progress — clear any cached
+      // progress so the home screen loads a fresh (empty) server object.
+      await storage.clearProgressCache();
 
       if (!mounted) return;
       widget.onAuthenticated(result);
     } on ApiException catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.message);
-    } catch (_) {
+      final code = e.statusCode != null ? '[${e.statusCode}] ' : '';
+      setState(() => _error = '$code${e.message}');
+    } catch (e) {
       if (!mounted) return;
-      setState(() => _error = 'Something went wrong. Please try again.');
+      setState(() => _error = 'Error: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

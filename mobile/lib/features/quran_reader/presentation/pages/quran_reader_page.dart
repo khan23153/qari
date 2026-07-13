@@ -8,6 +8,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/serene_decorations.dart';
 import '../../../../data/models/word_model.dart';
 import '../../../../data/models/surah_model.dart';
+import '../../../../data/repositories/corpus_repository.dart';
 import '../../../../data/services/local_storage_service.dart';
 import '../../../../data/services/audio_service.dart';
 import '../widgets/ayah_widget.dart';
@@ -45,14 +46,42 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
   int? _playingAyahIndex;
   double _playbackSpeed = AppConstants.defaultPlaybackSpeed;
 
-  // Sample ayah data for demonstration
-  late final List<AyahModel> _ayahs;
+  // Ayah data — fetched live from the API; falls back to sample data on error
+  // so the screen is never blank.
+  List<AyahModel> _ayahs = [];
+  bool _isLoadingAyahs = true;
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
-    _ayahs = _generateSampleAyahs(widget.surahNumber);
+    _loadAyahs();
+  }
+
+  /// Loads the ayahs for this surah. On success the server data is mapped
+  /// into the state array; on failure we fall back to bundled sample data
+  /// (kept so the reader still renders when offline / API is unreachable).
+  Future<void> _loadAyahs() async {
+    setState(() => _isLoadingAyahs = true);
+    try {
+      final ayahs = await CorpusRepository().getAyahs(widget.surahNumber);
+      if (mounted) {
+        setState(() {
+          _ayahs = ayahs.isNotEmpty
+              ? ayahs
+              : _generateSampleAyahs(widget.surahNumber);
+          _isLoadingAyahs = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('QuranReader: failed to load ayahs, using sample: $e');
+      if (mounted) {
+        setState(() {
+          _ayahs = _generateSampleAyahs(widget.surahNumber);
+          _isLoadingAyahs = false;
+        });
+      }
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -222,7 +251,9 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
 
             // ─── Ayah List ────────────────────────────────────────────
             Expanded(
-              child: ListView.builder(
+              child: _isLoadingAyahs
+                  ? const Center(child: CircularProgressIndicator())
+                  : ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 itemCount: _ayahs.length,
                 itemBuilder: (context, index) {

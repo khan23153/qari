@@ -409,6 +409,21 @@ class AppTheme {
         AppConstants.tajweedColors['normal']!;
   }
 
+  /// Returns [color] adjusted for the surrounding theme so colored Quran text
+  /// (grammar / tajweed coding) never blends into the background. On a dark
+  /// theme the colors are lightened toward white; on light themes they are
+  /// returned unchanged.
+  static Color ensureContrast(
+    Color color,
+    Brightness brightness, {
+    double amount = 0.45,
+  }) {
+    if (brightness == Brightness.dark) {
+      return Color.lerp(color, Colors.white, amount) ?? color;
+    }
+    return color;
+  }
+
   /// Builds a [TextDecoration] from an [UnderlineStyle].
   static TextDecoration toTextDecoration(UnderlineStyle style) {
     switch (style) {

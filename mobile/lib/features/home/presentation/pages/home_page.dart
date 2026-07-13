@@ -4,9 +4,13 @@ import 'package:haptic_feedback/haptic_feedback.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../data/services/local_storage_service.dart';
+import '../../../../data/repositories/user_repository.dart';
+import '../../../../data/models/user_model.dart';
+import '../../../../data/models/lesson_model.dart';
 import '../../../quran_reader/presentation/pages/surah_list_page.dart';
 import '../../../recitation/presentation/pages/recitation_page.dart';
 import '../../../profile/presentation/pages/profile_page.dart';
+import '../../../lessons/presentation/pages/lesson_player_page.dart';
 import '../widgets/streak_card.dart';
 import '../widgets/continue_card.dart';
 import '../widgets/daily_goal_ring.dart';
@@ -171,11 +175,14 @@ class HomeTab extends ConsumerStatefulWidget {
 
 class _HomeTabState extends ConsumerState<HomeTab> {
   String _selectedLanguage = 'en';
+  HomeResponse? _home;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _loadLanguage();
+    _loadHome();
   }
 
   Future<void> _loadLanguage() async {
@@ -184,6 +191,61 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     if (mounted && lang != null) {
       setState(() => _selectedLanguage = lang);
     }
+  }
+
+  /// Fetches the home screen data. Any failure leaves [_home] null so the UI
+  /// falls back to zero/empty defaults rather than stale or fake values.
+  Future<void> _loadHome() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+    try {
+      final home = await UserRepository().getHomeData();
+      if (mounted) setState(() => _home = home);
+    } catch (e) {
+      debugPrint('HomeTab: failed to load home data: $e');
+      if (mounted) setState(() => _home = null);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // ─── Derived progress values (default to zero / empty) ───────────────────
+  int get _streak => _home?.streakCount ?? _home?.user.currentStreak ?? 0;
+  int get _xpToday => _home?.xpToday ?? 0;
+  int get _xpWeeklyGoal => _home?.xpWeeklyGoal ?? 100;
+  LessonProgress? get _continueLesson => _home?.continueLesson;
+  int get _flashcardsDue => _home?.flashcardsDue ?? 0;
+  int get _dailyGoalProgress => _home?.dailyGoalProgress ?? 0;
+  int get _dailyGoal => _home?.dailyGoal ?? 5;
+  List<PathNode>? get _pathNodes => _home?.learningPath;
+
+  /// Opens the lesson player for either the continue-lesson or a tapped path
+  /// node. Builds a minimal [LessonModel] from the available server data.
+  void _openLesson({LessonProgress? lesson, PathNode? node}) {
+    late final LessonModel model;
+    if (lesson != null) {
+      model = LessonModel(
+        lessonId: lesson.lessonId,
+        moduleNumber: lesson.moduleNumber,
+        lessonNumber: lesson.lessonNumber,
+        title: lesson.title,
+        description: '',
+      );
+    } else if (node != null && node.lessonId != null) {
+      model = LessonModel(
+        lessonId: node.lessonId!,
+        moduleNumber: 1,
+        lessonNumber: node.lessonId!,
+        title: node.label,
+        description: '',
+      );
+    } else {
+      return;
+    }
+    Haptics.vibrate(HapticsType.medium);
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => LessonPlayerPage(lesson: model)),
+    );
   }
 
   @override
@@ -197,8 +259,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
           child: RefreshIndicator(
           onRefresh: () async {
             await Haptics.vibrate(HapticsType.medium);
-            // Trigger refresh — in production this would call the API
-            await Future.delayed(const Duration(seconds: 1));
+            await _loadHome();
           },
           child: CustomScrollView(
             slivers: [
@@ -247,7 +308,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              '7',
+                              '$_streak',
                               style: theme.textTheme.titleMedium?.copyWith(
                                 fontWeight: FontWeight.w700,
                                 color: Colors.orange.shade700,
@@ -266,8 +327,8 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                   child: _XpBar(
-                    currentXp: 340,
-                    weeklyGoal: 500,
+                    currentXp: _xpToday,
+                    weeklyGoal: _xpWeeklyGoal,
                   ),
                 ),
               ),
@@ -276,14 +337,21 @@ class _HomeTabState extends ConsumerState<HomeTab> {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-                  child: ContinueCard(
-                    lessonTitle: isUrdu ? 'اسباق ۳: فعل' : 'Lesson 3: Fi\'l (Verbs)',
-                    moduleNumber: 1,
-                    progressPercent: 0.6,
-                    onTap: () {
-                      // Navigate to lesson player
-                    },
-                  ),
+                  child: _continueLesson != null
+                      ? ContinueCard(
+                          lessonTitle: _continueLesson!.title,
+                          moduleNumber: _continueLesson!.moduleNumber,
+                          progressPercent: _continueLesson!.progressPercent,
+                          onTap: () => _openLesson(lesson: _continueLesson),
+                        )
+                      : _StartLearningCard(
+                          isUrdu: isUrdu,
+                          onTap: () => _openLesson(
+                            node: _pathNodes != null && _pathNodes!.isNotEmpty
+                                ? _pathNodes!.first
+                                : null,
+                          ),
+                        ),
                 ),
               ),
 
@@ -309,8 +377,8 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: DailyGoalRing(
-                          current: 3,
-                          goal: 5,
+                          current: _dailyGoalProgress,
+                          goal: _dailyGoal,
                         ),
                       ),
                     ],
@@ -334,7 +402,10 @@ class _HomeTabState extends ConsumerState<HomeTab> {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: const LearningPathMap(),
+                  child: LearningPathMap(
+                    nodes: _pathNodes,
+                    onNodeTap: (node) => _openLesson(node: node),
+                  ),
                 ),
               ),
 
@@ -343,6 +414,79 @@ class _HomeTabState extends ConsumerState<HomeTab> {
           ),
         ),
       ),
+      ),
+    );
+  }
+}
+
+/// Prompt shown when there is no in-progress lesson yet.
+class _StartLearningCard extends StatelessWidget {
+  final bool isUrdu;
+  final VoidCallback onTap;
+
+  const _StartLearningCard({required this.isUrdu, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppConstants.cardBorderRadius),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primary.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(AppConstants.cardBorderRadius),
+            border: Border.all(
+              color: theme.colorScheme.primary.withValues(alpha: 0.2),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.play_circle_fill_rounded,
+                  color: theme.colorScheme.primary,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isUrdu ? 'اپنا سفر شروع کریں' : 'Start your journey',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      isUrdu
+                          ? 'نیچے دیے گئے سبق پر ٹیپ کریں'
+                          : 'Tap a lesson below to begin',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.arrow_forward_rounded,
+                color: theme.colorScheme.primary,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

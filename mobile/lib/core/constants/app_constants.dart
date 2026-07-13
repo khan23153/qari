@@ -7,14 +7,14 @@ class AppConstants {
   // ─── API ────────────────────────────────────────────────────────────────
   /// Base URL for the core API.
   ///
-  /// Production backend is hosted on the VPS and reached over HTTPS using its
-  /// public IP (the app trusts the embedded [qari_ca] for this host):
+  /// Production backend is hosted on the VPS and reached over HTTPS on :443
+  /// using its public IP. The app accepts the self-signed cert (see
+  /// ApiClient) so this works without a public CA:
   ///   https://20.197.40.13/v1  →  /v1/auth/signup
   ///
   /// `api.qari.app` does not currently resolve, so the IP is used directly.
   /// The `/v1` prefix is required (the backend mounts every route under `/v1`).
-  /// The network security config permits cleartext + trusts [qari_ca] for
-  /// 20.197.40.13.
+  /// nginx terminates :443 (self-signed TLS) and proxies `/v1` to the core API.
   ///
   /// For local development on an emulator, override at run time, e.g.:
   ///   flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000/v1
@@ -24,7 +24,10 @@ class AppConstants {
     return 'https://20.197.40.13/v1';
   }
   static const String audioCdnUrl = 'https://audio.qari.app';
-  static const int apiTimeoutSeconds = 30;
+  static const int apiTimeoutSeconds = 90;
+  /// Longer timeout specifically for the (potentially large) recitation audio
+  /// upload + long-running AI analysis poll.
+  static const int recitationApiTimeoutSeconds = 180;
 
   // ─── Supported Languages ────────────────────────────────────────────────
   static const List<AppLanguage> supportedLanguages = [

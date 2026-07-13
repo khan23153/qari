@@ -4,6 +4,7 @@ import 'package:haptic_feedback/haptic_feedback.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/serene_decorations.dart';
+import '../../../profile/presentation/pages/profile_page.dart';
 
 /// Tasbih (dhikr counter) screen — a glass card with a glowing amber progress
 /// ring, a large tap-to-count number, and a switcher between preset dhikr.
@@ -43,6 +44,25 @@ class _TasbihPageState extends ConsumerState<TasbihPage> {
     final progress = (_count / _target).clamp(0.0, 1.0);
 
     return Scaffold(
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        title: const SizedBox.shrink(),
+        centerTitle: true,
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        actions: [
+          IconButton(
+            tooltip: 'Settings',
+            icon: const Icon(Icons.settings_rounded),
+            onPressed: () {
+              Haptics.vibrate(HapticsType.selection);
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ProfilePage()),
+              );
+            },
+          ),
+        ],
+      ),
       body: SereneBackground(
         child: SafeArea(
           child: CustomScrollView(

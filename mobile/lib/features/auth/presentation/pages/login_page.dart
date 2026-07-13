@@ -53,6 +53,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       await storage.setAuthToken(result.accessToken);
       await storage.setUserId(result.userId);
       await storage.setIsOnboarded(result.isOnboarded);
+      // Clear any previously cached progress so this user fetches a fresh
+      // (zeroed) database object instead of stale data from another account.
+      await storage.clearProgressCache();
 
       if (!mounted) return;
       widget.onAuthenticated(result);

@@ -76,6 +76,7 @@ class _QariAppState extends ConsumerState<QariApp> {
   Widget? _initialPage;
   bool _updateShown = false;
   final AppUpdateService _updateService = AppUpdateService(ApiClient());
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
@@ -111,13 +112,18 @@ class _QariAppState extends ConsumerState<QariApp> {
     _checkForUpdate();
   }
 
-  /// Called after a successful signup/login. Routes based on onboarding state.
+  /// Called after a successful signup/login. Replaces the whole auth stack
+  /// with the correct post-auth screen so the user actually lands there
+  /// (rather than being popped back onto the LoginPage root route).
   void _handleAuthenticated(AuthResult result) {
     if (!mounted) return;
-    setState(() {
-      _initialPage =
-          result.isOnboarded ? const HomePage() : const LanguageSelectPage();
-    });
+    final page = result.isOnboarded
+        ? const HomePage()
+        : const LanguageSelectPage();
+    _navigatorKey.currentState?.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => page),
+      (route) => false,
+    );
   }
 
   /// Ask the backend whether a newer app build is available and, if so,
@@ -187,6 +193,7 @@ class _QariAppState extends ConsumerState<QariApp> {
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      navigatorKey: _navigatorKey,
       title: 'Qari',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,

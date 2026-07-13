@@ -1,4 +1,6 @@
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../../core/constants/app_constants.dart';
 import 'local_storage_service.dart';
@@ -20,6 +22,18 @@ class ApiClient {
         'Accept': 'application/json',
       },
     ));
+
+    // Dev/test builds talk to the VPS over a self-signed cert. Accept it so
+    // the app can connect without a publicly-trusted CA. (Not used in
+    // production with a real cert.)
+    _dio.httpClientAdapter = IOHttpClientAdapter(
+      createHttpClient: () {
+        final client = HttpClient()
+          ..badCertificateCallback =
+              (cert, host, port) => host == '20.197.40.13';
+        return client;
+      },
+    );
 
     _setupInterceptors();
   }
@@ -156,6 +170,7 @@ class ApiClient {
     Map<String, dynamic>? extraFields,
     ProgressCallback? onProgress,
     String? idempotencyKey,
+    Duration? timeout,
   }) async {
     final formData = FormData.fromMap({
       fieldName: await MultipartFile.fromFile(filePath),
@@ -170,6 +185,8 @@ class ApiClient {
           'Content-Type': 'multipart/form-data',
           if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey,
         },
+        sendTimeout: timeout,
+        receiveTimeout: timeout,
       ),
       onSendProgress: onProgress,
     );
@@ -212,10 +229,20 @@ class ApiException implements Exception {
     final response = error.response;
     if (response != null) {
       final data = response.data as Map<String, dynamic>?;
+      final dynamic rawMsg =
+          data?['message'] ?? data?['detail'] ?? data?['title'];
+      final String message;
+      if (rawMsg is List) {
+        message = rawMsg
+            .map((e) => e is Map ? (e['msg'] ?? e.toString()) : e.toString())
+            .join('\n');
+      } else {
+        message = rawMsg?.toString() ?? 'An error occurred. Please try again.';
+      }
       return ApiException(
         statusCode: response.statusCode,
-        message: data?['message'] ?? 'An error occurred. Please try again.',
-        errorCode: data?['error_code'] as String?,
+        message: message,
+        errorCode: data?['error_code'] as String? ?? data?['type'] as String?,
         details: data,
       );
     }
