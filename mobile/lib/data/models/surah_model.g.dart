@@ -9,7 +9,7 @@ part of 'surah_model.dart';
 _SurahModel _$SurahModelFromJson(Map<String, dynamic> json) => _SurahModel(
       surahId: (json['surah_id'] as num).toInt(),
       surahNumber: (json['surah_number'] as num).toInt(),
-      name: json['name'] as String,
+      name: json['name'] as String?,
       nameArabic: json['name_arabic'] as String,
       nameEnglish: json['name_english'] as String,
       nameTranslation: json['name_translation'] as String,

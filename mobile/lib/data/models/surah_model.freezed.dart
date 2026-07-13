@@ -17,8 +17,10 @@ mixin _$SurahModel {
   @JsonKey(name: 'surah_id')
   int get surahId;
   @JsonKey(name: 'surah_number')
-  int get surahNumber;
-  String get name;
+  int get surahNumber; // The backend's SurahBrief exposes a computed `name` (the transliteration,
+// often absent). Kept as nullable and not used by the UI (we use
+// nameArabic), so a missing key never breaks fromJson.
+  String? get name;
   @JsonKey(name: 'name_arabic')
   String get nameArabic;
   @JsonKey(name: 'name_english')
@@ -103,7 +105,7 @@ abstract mixin class $SurahModelCopyWith<$Res> {
   $Res call(
       {@JsonKey(name: 'surah_id') int surahId,
       @JsonKey(name: 'surah_number') int surahNumber,
-      String name,
+      String? name,
       @JsonKey(name: 'name_arabic') String nameArabic,
       @JsonKey(name: 'name_english') String nameEnglish,
       @JsonKey(name: 'name_translation') String nameTranslation,
@@ -128,7 +130,7 @@ class _$SurahModelCopyWithImpl<$Res> implements $SurahModelCopyWith<$Res> {
   $Res call({
     Object? surahId = null,
     Object? surahNumber = null,
-    Object? name = null,
+    Object? name = freezed,
     Object? nameArabic = null,
     Object? nameEnglish = null,
     Object? nameTranslation = null,
@@ -147,10 +149,10 @@ class _$SurahModelCopyWithImpl<$Res> implements $SurahModelCopyWith<$Res> {
           ? _self.surahNumber
           : surahNumber // ignore: cast_nullable_to_non_nullable
               as int,
-      name: null == name
+      name: freezed == name
           ? _self.name
           : name // ignore: cast_nullable_to_non_nullable
-              as String,
+              as String?,
       nameArabic: null == nameArabic
           ? _self.nameArabic
           : nameArabic // ignore: cast_nullable_to_non_nullable
@@ -283,7 +285,7 @@ extension SurahModelPatterns on SurahModel {
     TResult Function(
             @JsonKey(name: 'surah_id') int surahId,
             @JsonKey(name: 'surah_number') int surahNumber,
-            String name,
+            String? name,
             @JsonKey(name: 'name_arabic') String nameArabic,
             @JsonKey(name: 'name_english') String nameEnglish,
             @JsonKey(name: 'name_translation') String nameTranslation,
@@ -333,7 +335,7 @@ extension SurahModelPatterns on SurahModel {
     TResult Function(
             @JsonKey(name: 'surah_id') int surahId,
             @JsonKey(name: 'surah_number') int surahNumber,
-            String name,
+            String? name,
             @JsonKey(name: 'name_arabic') String nameArabic,
             @JsonKey(name: 'name_english') String nameEnglish,
             @JsonKey(name: 'name_translation') String nameTranslation,
@@ -381,7 +383,7 @@ extension SurahModelPatterns on SurahModel {
     TResult? Function(
             @JsonKey(name: 'surah_id') int surahId,
             @JsonKey(name: 'surah_number') int surahNumber,
-            String name,
+            String? name,
             @JsonKey(name: 'name_arabic') String nameArabic,
             @JsonKey(name: 'name_english') String nameEnglish,
             @JsonKey(name: 'name_translation') String nameTranslation,
@@ -419,7 +421,7 @@ class _SurahModel implements SurahModel {
   const _SurahModel(
       {@JsonKey(name: 'surah_id') required this.surahId,
       @JsonKey(name: 'surah_number') required this.surahNumber,
-      required this.name,
+      this.name,
       @JsonKey(name: 'name_arabic') required this.nameArabic,
       @JsonKey(name: 'name_english') required this.nameEnglish,
       @JsonKey(name: 'name_translation') required this.nameTranslation,
@@ -437,8 +439,11 @@ class _SurahModel implements SurahModel {
   @override
   @JsonKey(name: 'surah_number')
   final int surahNumber;
+// The backend's SurahBrief exposes a computed `name` (the transliteration,
+// often absent). Kept as nullable and not used by the UI (we use
+// nameArabic), so a missing key never breaks fromJson.
   @override
-  final String name;
+  final String? name;
   @override
   @JsonKey(name: 'name_arabic')
   final String nameArabic;
@@ -538,7 +543,7 @@ abstract mixin class _$SurahModelCopyWith<$Res>
   $Res call(
       {@JsonKey(name: 'surah_id') int surahId,
       @JsonKey(name: 'surah_number') int surahNumber,
-      String name,
+      String? name,
       @JsonKey(name: 'name_arabic') String nameArabic,
       @JsonKey(name: 'name_english') String nameEnglish,
       @JsonKey(name: 'name_translation') String nameTranslation,
@@ -563,7 +568,7 @@ class __$SurahModelCopyWithImpl<$Res> implements _$SurahModelCopyWith<$Res> {
   $Res call({
     Object? surahId = null,
     Object? surahNumber = null,
-    Object? name = null,
+    Object? name = freezed,
     Object? nameArabic = null,
     Object? nameEnglish = null,
     Object? nameTranslation = null,
@@ -582,10 +587,10 @@ class __$SurahModelCopyWithImpl<$Res> implements _$SurahModelCopyWith<$Res> {
           ? _self.surahNumber
           : surahNumber // ignore: cast_nullable_to_non_nullable
               as int,
-      name: null == name
+      name: freezed == name
           ? _self.name
           : name // ignore: cast_nullable_to_non_nullable
-              as String,
+              as String?,
       nameArabic: null == nameArabic
           ? _self.nameArabic
           : nameArabic // ignore: cast_nullable_to_non_nullable

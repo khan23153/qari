@@ -9,7 +9,10 @@ abstract class SurahModel with _$SurahModel {
   const factory SurahModel({
     @JsonKey(name: 'surah_id') required int surahId,
     @JsonKey(name: 'surah_number') required int surahNumber,
-    required String name,
+    // The backend's SurahBrief exposes a computed `name` (the transliteration,
+    // often absent). Kept as nullable and not used by the UI (we use
+    // nameArabic), so a missing key never breaks fromJson.
+    String? name,
     @JsonKey(name: 'name_arabic') required String nameArabic,
     @JsonKey(name: 'name_english') required String nameEnglish,
     @JsonKey(name: 'name_translation') required String nameTranslation,

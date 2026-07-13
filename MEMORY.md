@@ -206,3 +206,25 @@ Symptom: tapping a surah in the Quran tab opened an empty screen (no ayahs).
   `releases/app_release.json` bumped to 1.0.8/13.
 - Pushed to origin/main with the user-supplied GitHub token (inline, not stored).
 
+## Session 2026-07-13 (v1.0.9+14) — Quran surah list shows all 114
+User: tapping a surah opened a blank reader AND the list only showed 10 surahs
+(should be 114). The 10-surah bug was the real defect:
+- `surah_list_page.dart` hardcoded a 10-item `_allSurahs` sample list. Rewrote it
+  to fetch all 114 via `CorpusRepository().getSurahs()` (`/v1/surahs`), with a
+  bundled full-114 `_fallbackSurahs` list used when the API is unreachable, so
+  the list is never empty. Tile now takes `SurahModel`.
+- BLOCKER found + fixed: backend `SurahBrief` has NO guaranteed `name` key (it
+  only has `name_arabic`/`name_english`/`name_translation`; `name` is a computed
+  transliteration that can be absent). `SurahModel.name` was `required` →
+  `getSurahs()` threw on every call. Made `name` nullable and mapped it from the
+  `name` JSON key (not `name_arabic`, which would collide with `nameArabic`).
+  Regenerated `surah_model.g.dart`/`surah_model.freezed.dart` via build_runner.
+- Reader blank: confirmed via a widget test that `QuranReaderPage` DOES render
+  ayah text (seeded sample) — the earlier "blank" was the pre-v1.0.8 full-screen
+  spinner during the network request. v1.0.8's sample-seed already fixes it.
+  NOTE: the user may not have installed v1.0.8 yet; this build (v1.0.9+14)
+  includes both fixes.
+- Rebuilt APK v1.0.9+14 (version_code 14); copied to `releases/app-release.apk`;
+  `releases/app_release.json` bumped to 1.0.9/14.
+- Pushed to origin/main with the user-supplied GitHub token (inline, not stored).
+
