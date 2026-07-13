@@ -418,3 +418,31 @@ the ML engine" feedback) and the word-by-word grid showed raw backend keys like
   mobile shows the "analysis failed" state. Redeploy VPS + deploy APK to
   20.197.40.13 for users to get real feedback.
 
+
+## Session 2026-07-13 — Deployed real ML engine on the VPS (no more 100% stub)
+The running VPS (this environment) backend was still on the OLD worker container
+with `QARI_ML_USE_STUB=true`, so recitations returned hardcoded 100% regardless
+of audio. Actually deployed the real engine here:
+- Recreated `infra-inference-worker-1` from updated compose → `QARI_ML_USE_STUB=false`.
+- Root-caused why real inference still failed, and fixed each gap:
+  1. `No module named 'ml'` → mounted `../ml:/app/ml` + `PYTHONPATH=/app` in compose.
+  2. ML deps missing from worker image → added `requirements.ml.txt` (CPU
+     torch/transformers/torchaudio/librosa/soundfile) + installed in
+     `backend/recitation_api/Dockerfile` (rebuilt image `infra-inference-worker`).
+     Dropped `edlib` (won't build on py3.12; unused by runtime `ml`).
+  3. Audio file not found by worker → added shared `qari_audio:/tmp/qari_audio`
+     volume to BOTH `recitation-api` and `inference-worker`.
+  4. Whisper `return_timestamps` generation-config error → disabled ASR
+     timestamps in `ml/inference/asr.py` (word timing comes from forced aligner).
+  5. Empty backend corpus DB → built reference bundle (6236 ayahs) from the
+     bundled mobile corpus via new `scripts/build_reference_from_local_corpus.py`
+     into `backend/recitation_api/reference_data` (gitignored); set
+     `QARI_REFERENCE_DATA_DIR=/app/reference_data`.
+- VERIFIED end-to-end: uploaded a (non-speech) WAV → worker loaded Whisper +
+  reference store and returned a COMPUTED 0% with "couldn't analyse with enough
+  confidence" — confirms real inference, NOT the 100% stub.
+- Committed + pushed (commit 8bdba74). Worker is `restart: unless-stopped` and
+  uses the rebuilt image + volume mounts, so it survives restarts.
+- FRONTEND: APK v1.0.13+24 (from prior turn) already has the word-mapping fix
+  and is current; no rebuild needed this turn. User's device hitting the VPS now
+  gets real scores (wrong words will be marked, not 100%).
