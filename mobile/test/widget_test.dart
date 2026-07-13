@@ -32,7 +32,7 @@ void main() {
       // Plus error states: mic denied, too noisy, low confidence
 
       final states = RecitationState.values;
-      expect(states.length, 8, reason: 'Should have 8 recitation states');
+      expect(states.length, 9, reason: 'Should have 9 recitation states');
     });
 
     testWidgets('Flashcard page uses SM-2 grades', (tester) async {

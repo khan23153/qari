@@ -16,6 +16,7 @@ import '../../../../data/services/audio_service.dart';
 import '../widgets/ayah_widget.dart';
 import '../widgets/word_bottom_sheet.dart';
 import '../widgets/grammar_legend.dart';
+import '../../../recitation/presentation/pages/recitation_page.dart';
 
 /// S5: Quran Reader (flagship) — ayah-by-ayah vertical scroll, words as
 /// individual tap targets, color-coded per pos_group, toggleable density,
@@ -702,11 +703,9 @@ class RecitationPageRoute extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Recite')),
-      body: Center(
-        child: Text('Recitation for $surahNumber:$ayahNumber'),
-      ),
+    return RecitationPage(
+      surahNumber: surahNumber,
+      ayahNumber: ayahNumber,
     );
   }
 }

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:haptic_feedback/haptic_feedback.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 
 import '../../../../core/constants/app_constants.dart';
@@ -12,7 +11,9 @@ import '../../../../data/services/recording_service.dart';
 import '../../../../data/services/audio_service.dart';
 import '../../../../data/repositories/recitation_repository.dart';
 import '../../../../data/repositories/corpus_repository.dart';
+import '../../../../data/repositories/local_corpus_repository.dart';
 import '../../../../data/models/recitation_model.dart';
+import '../../../../data/models/word_model.dart';
 import '../../../../core/utils/idempotency.dart';
 import '../../../../data/services/api_client.dart';
 import '../widgets/live_waveform.dart';
@@ -67,6 +68,28 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
     if (widget.surahNumber != null) {
       _surahNumber = widget.surahNumber!;
       _ayahNumber = widget.ayahNumber ?? 1;
+    }
+    _loadTargetAyahText();
+  }
+
+  /// Loads the actual target ayah text from the bundled corpus so the screen
+  /// shows the correct ayah the user tapped in the reader (falls back to the
+  /// default bismillah if the surah/ayah isn't in the local bundle).
+  Future<void> _loadTargetAyahText() async {
+    try {
+      final ayahs = await LocalCorpusRepository().getAyahs(_surahNumber);
+      AyahModel? match;
+      for (final a in ayahs) {
+        if (a.ayahNumber == _ayahNumber) {
+          match = a;
+          break;
+        }
+      }
+      if (match != null && mounted) {
+        setState(() => _ayahText = match!.ayahText);
+      }
+    } catch (e) {
+      debugPrint('Recitation: could not load target ayah text: $e');
     }
   }
 

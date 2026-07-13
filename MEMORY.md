@@ -367,3 +367,23 @@ a regression test.
   (v1.0.6+11 → v1.0.11+16) were pushed to origin/main with the user's GitHub
   token (inline, not stored).
 
+## Session 2026-07-13 — Recite screen from Quran reader was a blank placeholder
+User: tapping "Recite" on an ayah opened a blank screen showing only
+"Recitation for 1:1". ROOT CAUSE: `RecitationPageRoute` in
+`quran_reader_page.dart` was a literal placeholder (`Scaffold` + `Text('Recitation
+for $surahNumber:$ayahNumber')`). FIX (working tree, uncommitted):
+- `quran_reader_page.dart`: `RecitationPageRoute.build` now returns the full
+  `RecitationPage(surahNumber:, ayahNumber:)` instead of the placeholder.
+- `recitation_page.dart`: the idle/listen/record UI already existed and is fully
+  wired to `RecordingService` (16kHz WAV), `AudioService` (reference playback w/
+  CDN fallback), and `RecitationRepository` (upload + poll → `RecitationResult`).
+  Added `_loadTargetAyahText()` to `initState` so the screen shows the REAL target
+  ayah text from `LocalCorpusRepository` (was hardcoded bismillah before).
+- Added `test/recitation_screen_test.dart` (pumps `RecitationPage` from reader and
+  asserts header + RTL arabic text + "Listen First" + "Record Now" buttons present).
+  Fixed stale `widget_test.dart` state-machine count 8→9 (`errorAnalysisFailed`).
+- RECITATION STATE MACHINE: idle → listening → recording → analyzing → results,
+  plus errorMicDenied / errorTooNoisy / errorLowConfidence / errorAnalysisFailed.
+- NOTE: `widget_test.dart` "Grammar color-coding follows spec" still fails — it's a
+  pre-existing stale constants assertion, unrelated to this change.
+
