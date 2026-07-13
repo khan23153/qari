@@ -17,7 +17,7 @@ _WordModel _$WordModelFromJson(Map<String, dynamic> json) => _WordModel(
       translationEn: json['translation_en'] as String?,
       translationUr: json['translation_ur'] as String?,
       translationHi: json['translation_hi'] as String?,
-      posGroup: json['pos_group'] as String,
+      posGroup: json['pos_group'] as String?,
       posArabic: json['pos_arabic'] as String?,
       rootArabic: json['root_arabic'] as String?,
       rootId: (json['root_id'] as num?)?.toInt(),

@@ -17,7 +17,7 @@ abstract class WordModel with _$WordModel {
     @JsonKey(name: 'translation_en') String? translationEn,
     @JsonKey(name: 'translation_ur') String? translationUr,
     @JsonKey(name: 'translation_hi') String? translationHi,
-    @JsonKey(name: 'pos_group') required String posGroup,
+    @JsonKey(name: 'pos_group') String? posGroup,
     @JsonKey(name: 'pos_arabic') String? posArabic,
     @JsonKey(name: 'root_arabic') String? rootArabic,
     @JsonKey(name: 'root_id') int? rootId,

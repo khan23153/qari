@@ -38,34 +38,53 @@ class CorpusRepository {
   // ─── Ayahs ───────────────────────────────────────────────────────────────
 
   /// Fetches all ayahs for a surah with word-level data.
+  ///
+  /// The backend caps each request at [MAX_AYAHS_PER_REQUEST] ayahs, so we
+  /// page through `from`/`to` until the server returns fewer than a full page
+  /// (or an empty page). This guarantees the reader shows the *complete* surah
+  /// rather than just the first ~20 ayahs — or a blank screen.
   Future<List<AyahModel>> getAyahs(int surahNumber) async {
     try {
-      final response = await _client.get(
-        '/surahs/$surahNumber/ayahs',
-        queryParameters: {'include_words': true},
-      );
-      // The backend normally returns a JSON array, but be defensive: some
-      // responses (or future versions) wrap the list under a key such as
-      // `ayahs` / `data` / `items`. Extract the array either way so the
-      // reader never silently gets an empty/blank screen.
-      final dynamic payload = response.data;
-      final List<dynamic> list;
-      if (payload is List) {
-        list = payload;
-      } else if (payload is Map) {
-        list = (payload['ayahs'] ??
-                payload['data'] ??
-                payload['items']) as List<dynamic>? ??
-            const [];
-      } else {
-        list = const [];
+      const pageSize = 20;
+      final List<AyahModel> all = [];
+      int from = 1;
+      while (true) {
+        final response = await _client.get(
+          '/surahs/$surahNumber/ayahs',
+          queryParameters: {
+            'include_words': true,
+            'from': from,
+            'to': from + pageSize - 1,
+          },
+        );
+        final List<dynamic> list = _extractAyahList(response.data);
+        if (list.isEmpty) break;
+        all.addAll(
+          list.map((json) => AyahModel.fromJson(json as Map<String, dynamic>)),
+        );
+        if (list.length < pageSize) break;
+        from += pageSize;
       }
-      return list
-          .map((json) => AyahModel.fromJson(json as Map<String, dynamic>))
-          .toList();
+      return all;
     } on DioException catch (e) {
       throw ApiException.fromDioError(e);
     }
+  }
+
+  /// Defensively extracts the ayah array from a response payload. The backend
+  /// normally returns a JSON array, but some responses (or future versions)
+  /// wrap the list under a key such as `ayahs` / `data` / `items`. Extract the
+  /// array either way so the reader never silently gets an empty/blank screen.
+  List<dynamic> _extractAyahList(dynamic payload) {
+    if (payload is List) {
+      return payload;
+    } else if (payload is Map) {
+      return (payload['ayahs'] ??
+              payload['data'] ??
+              payload['items']) as List<dynamic>? ??
+          const [];
+    }
+    return const [];
   }
 
   /// Fetches a single ayah with word-level data.

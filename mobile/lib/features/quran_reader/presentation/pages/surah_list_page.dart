@@ -29,16 +29,17 @@ class _SurahListPageState extends ConsumerState<SurahListPage> {
   void initState() {
     super.initState();
     _loadSurahs();
-  }  /// Loads the list of surahs from the API. On success the server data is
-  /// used (all 114 surahs); on failure we keep the bundled fallback list so
-  /// the user can still browse and open surahs offline.
+  }  /// Loads the list of surahs from the API. The bundled list of all 114
+  /// surahs is always the base so the user can browse and open every surah
+  /// even if the backend returns a partial/empty list or is unreachable. Any
+  /// server data is merged in (by surah number) to refresh names/counts.
   Future<void> _loadSurahs() async {
     setState(() => _isLoading = true);
     try {
-      final surahs = await CorpusRepository().getSurahs();
+      final serverSurahs = await CorpusRepository().getSurahs();
       if (mounted) {
         setState(() {
-          _surahs = surahs.isNotEmpty ? surahs : _fallbackSurahs;
+          _surahs = _mergeWithFallback(serverSurahs);
           _filteredSurahs = _surahs;
           _isLoading = false;
         });
@@ -53,6 +54,26 @@ class _SurahListPageState extends ConsumerState<SurahListPage> {
         });
       }
     }
+  }
+
+  /// Merges server surahs into the bundled 114-surah fallback by surah number.
+  /// Server data wins on a match; missing surahs keep their bundled entry so
+  /// the list is always complete (114).
+  List<SurahModel> _mergeWithFallback(List<SurahModel> serverSurahs) {
+    if (serverSurahs.isEmpty) return List.from(_fallbackSurahs);
+    final byNumber = {for (final s in serverSurahs) s.surahNumber: s};
+    final merged = <SurahModel>[];
+    for (final fallback in _fallbackSurahs) {
+      merged.add(byNumber[fallback.surahNumber] ?? fallback);
+    }
+    // Include any server surah not present in the fallback (defensive).
+    for (final s in serverSurahs) {
+      if (!_fallbackSurahs.any((f) => f.surahNumber == s.surahNumber)) {
+        merged.add(s);
+      }
+    }
+    merged.sort((a, b) => a.surahNumber.compareTo(b.surahNumber));
+    return merged;
   }
 
   void _filterSurahs(String query) {

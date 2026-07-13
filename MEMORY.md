@@ -188,6 +188,34 @@ ur/ar is explicitly selected.
   `releases/app_release.json` bumped to 1.0.7/12.
 - Pushed to origin/main with the user-supplied GitHub token (inline, not stored).
 
+## Session 2026-07-13 (v1.0.10+15) — surah list (10→114) + reader blank screen
+User reported (again) "only 10 surahs" and "blank screen on tapping a surah".
+The v1.0.9+14 notes claimed this was already fixed, but it recurred — the
+previous attempt did NOT fix the real root causes:
+1. **Blank screen ROOT CAUSE** — backend `/surahs/{n}/ayahs` returns words with
+   a NULL `pos_group`. `WordModel.posGroup` was `required` (non-nullable), so
+   `WordModel.fromJson` threw `as String` → bubbled out of `getAyahs` (not a
+   DioException, so the repo's `catch (DioException)` didn't catch it) → on a
+   pre-seed build the reader rendered empty/blank. FIXED: `posGroup` is now
+   `String?` (word_model.dart) and callers pass `?? 'default'` to
+   `getGrammarConfig`. Regenerated freezed.
+2. **Partial/short surahs** — backend caps each `/ayahs` request at
+   `MAX_AYAHS_PER_REQUEST = 20` (shared/__init__.py:164). The mobile fetched
+   only one page, so long surahs showed ~20 ayahs. FIXED: `getAyahs`
+   (corpus_repository.dart) now paginates `from`/`to` in 20-ayah pages until a
+   short/empty page, assembling the full surah.
+3. **Only 10 surahs** — if the backend returns a partial list (or the DB only
+   has a subset), `_loadSurahs` replaced the 114-surah list with whatever the
+   server sent. FIXED: `_loadSurahs` (surah_list_page.dart) now MERGES server
+   surahs into the bundled `_fallbackSurahs` (all 114) by surah number, so the
+   list is ALWAYS complete (114) regardless of backend state. Server data wins
+   on a match; fallback fills gaps.
+- Rebuilt APK v1.0.10+15; copied to releases/app-release.apk;
+  releases/app_release.json bumped to 1.0.10/15.
+- NOTE: OTA serves from VPS (20.197.40.13/v1/app/download). To actually push
+  this to users, the new releases/app-release.apk must be deployed to the VPS
+  (the VPS copy, not just the GitHub raw one, is what devices download).
+
 ## Session 2026-07-13 (v1.0.8+13) — Quran reader blank screen fixed
 Symptom: tapping a surah in the Quran tab opened an empty screen (no ayahs).
 - ROOT CAUSE: `QuranReaderPage._loadAyahs` set `_isLoadingAyahs=true` and the

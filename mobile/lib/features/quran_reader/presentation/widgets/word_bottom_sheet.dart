@@ -79,7 +79,7 @@ class _WordBottomSheetState extends State<WordBottomSheet> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final word = widget.word;
-    final config = AppTheme.getGrammarConfig(word.posGroup);
+    final config = AppTheme.getGrammarConfig(word.posGroup ?? 'default');
     final meaning = word.translationFor(widget.languageCode) ?? '—';
 
     return Container(

@@ -1,12 +1,12 @@
 {
-  "version": "1.0.9",
-  "version_code": 14,
+  "version": "1.0.10",
+  "version_code": 15,
   "min_version": "1.0.0",
   "min_version_code": 1,
   "apk_url": "https://20.197.40.13/v1/app/download",
   "force_update": false,
-  "notes_en": "Fix: Quran surah list now shows all 114 surahs (was hardcoded to 10). SurahListPage fetches /surahs from the API and falls back to a bundled 114-surah list when offline. Also fixed SurahModel 'name' field mapping (backend has no guaranteed 'name' key) so getSurahs() no longer throws. Reader still seeds sample ayahs so it is never blank while loading.",
-  "notes_ur": "درست: قرآن کی فہرست اب 114 سورہ دکھاتی ہے (پہلے 10 تھیں)۔",
-  "notes_hi": "Fix: Quran surah list ab 114 surahs dikhata hai (pehle 10 thi).",
+  "notes_en": "Fix: Quran reader no longer shows a blank screen when opening a surah. Root cause was the backend returning words with a null pos_group, which crashed AyahModel parsing. pos_group is now optional and the reader paginates the /ayahs endpoint (backend caps at 20/request) so full surahs load. Surah list is now always all 114, merging live API data into the bundled 114-surah list so it is never partial.",
+  "notes_ur": "درست: سورہ کھولنے پر اب خالی اسکرین نہیں آتی۔ تمام 114 سورہ اب دکھتے ہیں۔",
+  "notes_hi": "Fix: Quran reader ab blank screen nahi dikhata. Ab 114 surahs dikhte hain.",
   "data_version": 1
 }

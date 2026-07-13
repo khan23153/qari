@@ -370,7 +370,7 @@ class _WordTapTarget extends StatelessWidget {
     TextDecorationStyle decorationStyle = TextDecorationStyle.solid;
 
     if (grammarColorsEnabled) {
-      final config = AppTheme.getGrammarConfig(word.posGroup);
+      final config = AppTheme.getGrammarConfig(word.posGroup ?? 'default');
       textColor = AppTheme.ensureContrast(config.color, Theme.of(context).brightness);
       decoration = AppTheme.toTextDecoration(config.underlineStyle);
       decorationColor = textColor;

@@ -34,7 +34,7 @@ mixin _$WordModel {
   @JsonKey(name: 'translation_hi')
   String? get translationHi;
   @JsonKey(name: 'pos_group')
-  String get posGroup;
+  String? get posGroup;
   @JsonKey(name: 'pos_arabic')
   String? get posArabic;
   @JsonKey(name: 'root_arabic')
@@ -144,7 +144,7 @@ abstract mixin class $WordModelCopyWith<$Res> {
       @JsonKey(name: 'translation_en') String? translationEn,
       @JsonKey(name: 'translation_ur') String? translationUr,
       @JsonKey(name: 'translation_hi') String? translationHi,
-      @JsonKey(name: 'pos_group') String posGroup,
+      @JsonKey(name: 'pos_group') String? posGroup,
       @JsonKey(name: 'pos_arabic') String? posArabic,
       @JsonKey(name: 'root_arabic') String? rootArabic,
       @JsonKey(name: 'root_id') int? rootId,
@@ -176,7 +176,7 @@ class _$WordModelCopyWithImpl<$Res> implements $WordModelCopyWith<$Res> {
     Object? translationEn = freezed,
     Object? translationUr = freezed,
     Object? translationHi = freezed,
-    Object? posGroup = null,
+    Object? posGroup = freezed,
     Object? posArabic = freezed,
     Object? rootArabic = freezed,
     Object? rootId = freezed,
@@ -226,10 +226,10 @@ class _$WordModelCopyWithImpl<$Res> implements $WordModelCopyWith<$Res> {
           ? _self.translationHi
           : translationHi // ignore: cast_nullable_to_non_nullable
               as String?,
-      posGroup: null == posGroup
+      posGroup: freezed == posGroup
           ? _self.posGroup
           : posGroup // ignore: cast_nullable_to_non_nullable
-              as String,
+              as String?,
       posArabic: freezed == posArabic
           ? _self.posArabic
           : posArabic // ignore: cast_nullable_to_non_nullable
@@ -366,7 +366,7 @@ extension WordModelPatterns on WordModel {
             @JsonKey(name: 'translation_en') String? translationEn,
             @JsonKey(name: 'translation_ur') String? translationUr,
             @JsonKey(name: 'translation_hi') String? translationHi,
-            @JsonKey(name: 'pos_group') String posGroup,
+            @JsonKey(name: 'pos_group') String? posGroup,
             @JsonKey(name: 'pos_arabic') String? posArabic,
             @JsonKey(name: 'root_arabic') String? rootArabic,
             @JsonKey(name: 'root_id') int? rootId,
@@ -430,7 +430,7 @@ extension WordModelPatterns on WordModel {
             @JsonKey(name: 'translation_en') String? translationEn,
             @JsonKey(name: 'translation_ur') String? translationUr,
             @JsonKey(name: 'translation_hi') String? translationHi,
-            @JsonKey(name: 'pos_group') String posGroup,
+            @JsonKey(name: 'pos_group') String? posGroup,
             @JsonKey(name: 'pos_arabic') String? posArabic,
             @JsonKey(name: 'root_arabic') String? rootArabic,
             @JsonKey(name: 'root_id') int? rootId,
@@ -492,7 +492,7 @@ extension WordModelPatterns on WordModel {
             @JsonKey(name: 'translation_en') String? translationEn,
             @JsonKey(name: 'translation_ur') String? translationUr,
             @JsonKey(name: 'translation_hi') String? translationHi,
-            @JsonKey(name: 'pos_group') String posGroup,
+            @JsonKey(name: 'pos_group') String? posGroup,
             @JsonKey(name: 'pos_arabic') String? posArabic,
             @JsonKey(name: 'root_arabic') String? rootArabic,
             @JsonKey(name: 'root_id') int? rootId,
@@ -544,7 +544,7 @@ class _WordModel implements WordModel {
       @JsonKey(name: 'translation_en') this.translationEn,
       @JsonKey(name: 'translation_ur') this.translationUr,
       @JsonKey(name: 'translation_hi') this.translationHi,
-      @JsonKey(name: 'pos_group') required this.posGroup,
+      @JsonKey(name: 'pos_group') this.posGroup,
       @JsonKey(name: 'pos_arabic') this.posArabic,
       @JsonKey(name: 'root_arabic') this.rootArabic,
       @JsonKey(name: 'root_id') this.rootId,
@@ -587,7 +587,7 @@ class _WordModel implements WordModel {
   final String? translationHi;
   @override
   @JsonKey(name: 'pos_group')
-  final String posGroup;
+  final String? posGroup;
   @override
   @JsonKey(name: 'pos_arabic')
   final String? posArabic;
@@ -719,7 +719,7 @@ abstract mixin class _$WordModelCopyWith<$Res>
       @JsonKey(name: 'translation_en') String? translationEn,
       @JsonKey(name: 'translation_ur') String? translationUr,
       @JsonKey(name: 'translation_hi') String? translationHi,
-      @JsonKey(name: 'pos_group') String posGroup,
+      @JsonKey(name: 'pos_group') String? posGroup,
       @JsonKey(name: 'pos_arabic') String? posArabic,
       @JsonKey(name: 'root_arabic') String? rootArabic,
       @JsonKey(name: 'root_id') int? rootId,
@@ -751,7 +751,7 @@ class __$WordModelCopyWithImpl<$Res> implements _$WordModelCopyWith<$Res> {
     Object? translationEn = freezed,
     Object? translationUr = freezed,
     Object? translationHi = freezed,
-    Object? posGroup = null,
+    Object? posGroup = freezed,
     Object? posArabic = freezed,
     Object? rootArabic = freezed,
     Object? rootId = freezed,
@@ -801,10 +801,10 @@ class __$WordModelCopyWithImpl<$Res> implements _$WordModelCopyWith<$Res> {
           ? _self.translationHi
           : translationHi // ignore: cast_nullable_to_non_nullable
               as String?,
-      posGroup: null == posGroup
+      posGroup: freezed == posGroup
           ? _self.posGroup
           : posGroup // ignore: cast_nullable_to_non_nullable
-              as String,
+              as String?,
       posArabic: freezed == posArabic
           ? _self.posArabic
           : posArabic // ignore: cast_nullable_to_non_nullable
