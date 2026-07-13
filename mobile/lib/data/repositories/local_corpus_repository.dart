@@ -34,9 +34,11 @@ class LocalCorpusRepository {
 
   Future<Map<int, List<AyahModel>>> _loadBundle() async {
     final ByteData data = await rootBundle.load(_assetPath);
-    // Decode gzip off the UI thread to avoid jank on the (large) payload.
     final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-    final decoded = await _decode(bytes);
+    // Decode gzip on the caller (fast enough for a 4.4 MB asset and avoids the
+    // fragile background-isolate path that could otherwise fail silently and
+    // leave the reader blank).
+    final decoded = gzip.decode(bytes);
     final jsonStr = utf8.decode(decoded);
     final Map<String, dynamic> root = jsonDecode(jsonStr) as Map<String, dynamic>;
 
@@ -45,28 +47,21 @@ class LocalCorpusRepository {
     for (final s in surahs) {
       final map = s as Map<String, dynamic>;
       final num = map['surah_number'] as int;
-      final ayahs = (map['ayahs'] as List<dynamic>)
-          .map((a) => AyahModel.fromJson(a as Map<String, dynamic>))
-          .toList();
+      // Parse each ayah defensively so a single malformed item can't blank the
+      // whole surah.
+      final ayahs = <AyahModel>[];
+      for (final a in (map['ayahs'] as List<dynamic>)) {
+        try {
+          ayahs.add(AyahModel.fromJson(a as Map<String, dynamic>));
+        } catch (e) {
+          debugPrint('LocalCorpus: skipping bad ayah in surah $num: $e');
+        }
+      }
       bySurah[num] = ayahs;
     }
     return bySurah;
   }
-
-  Future<Uint8List> _decode(Uint8List bytes) async {
-    // Run gzip decoding in a background isolate via compute.
-    try {
-      return await compute(gzipDecode, bytes);
-    } catch (_) {
-      // Fallback on platforms where compute is unavailable (e.g. tests).
-      return gzipDecode(bytes);
-    }
-  }
 }
-
-/// Decodes a gzipped payload. Exposed at top level so it can run in a
-/// background isolate via [compute].
-Uint8List gzipDecode(Uint8List bytes) => Uint8List.fromList(gzip.decode(bytes));
 
 /// Provider for the local corpus repository.
 final localCorpusRepositoryProvider = Provider<LocalCorpusRepository>(

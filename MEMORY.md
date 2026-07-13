@@ -216,6 +216,40 @@ previous attempt did NOT fix the real root causes:
   this to users, the new releases/app-release.apk must be deployed to the VPS
   (the VPS copy, not just the GitHub raw one, is what devices download).
 
+## Session 2026-07-13 (v1.0.11+16) — ROOT CAUSE of blank reader found + local corpus
+The recurring "blank screen on tapping a surah" was NEVER actually fixed by the
+posGroup/merge changes — those only addressed symptoms. REAL ROOT CAUSE:
+- The backend corpus DB is **empty**. `backend/core_api/seed_dev_data.py` only
+  seeds qaris/badges/lessons — it never loads surahs/ayahs/words. Verified live:
+  `GET /v1/surahs` → `[]`, `GET /v1/surahs/1` → "Surah '1' not found".
+  So `/surahs/{n}/ayahs` returns `[]` for EVERY surah, and the reader fell back
+  to a single placeholder bismillah ayah (only Al-Fatiha had real sample data).
+- Decision: stop depending on the (empty/unreliable) backend for reading.
+  Bundle the full Quran locally in the app so the reader works offline.
+- Added `scripts/build_local_corpus.py` which pulls all 114 surahs (Uthmani
+  text, simple text, EN verse translation res 84, UR verse translation res 97,
+  word-by-word transliteration + EN word translation) from the Quran.com API v4
+  and writes `mobile/assets/quran_corpus.json` shaped to match AyahModel/
+  WordModel `fromJson` keys. Gzipped → `mobile/assets/quran_corpus.json.gz`
+  (4.3 MB; ~41 MB uncompressed, 6236 ayahs / 83665 words).
+- Added `mobile/lib/data/repositories/local_corpus_repository.dart`: loads the
+  gzipped asset via `rootBundle`, decodes with `gzip.decode` in a `compute`
+  isolate, parses directly to `AyahModel`/`WordModel`.
+- `QuranReaderPage._loadAyahs` now loads the **local corpus first** (instant,
+  offline, never blank), then optionally merges live backend data on top.
+- `pubspec.yaml` registers `assets/quran_corpus.json.gz`; version bumped
+  1.0.10+15 → 1.0.11+16.
+- KNOWN LIMITATION: Quran.com free API has no per-word POS group / grammar
+  labels and no Hindi translation, so grammar colors use the `default` style
+  and `translation_hi` falls back to EN. Hindi verse translation not bundled.
+- BUILD NOTE: the APK for v1.0.11+16 was NOT built in-session — this environment
+  blocks the 153 MB Android cmdline-tools download (headers arrive, body empty),
+  so no Android SDK / NDK. The user must build + deploy on their own machine:
+    cd mobile && flutter pub get && flutter build apk --release
+    # then: copy build/app/outputs/flutter-apk/app-release.apk → releases/
+    # and deploy to VPS at 20.197.40.13 (OTA /v1/app/download).
+    # Bump releases/app_release.json to 1.0.11/16 AFTER the APK is on the VPS.
+
 ## Session 2026-07-13 (v1.0.8+13) — Quran reader blank screen fixed
 Symptom: tapping a surah in the Quran tab opened an empty screen (no ayahs).
 - ROOT CAUSE: `QuranReaderPage._loadAyahs` set `_isLoadingAyahs=true` and the
@@ -255,4 +289,40 @@ User: tapping a surah opened a blank reader AND the list only showed 10 surahs
 - Rebuilt APK v1.0.9+14 (version_code 14); copied to `releases/app-release.apk`;
   `releases/app_release.json` bumped to 1.0.9/14.
 - Pushed to origin/main with the user-supplied GitHub token (inline, not stored).
+
+## Session 2026-07-13 — reader blank fix (post v1.0.11+16) + widget test
+Follow-up to the local-corpus work. Two more root causes of a blank reader, plus
+a regression test.
+
+1. **AyahWidget hidden by opacity-0 animation (REAL blank-screen cause)** —
+   `ayah_widget.dart` wrapped the ayah `Container` in
+   `.animate(target: isPlaying ? 1 : 0).fadeIn()`. `fadeIn` STARTS at opacity 0,
+   so every ayah that is *not* currently playing (i.e. essentially all of them)
+   was painted fully transparent → the reader showed only the header/settings
+   bar with a blank ayah list. FIXED: removed the `.animate().fadeIn()` wrapper;
+   the container now paints directly. Added a code comment in ayah_widget.dart
+   so this doesn't get re-introduced.
+2. **Local corpus decode could fail silently** — `LocalCorpusRepository` decoded
+   the gzipped asset via a `compute` background isolate. On platforms where that
+   path is flaky, the future could fail and leave the reader blank. FIXED:
+   decode `gzip.decode` directly on the caller (fast for a ~4.4 MB asset) and
+   parse each ayah defensively (`try/catch`, skip bad ayahs with `debugPrint`)
+   so a single malformed item can't blank an entire surah. Removed the top-level
+   `gzipDecode`/`_decode` helpers.
+3. **Regression test added** — `mobile/test/ayah_widget_visibility_test.dart`
+   drives `AyahWidget` with `isPlaying:false` (the state that previously hid
+   everything) and asserts: (a) the Arabic word widgets are present, (b) the
+   first word actually has a non-zero painted size, and (c) no ancestor
+   `RenderAnimatedOpacity` is painting at ~0 opacity. This pins the exact bug
+   that the v1.0.11+16 changes didn't fully close.
+- `flutter` is NOT in PATH by default; run tests with:
+  `export PATH="/home/Innocent/flutter/bin:$PATH"; flutter test test/ayah_widget_visibility_test.dart`
+  → all tests pass.
+- BUILD NOTE: this environment has no Android SDK/NDK (the 153 MB cmdline-tools
+  download is blocked — headers arrive, body empty), so the APK was NOT rebuilt
+  here. The fix is verified by the widget test (runs headless, no device). The
+  user must rebuild the APK on their machine before deploying to the VPS.
+- These working-tree changes + the 6 already-committed-but-unpushed commits
+  (v1.0.6+11 → v1.0.11+16) were pushed to origin/main with the user's GitHub
+  token (inline, not stored).
 

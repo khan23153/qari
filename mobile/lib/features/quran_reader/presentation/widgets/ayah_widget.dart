@@ -45,6 +45,10 @@ class AyahWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    // NOTE: Do NOT wrap this in `.animate(target: isPlaying ? 1 : 0).fadeIn()`.
+    // `fadeIn` begins at opacity 0, so any ayah that is *not* playing (i.e.
+    // essentially all of them) would be rendered invisible — leaving the
+    // reader showing only the header/settings bar with a blank ayah list.
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
@@ -102,9 +106,7 @@ class AyahWidget extends StatelessWidget {
           ),
         ],
       ),
-    )
-        .animate(target: isPlaying ? 1 : 0)
-        .fadeIn(duration: 300.ms);
+    );
   }
 
   Widget _buildArabicWords(ThemeData theme) {

@@ -53,3 +53,7 @@ infra/certs/
 # Docker
 infra/data/
 infra/docker-compose.override.yml
+
+# Release signing (do not commit)
+mobile/android/upload-keystore.jks
+mobile/android/key.properties
