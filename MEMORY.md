@@ -188,3 +188,21 @@ ur/ar is explicitly selected.
   `releases/app_release.json` bumped to 1.0.7/12.
 - Pushed to origin/main with the user-supplied GitHub token (inline, not stored).
 
+## Session 2026-07-13 (v1.0.8+13) — Quran reader blank screen fixed
+Symptom: tapping a surah in the Quran tab opened an empty screen (no ayahs).
+- ROOT CAUSE: `QuranReaderPage._loadAyahs` set `_isLoadingAyahs=true` and the
+  build showed a full-screen `CircularProgressIndicator` until the network call
+  resolved. The backend VPS (20.197.40.13) is frequently down/filtered, so the
+  Dio request can sit until the ~90s `apiTimeoutSeconds` → the page looked blank
+  for a long time. Data shapes (AyahOut/WordBrief) do match AyahModel/WordModel,
+  and the error path already falls back to sample ayahs — the blank was purely
+  the loading state, not missing data.
+- FIX in `quran_reader_page.dart`: seed `_ayahs` with `_generateSampleAyahs`
+  in `initState` so the first frame has content; render the `ListView` (with a
+  thin `LinearProgressIndicator` at top while loading) instead of a spinner;
+  on network failure keep the current ayahs (don't clobber with sample); show a
+  friendly "No ayahs found" only if truly empty. Screen is now never blank.
+- Rebuilt APK v1.0.8+13 (version_code 13); copied to `releases/app-release.apk`;
+  `releases/app_release.json` bumped to 1.0.8/13.
+- Pushed to origin/main with the user-supplied GitHub token (inline, not stored).
+

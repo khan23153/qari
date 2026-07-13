@@ -54,6 +54,11 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
   @override
   void initState() {
     super.initState();
+    // Seed with sample ayahs so the reader is never blank while the network
+    // request is in flight (the VPS is frequently down/filtered, which can
+    // leave the screen on a spinner for the full request timeout). Real data
+    // replaces this once it arrives; on failure we simply keep the sample.
+    _ayahs = _generateSampleAyahs(widget.surahNumber);
     _loadSettings();
     _loadAyahs();
   }
@@ -74,12 +79,9 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
         });
       }
     } catch (e) {
-      debugPrint('QuranReader: failed to load ayahs, using sample: $e');
+      debugPrint('QuranReader: failed to load ayahs, keeping current: $e');
       if (mounted) {
-        setState(() {
-          _ayahs = _generateSampleAyahs(widget.surahNumber);
-          _isLoadingAyahs = false;
-        });
+        setState(() => _isLoadingAyahs = false);
       }
     }
   }
@@ -251,40 +253,51 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
 
             // ─── Ayah List ────────────────────────────────────────────
             Expanded(
-              child: _isLoadingAyahs
-                  ? const Center(child: CircularProgressIndicator())
-                  : ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                itemCount: _ayahs.length,
-                itemBuilder: (context, index) {
-                  final ayah = _ayahs[index];
-                  final isPlaying = _playingAyahIndex == index;
+              child: Column(
+                children: [
+                  if (_isLoadingAyahs)
+                    const LinearProgressIndicator(minHeight: 2),
+                  Expanded(
+                    child: _ayahs.isEmpty
+                        ? const Center(
+                            child: Text('No ayahs found for this surah.'),
+                          )
+                        : ListView.builder(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 8),
+                            itemCount: _ayahs.length,
+                            itemBuilder: (context, index) {
+                              final ayah = _ayahs[index];
+                              final isPlaying = _playingAyahIndex == index;
 
-                  return AyahWidget(
-                    ayah: ayah,
-                    languageCode: _selectedLanguage,
-                    arabicFontSize: _arabicFontSize,
-                    densityLevel: _densityLevel,
-                    grammarColorsEnabled: _grammarColorsEnabled,
-                    tajweedColorsEnabled: _tajweedColorsEnabled,
-                    isPlaying: isPlaying,
-                    onWordTapped: _onWordTapped,
-                    onPlayTapped: () => _playAyahAudio(index),
-                    onReciteTapped: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => RecitationPageRoute(
-                            surahNumber: ayah.surahNumber,
-                            ayahNumber: ayah.ayahNumber,
+                              return AyahWidget(
+                                ayah: ayah,
+                                languageCode: _selectedLanguage,
+                                arabicFontSize: _arabicFontSize,
+                                densityLevel: _densityLevel,
+                                grammarColorsEnabled: _grammarColorsEnabled,
+                                tajweedColorsEnabled: _tajweedColorsEnabled,
+                                isPlaying: isPlaying,
+                                onWordTapped: _onWordTapped,
+                                onPlayTapped: () => _playAyahAudio(index),
+                                onReciteTapped: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => RecitationPageRoute(
+                                        surahNumber: ayah.surahNumber,
+                                        ayahNumber: ayah.ayahNumber,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                onContextStoryTapped: () => _showContextStory(ayah),
+                                onShareTapped: () => _shareAyah(ayah),
+                                onSpeedTapped: _showSpeedSelector,
+                              );
+                            },
                           ),
-                        ),
-                      );
-                    },
-                    onContextStoryTapped: () => _showContextStory(ayah),
-                    onShareTapped: () => _shareAyah(ayah),
-                    onSpeedTapped: _showSpeedSelector,
-                  );
-                },
+                  ),
+                ],
               ),
             ),
           ],
