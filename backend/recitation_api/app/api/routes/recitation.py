@@ -258,6 +258,34 @@ async def upload_recitation(
     )
 
 
+@router.get("/{session_id}/audio")
+async def get_recitation_audio(session_id: str):
+    """Stream back the user's uploaded audio for A/B comparison playback.
+
+    The mobile app cannot open the server-local filesystem path stored in the
+    job, so the worker publishes this absolute URL (built from
+    ``recitation_api_public_url``) in ``user_audio_url``.
+    """
+    file_path = os.path.join(settings.audio_storage_path, session_id, "audio.wav")
+    if not os.path.isfile(file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "type": "about:blank",
+                "title": "Not Found",
+                "status": 404,
+                "detail": f"No audio found for session '{session_id}'",
+            },
+        )
+    from fastapi.responses import FileResponse
+
+    return FileResponse(
+        file_path,
+        media_type="audio/wav",
+        filename=f"{session_id}.wav",
+    )
+
+
 @router.get("/{session_id}", response_model=RecitationPollResponse)
 async def get_recitation_result(session_id: str):
     """Poll for recitation results by session_id.

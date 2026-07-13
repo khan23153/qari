@@ -259,12 +259,16 @@ class TajweedChecker:
             start_ms = word_starts_ms[i]
             end_ms = word_ends_ms[i]
 
-            # Use tajweed_positions if available, otherwise infer from word text
-            positions = []
+            # Use authoritative tajweed_positions when present, otherwise infer
+            # the likely positions from the word text. A reference entry of
+            # {"checks": []} must NOT suppress inference — otherwise no checks
+            # run, nothing is ever evaluated, and the tajweed score defaults
+            # to 100% (see compute_scores). This was the cause of tajweed
+            # always showing 100% for ayahs whose reference data had no spans.
+            provided = []
             if tajweed_positions and i < len(tajweed_positions) and tajweed_positions[i]:
-                positions = tajweed_positions[i].get("checks", [])
-            else:
-                positions = self._infer_tajweed_positions(word)
+                provided = tajweed_positions[i].get("checks", [])
+            positions = provided if provided else self._infer_tajweed_positions(word)
 
             for pos in positions:
                 rule = pos.get("rule", "")
@@ -455,10 +459,18 @@ class TajweedChecker:
         if is_nasal:
             confidence = 0.90
         else:
-            confidence = 0.70
+            confidence = 0.88
 
         # Verdict
-        if nasal_duration_ms < GHUNNAH_MIN_MS:
+        # Ghunnah IS nasalization. If the nasal quality is absent at a noon/meem
+        # position, the rule was not applied — this is the core failure mode
+        # (reciting without ghunnah). Previously this only checked the gross
+        # sustained duration, which any spoken sound satisfies, so ghunnah
+        # always passed.
+        if not is_nasal:
+            verdict = TajweedVerdict.FAIL
+            detail = f"No ghunnah (nasalization) detected: centroid={centroid:.0f}Hz"
+        elif nasal_duration_ms < GHUNNAH_MIN_MS:
             verdict = TajweedVerdict.FAIL
             detail = f"Ghunnah too short: {nasal_duration_ms:.0f}ms (min {GHUNNAH_MIN_MS}ms)"
         elif nasal_duration_ms > GHUNNAH_MAX_MS:
@@ -467,7 +479,7 @@ class TajweedChecker:
             confidence = min(confidence + 0.05, 1.0)
         else:
             verdict = TajweedVerdict.PASS
-            detail = f"Ghunnah duration OK: {nasal_duration_ms:.0f}ms"
+            detail = f"Ghunnah OK: {nasal_duration_ms:.0f}ms, centroid={centroid:.0f}Hz"
 
         return TajweedResult(
             check_type=TajweedCheckType.GHUNNAH,

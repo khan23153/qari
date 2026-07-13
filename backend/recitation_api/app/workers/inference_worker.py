@@ -151,6 +151,19 @@ def _ensure_reference(surah: int, ayah: int, qari_id: Optional[str]) -> bool:
         return False
 
 
+def _build_reference_audio_url(surah: int, ayah: int) -> str:
+    """Synthesise a reachable Qari reference audio URL for an ayah.
+
+    The reference data often ships without an ``audio_url`` (the recitation
+    corpus leaves it empty), which left the mobile's "Reference (Qari)" track
+    silent. We fall back to the same CDN the Flutter app already uses for
+    reciter playback so it is reliably reachable.
+    """
+    base = settings.reference_audio_base_url.rstrip("/")
+    reciter = settings.reference_audio_reciter
+    return f"{base}/{reciter}/{surah:03d}{ayah:03d}.mp3"
+
+
 def _load_audio(audio_path: str) -> tuple:
     """Load a WAV file as a (float32 ndarray, sample_rate) tuple."""
     try:
@@ -247,7 +260,15 @@ async def run_ml_inference(job: dict) -> dict:
     ayah_to = int(job.get("ayah_to", 1))
     qari_id = job.get("qari_id")
     audio_path = job.get("audio_path")
-    user_audio_url = job.get("audio_path")
+
+    # The user's recording lives on the server filesystem; the mobile app can
+    # only play an HTTP URL, so publish the served endpoint instead of the
+    # local path (otherwise A/B playback is silent).
+    public_base = settings.recitation_api_public_url.rstrip("/")
+    if public_base:
+        user_audio_url = f"{public_base}/v1/recitations/{session_id}/audio"
+    else:
+        user_audio_url = job.get("audio_path")
     duration_sec = int(float(job.get("audio_duration_sec", 0)))
 
     if not audio_path or not os.path.exists(audio_path):
@@ -268,6 +289,14 @@ async def run_ml_inference(job: dict) -> dict:
     overall_total = 0.0
     evaluated = 0
     evaluated_ayahs = 0
+    reference_audio_url: Optional[str] = None
+
+    def _resolve_reference_url(ayah: int) -> str:
+        # Prefer the reference's own audio URL; fall back to the CDN so the
+        # mobile always has a playable "Reference (Qari)" track.
+        if ml_result.reference_audio_url:
+            return ml_result.reference_audio_url
+        return _build_reference_audio_url(surah, ayah)
 
     for ayah in range(ayah_from, ayah_to + 1):
         # Resolve reference; skip ayahs we cannot evaluate (no false reds).
@@ -285,6 +314,8 @@ async def run_ml_inference(job: dict) -> dict:
             continue
 
         evaluated_ayahs += 1
+        if reference_audio_url is None:
+            reference_audio_url = _resolve_reference_url(ayah)
         fluency_total += ml_result.scores.fluency
         tajweed_total += ml_result.scores.tajweed
         overall_total += ml_result.scores.overall
@@ -303,7 +334,7 @@ async def run_ml_inference(job: dict) -> dict:
                 "actual_text": wr.hypothesis,
                 "error_type": error_type,
                 "error_description": error_description,
-                "reference_audio_url": ml_result.reference_audio_url or None,
+                "reference_audio_url": _resolve_reference_url(ayah),
                 "user_audio_url": user_audio_url,
                 "phoneme_errors": [],
             })
@@ -332,7 +363,7 @@ async def run_ml_inference(job: dict) -> dict:
         fluency=fluency_total / n / 100.0,
         accuracy=fluency_total / n / 100.0,
         word_verdicts=word_verdicts,
-        reference_audio_url=None,
+        reference_audio_url=reference_audio_url,
         user_audio_url=user_audio_url,
         feedback="AI feedback complete. Tap red words to compare your recitation.",
         feedback_urdu=None,

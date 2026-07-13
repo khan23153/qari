@@ -45,6 +45,19 @@ class Settings(BaseSettings):
 
     # --- Storage (audio files) ---
     audio_storage_path: str = "/tmp/qari_audio"
+    # Publicly reachable base URL of THIS recitation_api service. Used to build
+    # absolute URLs for uploaded user audio so the mobile can stream them
+    # back (the worker only knows the server-local filesystem path).
+    # Example: https://api.qari.app/recitation-api
+    recitation_api_public_url: str = ""
+
+    # --- Reference (Qari) audio ---
+    # When a reference ayah has no audio URL of its own, the worker synthesises
+    # one from this CDN so the mobile can play the "Reference (Qari)" track.
+    # everyayah.com is the same CDN the Flutter app already uses for reciter
+    # playback, so it is reliably reachable and trusted by the audio player.
+    reference_audio_base_url: str = "https://everyayah.com/data"
+    reference_audio_reciter: str = "Alafasy_128kbps"
 
     # --- Recitation ML engine ---
     # When True, the worker uses the deterministic stub instead of loading the

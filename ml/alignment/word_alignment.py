@@ -93,6 +93,10 @@ LOW_CONFIDENCE_THRESHOLD = 0.50
 # Character similarity threshold for distinguishing mispronounced vs low_confidence
 MISPRONUNCIATION_SIMILARITY_THRESHOLD = 0.3
 
+# Character similarity at/above which a differing word is treated as a correct
+# near-match (ASR/tokenization noise) instead of a mispronunciation.
+NEAR_MATCH_CORRECT_THRESHOLD = 0.85
+
 
 def _char_similarity(s1: str, s2: str) -> float:
     """
@@ -184,11 +188,13 @@ class WordAligner:
         mismatch_score: int = MISMATCH_SCORE,
         gap_score: int = GAP_SCORE,
         low_confidence_threshold: float = LOW_CONFIDENCE_THRESHOLD,
+        near_match_correct_threshold: float = NEAR_MATCH_CORRECT_THRESHOLD,
     ) -> None:
         self.match_score = match_score
         self.mismatch_score = mismatch_score
         self.gap_score = gap_score
         self.low_confidence_threshold = low_confidence_threshold
+        self.near_match_correct_threshold = near_match_correct_threshold
 
     def align(
         self,
@@ -408,7 +414,11 @@ class WordAligner:
 
         Priority:
         1. If ASR confidence is below threshold → low_confidence (ASR unsure)
-        2. Otherwise → mispronounced (ASR is confident the user said something different)
+        2. If the recognised word is near-identical to the reference
+           (character similarity >= ``near_match_correct_threshold``) → correct.
+           High similarity almost always means an ASR/tokenization mismatch
+           rather than a real mispronunciation, so we avoid a false red mark.
+        3. Otherwise → mispronounced (ASR is confident the user said something different)
 
         The character similarity is informational and stored on the AlignedWord
         but does not override the confidence-based classification. A high-confidence
@@ -432,6 +442,13 @@ class WordAligner:
         """
         if confidence < self.low_confidence_threshold:
             return WordVerdict.LOW_CONFIDENCE
+        # Near-identical words (high character similarity) are almost always an
+        # ASR / tokenization mismatch rather than a real mispronunciation — e.g.
+        # a correctly recited word recognised with a slightly different token.
+        # Marking these as wrong produces false reds ("I said it correctly!"),
+        # so treat them as correct instead of mispronounced.
+        if similarity >= self.near_match_correct_threshold:
+            return WordVerdict.CORRECT
         return WordVerdict.MISPRONOUNCED
 
     def align_from_strings(
