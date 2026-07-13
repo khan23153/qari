@@ -11,6 +11,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../data/services/recording_service.dart';
 import '../../../../data/services/audio_service.dart';
 import '../../../../data/repositories/recitation_repository.dart';
+import '../../../../data/repositories/corpus_repository.dart';
 import '../../../../data/models/recitation_model.dart';
 import '../../../../core/utils/idempotency.dart';
 import '../../../../data/services/api_client.dart';
@@ -85,22 +86,45 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
     await Haptics.vibrate(HapticsType.selection);
     setState(() => _state = RecitationState.listening);
 
+    // Prefer the real per-ayah audio_url returned by the backend (a working
+    // quran.com CDN link). The hardcoded audioCdnUrl ('https://audio.qari.app')
+    // does not resolve, which is what produced the "0 source error" toast.
+    String? referenceUrl;
     try {
-      _isPlayingReference = true;
-      await _audioService.playAyah(
-        surahNumber: _surahNumber,
-        ayahNumber: _ayahNumber,
-      );
+      final ayah = await CorpusRepository().getAyah(_surahNumber, _ayahNumber);
+      referenceUrl = ayah.audioUrl;
     } catch (e) {
-      // Surface the real reason (bad URL / player init failure) instead of
-      // failing silently — the user needs to know why no sound played.
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Could not play reference audio: $e'),
-            duration: const Duration(seconds: 3),
-          ),
-        );
+      debugPrint('Recitation: could not fetch reference audio url: $e');
+    }
+    debugPrint('Recitation reference audio url: $referenceUrl');
+
+    if (mounted) {
+      if (referenceUrl != null && referenceUrl.isNotEmpty) {
+        try {
+          await _audioService.playUrl(referenceUrl);
+        } catch (e) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Could not play reference audio: $e'),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      } else {
+        // Fallback to the (possibly unavailable) constructed CDN url.
+        try {
+          await _audioService.playAyah(
+            surahNumber: _surahNumber,
+            ayahNumber: _ayahNumber,
+          );
+        } catch (e) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Could not play reference audio: $e'),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
       }
     }
 

@@ -18,9 +18,28 @@ import 'features/onboarding/presentation/pages/language_select_page.dart';
 import 'features/home/presentation/pages/home_page.dart';
 
 Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // In release builds, a widget that throws during build is replaced by the
+  // framework's default ErrorWidget, which renders as a BLANK GREY screen
+  // with no information. Replace it with a visible, scrollable error so a
+  // UI bug (e.g. in the Quran reader) is diagnosable instead of silent.
+  ErrorWidget.builder = (details) {
+    return Scaffold(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            'UI error:\n${details.exception}\n\n${details.stack}',
+            style: const TextStyle(color: Colors.red, fontSize: 12),
+          ),
+        ),
+      ),
+    );
+  };
+
   // Catch async/Dart errors and show them instead of hard-crashing.
   runZonedGuarded(() async {
-    WidgetsFlutterBinding.ensureInitialized();
 
     FlutterError.onError = (details) {
       debugPrint('FlutterError: ${details.exception}\n${details.stack}');

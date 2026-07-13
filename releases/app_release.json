@@ -1,12 +1,12 @@
 {
-  "version": "1.0.2",
-  "version_code": 7,
+  "version": "1.0.3",
+  "version_code": 8,
   "min_version": "1.0.0",
   "min_version_code": 1,
   "apk_url": "https://20.197.40.13/v1/app/download",
   "force_update": false,
-  "notes_en": "Fix: profile now shows real server stats (no more stale 1240 XP); Start Journey button always navigates; Quran reader handles API list shapes; recitation surfaces real error codes; Qibla uses best-accuracy GPS.",
-  "notes_ur": "پروفائل ابھی سرور کے حقیقی اعداد دکھاتا ہے؛ سفر شروع کریں بٹن اب کام کرتا ہے؛ قرآن ریڈر بہتر؛ recitation خرابی کا کوڈ دکھاتا ہے۔",
-  "notes_hi": "Profile ab server ke asli stats dikhata hai; Start Journey button ab kam karta hai; Quran reader sudhara gaya.",
+  "notes_en": "Fix: recitation 405 (nginx routes /v1/recitations to recitation-api); reference audio now uses real backend URL (no more 0 source error); Quran screen surfaces build errors instead of blank grey.",
+  "notes_ur": "recitation 405 درست؛ ریفرنس آڈیو اب سرور کے اصل لنک سے چلتا ہے؛ قرآن اسکرین اب خاموش سستی کے بجائے خرابی دکھاتا ہے۔",
+  "notes_hi": "Recitation 405 fix; reference audio ab server ke real link se chalta hai; Quran screen ab grey ke bajaye error dikhata hai.",
   "data_version": 1
 }

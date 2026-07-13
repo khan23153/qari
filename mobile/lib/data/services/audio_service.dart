@@ -72,6 +72,7 @@ class AudioService {
   }
 
   Future<void> _playUrl(String url) async {
+    debugPrint('AudioService: playing url -> $url');
     try {
       if (_currentUrl == url && _player.playing) {
         await _player.pause();

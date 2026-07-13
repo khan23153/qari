@@ -62,3 +62,24 @@ Built APK v1.0.2+7 (version_code 7). Fixed:
 - Push needs a GitHub token (no credential helper configured).
 - Consider Git LFS for the large APK.
 - Verify backend is reachable (VPS auto-shuts off) before testing network calls.
+
+## Session 2026-07-13 (commit <TBD>) — 3 more bug fixes (v1.0.3+8)
+From screenshots 1000115565/66/67:
+1. **Quran screen completely grey** — In release builds a widget that throws
+   during build shows the framework's BLANK GREY ErrorWidget. Added a global
+   `ErrorWidget.builder` in `main.dart` that renders the exception + stack
+   visibly (no more silent grey). Need the actual stack trace (or re-test) to
+   pinpoint the exact throw in the reader; layout itself (Expanded/Stack) is
+   correct.
+2. **Recitation analysis HTTP 405** — ROOT CAUSE was INFRA, not frontend: the
+   `recitation_api` service is separate from `core_api`. nginx's HTTPS (:443)
+   block was missing `location /v1/recitations/ { proxy_pass http://recitation_api; }`
+   (the HTTP :80 block had it). So `POST /v1/recitations/upload` hit `core_api`
+   (which only has `GET /{session_id}`) → 405. FIXED in `infra/nginx.conf`
+   (both server blocks). The mobile already uses POST correctly. NOTE: nginx
+   change requires **redeploying the VPS** (docker compose restart).
+3. **Audio "0 source error"** — `audioCdnUrl='https://audio.qari.app'` does not
+   resolve. The backend returns a real per-ayah `audio_url` (quran.com CDN).
+   Recitation "Listen First" now fetches that via `CorpusRepository.getAyah`
+   and plays it; also logs the URL in `AudioService._playUrl`. Reader already
+   preferred `ayah.audioUrl`.
