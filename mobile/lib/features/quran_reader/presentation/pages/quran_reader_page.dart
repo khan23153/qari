@@ -7,8 +7,8 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/serene_decorations.dart';
 import '../../../../data/models/word_model.dart';
-import '../../../../data/models/surah_model.dart';
 import '../../../../data/repositories/corpus_repository.dart';
+import '../../../../data/repositories/local_corpus_repository.dart';
 import '../../../../data/services/local_storage_service.dart';
 import '../../../../data/services/audio_service.dart';
 import '../widgets/ayah_widget.dart';
@@ -63,26 +63,42 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
     _loadAyahs();
   }
 
-  /// Loads the ayahs for this surah. On success the server data is mapped
-  /// into the state array; on failure we fall back to bundled sample data
-  /// (kept so the reader still renders when offline / API is unreachable).
+  /// Loads the ayahs for this surah. The bundled local corpus is the source of
+  /// truth (instant + offline, never blank). If the live backend also has data
+  /// it is merged on top afterwards, but the screen is never left empty waiting
+  /// on the network.
   Future<void> _loadAyahs() async {
     setState(() => _isLoadingAyahs = true);
+
+    // 1) Instant local load — always succeeds if the asset is bundled.
     try {
-      final ayahs = await CorpusRepository().getAyahs(widget.surahNumber);
+      final local = await ref
+          .read(localCorpusRepositoryProvider)
+          .getAyahs(widget.surahNumber);
       if (mounted) {
         setState(() {
-          _ayahs = ayahs.isNotEmpty
-              ? ayahs
+          _ayahs = local.isNotEmpty
+              ? local
               : _generateSampleAyahs(widget.surahNumber);
-          _isLoadingAyahs = false;
         });
       }
     } catch (e) {
-      debugPrint('QuranReader: failed to load ayahs, keeping current: $e');
-      if (mounted) {
-        setState(() => _isLoadingAyahs = false);
+      debugPrint('QuranReader: local corpus load failed: $e');
+      if (mounted && _ayahs.isEmpty) {
+        setState(() => _ayahs = _generateSampleAyahs(widget.surahNumber));
       }
+    }
+
+    if (mounted) setState(() => _isLoadingAyahs = false);
+
+    // 2) Optional network merge — overrides with richer server data if present.
+    try {
+      final ayahs = await CorpusRepository().getAyahs(widget.surahNumber);
+      if (mounted && ayahs.isNotEmpty) {
+        setState(() => _ayahs = ayahs);
+      }
+    } catch (e) {
+      debugPrint('QuranReader: network ayahs unavailable, keeping local: $e');
     }
   }
 
