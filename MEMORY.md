@@ -172,3 +172,19 @@ the user's selected language (en/ur/ar), so any widget relying on
 `MaterialLocalizations` will crash on non-English locales unless the Global
 delegates are used.
 
+## Session 2026-07-13 (v1.0.7+12) — RTL flip regression fixed
+After v1.0.6+11 (Global delegates), the whole UI flipped to RTL. ROOT CAUSE:
+switching to `GlobalWidgetsLocalizations` made Urdu/Arabic localize correctly,
+and those locales are RTL — so the entire app mirrored. This is *correct*
+behavior for ur/ar, but the user wants English to stay LTR and RTL only when
+ur/ar is explicitly selected.
+- FIX in `main.dart`: kept `locale: locale` (dynamic, respects selected
+  language) and added a `builder` that wraps the app in `Directionality`:
+  LTR for English, RTL only for `ur`/`ar` (helper `_isRtl(Locale)`). Also set
+  `locale` + same `Directionality` builder on the loading `MaterialApp`
+  (which previously had no `locale`). `AppLanguage.textDirection` is the source
+  of truth (en=LTR, ur/ar=RTL).
+- Rebuilt APK v1.0.7+12 (version_code 12); copied to `releases/app-release.apk`;
+  `releases/app_release.json` bumped to 1.0.7/12.
+- Pushed to origin/main with the user-supplied GitHub token (inline, not stored).
+

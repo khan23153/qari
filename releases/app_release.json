@@ -1,12 +1,12 @@
 {
-  "version": "1.0.6",
-  "version_code": 11,
+  "version": "1.0.7",
+  "version_code": 12,
   "min_version": "1.0.0",
   "min_version_code": 1,
   "apk_url": "https://20.197.40.13/v1/app/download",
   "force_update": false,
-  "notes_en": "Fix: Home/Quran tabs crashed with 'Null check operator used on a null value' (MaterialLocalizations.of returned null). Root cause: MaterialApp used DefaultMaterialLocalizations.delegate which only supports English, but the app sets locale to Urdu/Arabic. Switched all three MaterialApps in main.dart to GlobalMaterialLocalizations.delegate / GlobalWidgetsLocalizations.delegate (flutter_localizations), which support ur/ar/en.",
-  "notes_ur": "درست: ہوم/قرآن ٹیب کریش (MaterialLocalizations null)۔ اب گلوبل لوکلائزیشن ڈیلیگیٹ استعمال ہو رہے ہیں (اردو/عربی/انگریزی)。",
-  "notes_hi": "Fix: Home/Quran tab crash (MaterialLocalizations null). Ab Global localization delegates use ho rahe hain (ur/ar/en).",
+  "notes_en": "Fix: UI flipped to RTL after the Global localization delegates were added. Directionality is now explicit and dynamic — English stays TextDirection.ltr; only Urdu/Arabic (explicitly selected) use rtl. The loading MaterialApp also now sets locale + Directionality. Home bottom-nav, cards, and text alignment no longer reverse in English.",
+  "notes_ur": "درست: UI کا RTL فلپ۔ اب صرف اردو/عربی میں RTL، انگریزی LTR۔",
+  "notes_hi": "Fix: UI RTL flip. Ab sirf Urdu/Arabic RTL, English LTR.",
   "data_version": 1
 }

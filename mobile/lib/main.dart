@@ -102,6 +102,13 @@ class QariApp extends ConsumerStatefulWidget {
 
 class _QariAppState extends ConsumerState<QariApp> {
   bool _isLoading = true;
+
+  /// Only Urdu and Arabic are RTL. English (and any other language) stays LTR.
+  /// Used to force [Directionality] so the whole UI cannot flip to RTL unless
+  /// the user has explicitly selected Urdu or Arabic.
+  static bool _isRtl(Locale locale) =>
+      locale.languageCode == 'ur' || locale.languageCode == 'ar';
+
   Widget? _initialPage;
   bool _updateShown = false;
   final AppUpdateService _updateService = AppUpdateService(ApiClient());
@@ -212,11 +219,16 @@ class _QariAppState extends ConsumerState<QariApp> {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
+        locale: locale,
         localizationsDelegates: const [
           GlobalMaterialLocalizations.delegate,
           GlobalWidgetsLocalizations.delegate,
         ],
         supportedLocales: AppConstants.supportedLocales,
+        builder: (context, child) => Directionality(
+          textDirection: _isRtl(locale) ? TextDirection.rtl : TextDirection.ltr,
+          child: child!,
+        ),
         home: const Scaffold(
           body: Center(
             child: CircularProgressIndicator(),
@@ -239,6 +251,10 @@ class _QariAppState extends ConsumerState<QariApp> {
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
       ],
+      builder: (context, child) => Directionality(
+        textDirection: _isRtl(locale) ? TextDirection.rtl : TextDirection.ltr,
+        child: child!,
+      ),
       home: _initialPage ?? const HomePage(),
     );
   }
