@@ -82,4 +82,34 @@ From screenshots 1000115565/66/67:
    resolve. The backend returns a real per-ayah `audio_url` (quran.com CDN).
    Recitation "Listen First" now fetches that via `CorpusRepository.getAyah`
    and plays it; also logs the URL in `AudioService._playUrl`. Reader already
-   preferred `ayah.audioUrl`.
+    preferred `ayah.audioUrl`.
+
+## Session 2026-07-13 (v1.0.4+9) — screenshot batch 1000115573-576 triage
+Screenshots 1000115573 (MaterialLocalizations null + TextField), 5574 (audio
+"0 source error"), 5575 (analysis HTTP 405), 5576 (red UI error box in module
+screen). Findings:
+1. **Issue 1 (MaterialLocalizations null on TextField)** — NOT a missing
+   MaterialApp: root `QariApp` already wraps in `MaterialApp` with
+   `localizationsDelegates` (main.dart). All TextFields are descendants of it.
+   Hardened the loading + error `MaterialApp`s in main.dart to also provide
+   `DefaultMaterialLocalizations`/`DefaultWidgetsLocalizations` delegates so
+   early/error states can't hit this class of error.
+2. **Issue 2 (red error box, module screen)** — `ErrorWidget.builder`
+   (main.dart) already surfaces the real exception + stack. Added a
+   `debugPrint` there so the failing child widget is identifiable from
+   `flutter logs`/terminal. Could NOT pinpoint the exact widget without the
+   device console output (no device here). The lesson/module screens
+   (lesson_list_page, lesson_player_page, quiz_widget, grammar_card_widget)
+   are null-safe on inspection.
+3. **Issue 3 (audio "0 source error")** — ALREADY FIXED in 43849ce: per-ayah
+   URL fetched from backend and logged at recitation_page.dart:99 before play.
+   No change needed.
+4. **Issue 4 (analysis HTTP 405)** — PREMISE WRONG: mobile already sends
+   `POST` (api_client.dart `uploadFile` → `_dio.post`). The 405 was INFRA:
+   nginx HTTPS :443 block lacked `location /v1/recitations/ { proxy_pass
+   http://recitation_api; }`. Fixed in infra/nginx.conf (43849ce) but requires
+   **VPS redeploy** (docker compose restart). Do NOT change client to GET/POST
+   again — it is already POST.
+
+Next: rebuilt APK v1.0.4+9 (committed locally, NOT pushed — needs GitHub
+token). Still need to **redeploy the VPS** for the 405 fix to take effect.

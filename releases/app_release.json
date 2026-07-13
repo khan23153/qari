@@ -1,12 +1,12 @@
 {
-  "version": "1.0.3",
-  "version_code": 8,
+  "version": "1.0.4",
+  "version_code": 9,
   "min_version": "1.0.0",
   "min_version_code": 1,
   "apk_url": "https://20.197.40.13/v1/app/download",
   "force_update": false,
-  "notes_en": "Fix: recitation 405 (nginx routes /v1/recitations to recitation-api); reference audio now uses real backend URL (no more 0 source error); Quran screen surfaces build errors instead of blank grey.",
-  "notes_ur": "recitation 405 درست؛ ریفرنس آڈیو اب سرور کے اصل لنک سے چلتا ہے؛ قرآن اسکرین اب خاموش سستی کے بجائے خرابی دکھاتا ہے۔",
-  "notes_hi": "Recitation 405 fix; reference audio ab server ke real link se chalta hai; Quran screen ab grey ke bajaye error dikhata hai.",
+  "notes_en": "Hardening: every MaterialApp (loading/error states) now provides MaterialLocalizations delegates, removing the 'null check on MaterialLocalizations' class of error for TextFields. UI build errors are now also logged to the console for faster diagnosis.",
+  "notes_ur": "بہتری: ہر MaterialApp اب مقامی کاری فراہم کرتا ہے؛ UI خرابیاں اب کنسول میں بھی لکھی جاتی ہیں۔",
+  "notes_hi": "Hardening: har MaterialApp ab MaterialLocalizations deta hai; UI build errors ab console me bhi log hote hain.",
   "data_version": 1
 }

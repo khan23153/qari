@@ -25,6 +25,10 @@ Future<void> main() async {
   // with no information. Replace it with a visible, scrollable error so a
   // UI bug (e.g. in the Quran reader) is diagnosable instead of silent.
   ErrorWidget.builder = (details) {
+    // Also surface the exception to the debug console so the exact child
+    // widget that threw during build (e.g. in the lesson/module screen) can
+    // be identified from `flutter logs` / the terminal.
+    debugPrint('UI build error: ${details.exception}\n${details.stack}');
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
@@ -67,6 +71,11 @@ Future<void> main() async {
     runApp(
       MaterialApp(
         debugShowCheckedModeBanner: false,
+        localizationsDelegates: const [
+          DefaultMaterialLocalizations.delegate,
+          DefaultWidgetsLocalizations.delegate,
+        ],
+        supportedLocales: AppConstants.supportedLocales,
         home: Scaffold(
           body: SafeArea(
             child: SingleChildScrollView(
@@ -202,6 +211,11 @@ class _QariAppState extends ConsumerState<QariApp> {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
+        localizationsDelegates: const [
+          DefaultMaterialLocalizations.delegate,
+          DefaultWidgetsLocalizations.delegate,
+        ],
+        supportedLocales: AppConstants.supportedLocales,
         home: const Scaffold(
           body: Center(
             child: CircularProgressIndicator(),
