@@ -392,3 +392,29 @@ for $surahNumber:$ayahNumber')`). FIX (working tree, uncommitted):
   >50MB (use Git LFS later). OTA still serves from VPS 20.197.40.13 — to push
   to users, deploy the new APK to the VPS (`/v1/app/download`).
 
+## Session 2026-07-13 — Recitation results: real Arabic words + real ML engine
+User: results screen was in STUB mode (hardcoded 100% + "Stub mode — connect
+the ML engine" feedback) and the word-by-word grid showed raw backend keys like
+`word_2_1_1` instead of Arabic. FIX (committed + pushed, commit 108b75a):
+- ROOT CAUSE of stub: `infra/docker-compose.yml` forced `QARI_ML_USE_STUB:"true"`
+  on the `inference-worker` service. The frontend already calls the REAL API
+  (`RecitationRepository.uploadRecitation`/`pollForResult`) — no mock in the app.
+  The stub `_default_inference` (backend/recitation_api/app/workers/
+  inference_worker.py:184) emits `word: "word_{surah}_{ayah}_{pos}"` keys + 1.0
+  scores. Set `QARI_ML_USE_STUB:"false"` so the real Whisper/Wav2Vec2 pipeline
+  (run_ml_inference) runs and returns actual Arabic + real scores.
+- FRONTEND word mapping: added `WordVerdict.displayWord(List<String> ayahWords)`
+  (mobile/lib/data/models/recitation_model.dart) that prefers real Arabic
+  already on the verdict, else resolves from the target ayah's word payload by
+  `wordIndex` (so no raw keys leak to the UI). `RecitationPage._loadTargetAyahText`
+  now also stores `_ayahWords`; passed to `RecitationResults` and
+  `WordComparisonSheet` which call `verdict.displayWord(...)`.
+- Tests: added `test/recitation_word_mapping_test.dart` (proves grid shows real
+  Arabic, not `word_x_y_z` keys). Bumped APK to v1.0.13+24 (rebuilt, copied,
+  app_release.json → 24).
+- DEPLOY NOTE: flipping stub off means the VPS `recitation_api` worker MUST have
+  the ML engine (Whisper ASR + Wav2Vec2 forced aligner) + reference data
+  (reference_data_dir / core_api) deployed, else real inference raises and the
+  mobile shows the "analysis failed" state. Redeploy VPS + deploy APK to
+  20.197.40.13 for users to get real feedback.
+
