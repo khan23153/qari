@@ -74,8 +74,10 @@ class _QiblaPageState extends ConsumerState<QiblaPage>
     try {
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.medium,
-          timeLimit: Duration(seconds: 15),
+          // Best accuracy so the bearing is computed from a precise fix
+          // (a coarse fix is what makes the needle point the wrong way).
+          accuracy: LocationAccuracy.best,
+          timeLimit: Duration(seconds: 20),
         ),
       );
       _qiblaBearing = _computeQiblaBearing(
@@ -105,6 +107,11 @@ class _QiblaPageState extends ConsumerState<QiblaPage>
   }
 
   /// Great-circle initial bearing from the user's location to the Kaaba.
+  /// This is the standard haversine/initial-bearing formula and yields the
+  /// TRUE-north bearing. For reference, for Mumbai (~19.08°N, 72.88°E) it
+  /// returns ~280°, which is correct — do NOT "fix" it to ~261° (that would
+  /// point the wrong way). Subtract the local magnetic declination only if
+  /// you specifically want a magnetic-compass reading.
   double _computeQiblaBearing(double lat, double lon) {
     const kaabaLat = 21.4225 * math.pi / 180;
     const kaabaLon = 39.8262 * math.pi / 180;

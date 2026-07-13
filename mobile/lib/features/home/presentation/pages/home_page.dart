@@ -11,6 +11,7 @@ import '../../../quran_reader/presentation/pages/surah_list_page.dart';
 import '../../../recitation/presentation/pages/recitation_page.dart';
 import '../../../profile/presentation/pages/profile_page.dart';
 import '../../../lessons/presentation/pages/lesson_player_page.dart';
+import '../../../lessons/presentation/pages/lesson_list_page.dart';
 import '../widgets/streak_card.dart';
 import '../widgets/continue_card.dart';
 import '../widgets/daily_goal_ring.dart';
@@ -222,26 +223,39 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   /// Opens the lesson player for either the continue-lesson or a tapped path
   /// node. Builds a minimal [LessonModel] from the available server data.
   void _openLesson({LessonProgress? lesson, PathNode? node}) {
-    late final LessonModel model;
     if (lesson != null) {
-      model = LessonModel(
+      _navigateToLesson(LessonModel(
         lessonId: lesson.lessonId,
         moduleNumber: lesson.moduleNumber,
         lessonNumber: lesson.lessonNumber,
         title: lesson.title,
         description: '',
-      );
-    } else if (node != null && node.lessonId != null) {
-      model = LessonModel(
-        lessonId: node.lessonId!,
-        moduleNumber: 1,
-        lessonNumber: node.lessonId!,
-        title: node.label,
-        description: '',
-      );
-    } else {
+      ));
       return;
     }
+    if (node != null) {
+      // A path node may omit lesson_id (e.g. quiz/checkpoint); fall back to
+      // its string id so the tap always opens something meaningful.
+      final id = node.lessonId ?? int.tryParse(node.id) ?? 1;
+      _navigateToLesson(LessonModel(
+        lessonId: id,
+        moduleNumber: 1,
+        lessonNumber: id,
+        title: node.label,
+        description: '',
+      ));
+      return;
+    }
+    // No lesson or path node is available yet — open the lesson catalogue so
+    // the "Start your journey" card still leads the user somewhere useful
+    // instead of doing nothing.
+    Haptics.vibrate(HapticsType.medium);
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const LessonListPage()),
+    );
+  }
+
+  void _navigateToLesson(LessonModel model) {
     Haptics.vibrate(HapticsType.medium);
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => LessonPlayerPage(lesson: model)),

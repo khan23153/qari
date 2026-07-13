@@ -13,6 +13,7 @@ import '../../../../data/services/audio_service.dart';
 import '../../../../data/repositories/recitation_repository.dart';
 import '../../../../data/models/recitation_model.dart';
 import '../../../../core/utils/idempotency.dart';
+import '../../../../data/services/api_client.dart';
 import '../widgets/live_waveform.dart';
 import '../widgets/recitation_results.dart';
 import '../widgets/word_comparison_sheet.dart';
@@ -90,8 +91,17 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
         surahNumber: _surahNumber,
         ayahNumber: _ayahNumber,
       );
-    } catch (_) {
-      // Audio may not be available in demo
+    } catch (e) {
+      // Surface the real reason (bad URL / player init failure) instead of
+      // failing silently — the user needs to know why no sound played.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not play reference audio: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
 
     if (mounted) setState(() => _isPlayingReference = false);
@@ -199,10 +209,17 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
       });
     } catch (e) {
       debugPrint('Recitation analysis error: $e');
+      // Surface the real error + any backend status code so the user can
+      // debug the network/timeout (e.g. check the exact API error code).
+      final message = e is ApiException
+          ? 'Analysis failed'
+              '${e.statusCode != null ? ' (HTTP ${e.statusCode})' : ''}'
+              '${e.errorCode != null ? ' [${e.errorCode}]' : ''}: '
+              '${e.message}'
+          : 'We couldn\'t analyze your recitation: $e';
       setState(() {
         _state = RecitationState.errorAnalysisFailed;
-        _errorMessage = 'We couldn\'t analyze your recitation. '
-            'Please check your connection and try again.';
+        _errorMessage = message;
       });
     }
   }

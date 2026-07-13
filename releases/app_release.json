@@ -1,12 +1,12 @@
 {
-  "version": "1.0.1",
-  "version_code": 6,
+  "version": "1.0.2",
+  "version_code": 7,
   "min_version": "1.0.0",
   "min_version_code": 1,
   "apk_url": "https://20.197.40.13/v1/app/download",
   "force_update": false,
-  "notes_en": "Fix: signup now lands on the correct screen on first tap (no more silent failure causing 409 on retry).",
-  "notes_ur": "دستخط شدہ ریلیز، HTTPS اوور۔دی۔ایئر۔",
-  "notes_hi": "Qari app ka pahla version.",
+  "notes_en": "Fix: profile now shows real server stats (no more stale 1240 XP); Start Journey button always navigates; Quran reader handles API list shapes; recitation surfaces real error codes; Qibla uses best-accuracy GPS.",
+  "notes_ur": "پروفائل ابھی سرور کے حقیقی اعداد دکھاتا ہے؛ سفر شروع کریں بٹن اب کام کرتا ہے؛ قرآن ریڈر بہتر؛ recitation خرابی کا کوڈ دکھاتا ہے۔",
+  "notes_hi": "Profile ab server ke asli stats dikhata hai; Start Journey button ab kam karta hai; Quran reader sudhara gaya.",
   "data_version": 1
 }

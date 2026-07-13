@@ -38,5 +38,27 @@ Fixed 7 reported mobile bugs:
     Gradle Plugin; future Flutter versions may fail to build. Plan to migrate.
   - Push needs a GitHub token (no credential helper configured).
 
+## Session 2026-07-13 (commit <TBD>) — 5 bug fixes
+Built APK v1.0.2+7 (version_code 7). Fixed:
+1. **Profile/Home progress mismatch** — `profile_page.dart` hardcoded
+   `_totalXp=1240`, `_currentStreak=7` etc. Now fetches real `/me` + `/me/stats`
+   from backend (defaults to 0 for new users). This was the "old cache" bug.
+   NOTE: signup/login already call `clearProgressCache()`; root cause was the
+   hardcoded values, not storage.
+2. **Start Journey button dead** — `home_page._openLesson` returned early when
+   the server sent no path nodes. Now always navigates (falls back to
+   `LessonListPage` when no lesson/node is available).
+3. **Ayat blank screen** — backend returns a JSON array of `AyahOut` (keys
+   match `AyahModel`/`WordModel`). Made `corpus_repository.getAyahs` tolerant of
+   wrapped shapes (`ayahs`/`data`/`items`) so the reader never gets an empty list.
+4. **Recitation no-sound / analysis-failed** — audio play errors were swallowed
+   (`catch (_)`); now surfaces a SnackBar. Analysis failures now show the real
+   HTTP status code + error_code from `ApiException` for debugging.
+5. **Qibla wrong (reported 261°, showed 280°)** — formula is CORRECT: 280.07°
+   is the true-north bearing for Mumbai (verified with haversine calc). Kept the
+   formula; improved GPS to `LocationAccuracy.best`. Do NOT change 280→261.
+
 ## Open tasks / TODO
-- (add as discovered)
+- Push needs a GitHub token (no credential helper configured).
+- Consider Git LFS for the large APK.
+- Verify backend is reachable (VPS auto-shuts off) before testing network calls.

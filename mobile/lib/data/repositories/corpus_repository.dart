@@ -44,8 +44,23 @@ class CorpusRepository {
         '/surahs/$surahNumber/ayahs',
         queryParameters: {'include_words': true},
       );
-      final data = response.data as List<dynamic>;
-      return data
+      // The backend normally returns a JSON array, but be defensive: some
+      // responses (or future versions) wrap the list under a key such as
+      // `ayahs` / `data` / `items`. Extract the array either way so the
+      // reader never silently gets an empty/blank screen.
+      final dynamic payload = response.data;
+      final List<dynamic> list;
+      if (payload is List) {
+        list = payload;
+      } else if (payload is Map) {
+        list = (payload['ayahs'] ??
+                payload['data'] ??
+                payload['items']) as List<dynamic>? ??
+            const [];
+      } else {
+        list = const [];
+      }
+      return list
           .map((json) => AyahModel.fromJson(json as Map<String, dynamic>))
           .toList();
     } on DioException catch (e) {

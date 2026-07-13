@@ -15,6 +15,7 @@ import 'attribution_page.dart';
 import '../../../onboarding/presentation/pages/language_select_page.dart';
 import '../../../auth/presentation/pages/login_page.dart';
 import '../../../home/presentation/pages/home_page.dart';
+import '../../../../data/repositories/user_repository.dart';
 
 /// S11: Profile/Settings — streak calendar, badges grid, stats,
 /// language switcher, qari picker, font-size slider with live Arabic preview,
@@ -35,18 +36,51 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   bool _grammarColors = true;
   bool _tajweedColors = false;
 
-  // Stats
-  int _totalXp = 1240;
-  int _currentStreak = 7;
-  int _lessonsCompleted = 12;
-  int _ayahsRead = 45;
-  int _flashcardsReviewed = 89;
-  int _recitationSessions = 5;
+  // Stats — start at zero (fresh-user defaults) and are filled from the
+  // server. We NEVER hardcode fake progress; mismatched numbers between the
+  // Home and Profile screens came from hardcoded values here.
+  String _displayName = 'Learner';
+  bool _isLoadingStats = true;
+  int _totalXp = 0;
+  int _currentStreak = 0;
+  int _lessonsCompleted = 0;
+  int _ayahsRead = 0;
+  int _flashcardsReviewed = 0;
+  int _recitationSessions = 0;
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
+    _loadProfileAndStats();
+  }
+
+  /// Fetches the real profile + stats from the backend so the Profile screen
+  /// shows the same source of truth as Home (zero for brand-new accounts,
+  /// live numbers for returning users). Falls back to zeros on failure.
+  Future<void> _loadProfileAndStats() async {
+    try {
+      final user = await UserRepository().getProfile();
+      final stats = await UserRepository().getStats();
+      if (mounted) {
+        setState(() {
+          _displayName = user.displayName?.isNotEmpty == true
+              ? user.displayName!
+              : 'Learner';
+          _totalXp = stats.totalXp;
+          _currentStreak = stats.currentStreak;
+          _lessonsCompleted = stats.lessonsCompleted;
+          _ayahsRead = stats.ayahsRead;
+          _flashcardsReviewed = stats.flashcardsReviewed;
+          _recitationSessions = stats.recitationSessions;
+          _isLoadingStats = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Profile: failed to load profile/stats: $e');
+      // Keep the zero defaults — never show fabricated progress.
+      if (mounted) setState(() => _isLoadingStats = false);
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -219,9 +253,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             children: [
               // ─── Profile Header ─────────────────────────────────────
               _ProfileHeader(
-                name: 'Affan',
+                name: _displayName,
                 totalXp: _totalXp,
                 currentStreak: _currentStreak,
+                isLoading: _isLoadingStats,
                 theme: theme,
               ),
 
@@ -313,12 +348,14 @@ class _ProfileHeader extends StatelessWidget {
   final String name;
   final int totalXp;
   final int currentStreak;
+  final bool isLoading;
   final ThemeData theme;
 
   const _ProfileHeader({
     required this.name,
     required this.totalXp,
     required this.currentStreak,
+    this.isLoading = false,
     required this.theme,
   });
 
@@ -367,7 +404,12 @@ class _ProfileHeader extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           // Key stats row
-          Row(
+          isLoading
+              ? const SizedBox(
+                  height: 32,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _StatChip(
