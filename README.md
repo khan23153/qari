@@ -125,13 +125,32 @@ per ayah (normalized text + tajweed positions), resolved from:
    or
 2. Lazily from `core-api` (`QARI_CORE_API_BASE_URL`, default `http://localhost:8000`).
 
-Generate the MVP-scope bundle (Al-Fatihah + Juz 30) from a running `core-api`:
+Build the reference bundle. Two builders exist:
 
-```bash
-python scripts/build_reference_bundle.py --core-api http://localhost:8000 \
-    --out /tmp/qari_reference --scope mvp
-# then set QARI_REFERENCE_DATA_DIR=/tmp/qari_reference when starting recitation-api
-```
+- `scripts/build_reference_bundle.py` — fetches reference words/tajweed from a
+  running `core-api` (`GET /v1/surahs/{n}/ayahs`). Use when the corpus DB is
+  populated:
+  ```bash
+  python scripts/build_reference_bundle.py --core-api http://localhost:8000 \
+      --out /tmp/qari_reference --scope mvp
+  ```
+- `scripts/build_reference_from_local_corpus.py` — builds the **full** bundle
+  (all 114 surahs / 6,236 ayahs) directly from the bundled mobile corpus
+  (`mobile/assets/quran_corpus.json.gz`). Use this when `core-api`'s corpus is
+  empty (the default on a fresh deploy):
+  ```bash
+  python scripts/build_reference_from_local_corpus.py \
+      --corpus mobile/assets/quran_corpus.json.gz \
+      --out backend/recitation_api/reference_data
+  ```
+  Then set `QARI_REFERENCE_DATA_DIR=/app/reference_data` on the worker.
+
+The worker image installs the ML runtime deps from
+`backend/recitation_api/requirements.ml.txt` (CPU torch / transformers /
+torchaudio / librosa / soundfile). `recitation-api` and `inference-worker`
+share the `qari_audio` Docker volume so uploaded audio is visible to the
+worker. `QARI_ML_USE_STUB` is `false` in production — the real Whisper-Quran
+pipeline runs (no hardcoded scores).
 
 Env overrides (prefix `QARI_`):
 
@@ -140,7 +159,6 @@ Env overrides (prefix `QARI_`):
 | `QARI_ML_USE_STUB` | `false` | Use the deterministic stub (no GPU) instead of the real pipeline |
 | `QARI_REFERENCE_DATA_DIR` | `""` | Prebuilt per-ayah reference JSON directory |
 | `QARI_CORE_API_BASE_URL` | `http://localhost:8000` | Fallback source for reference words/tajweed |
-
 The backend returns results in the exact shape the Flutter `RecitationResult`
 model parses (`{status, result:{overall_score, word_verdicts:[...]}}`). When a
 reference/model is unavailable the engine returns a low-confidence result

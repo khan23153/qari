@@ -70,6 +70,12 @@ def main() -> None:
                 wt = w.get("text") or ""
                 if not wt:
                     continue
+                nw = normalize(wt)
+                # Skip tokens with no actual Arabic letters (e.g. standalone
+                # numerals like the corpus' stray "1" marker) so a real recitation
+                # is never penalised for a reference-data artifact.
+                if not any("\u0621" <= c <= "\u064A" for c in nw):
+                    continue
                 words.append({
                     "word": normalize(wt),
                     "phonemes": [],

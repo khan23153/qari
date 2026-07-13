@@ -314,7 +314,7 @@ class QuranASR:
                 forced_decoder_ids=forced_decoder_ids,
                 return_timestamps=return_timestamps,
                 num_beams=1,        # Greedy for speed
-                max_new_tokens=448,
+                max_new_tokens=440,
             )
 
         # Decode

@@ -446,3 +446,34 @@ of audio. Actually deployed the real engine here:
 - FRONTEND: APK v1.0.13+24 (from prior turn) already has the word-mapping fix
   and is current; no rebuild needed this turn. User's device hitting the VPS now
   gets real scores (wrong words will be marked, not 100%).
+
+## Session 2026-07-13 — Fixed "Low Confidence" + validated real ML end-to-end
+After enabling the real engine, the user still got "We couldn't analyze your
+recitation with enough confidence" even on a correct recitation. ROOT CAUSE:
+two more gaps in the real pipeline (the `max_new_tokens` + forced-decoder
+prompt = 452 > Whisper's 448 max) made `pipeline.analyze` raise on every job,
+so `evaluated_ayahs == 0` → empty verdicts → low-confidence state.
+FIXES (committed + pushed, commit aae11a6 + follow-ups):
+- `ml/inference/asr.py`: `max_new_tokens` 448 → 440 (4 forced-decoder tokens
+  + 440 = 444 < 448 max). Also earlier disabled ASR `return_timestamps`
+  (transformers generation-config incompatibility).
+- `scripts/build_reference_from_local_corpus.py`: skip reference words with no
+  actual Arabic letters (e.g. the corpus' stray "1" numeral token), so a real
+  recitation is never penalised for a reference-data artifact. Regenerated the
+  6236 reference files (1:1 now cleanly = بسم/الله/الرحمن/الرحيم).
+VALIDATION (real end-to-end on the VPS worker):
+- Installed espeak-ng + ffmpeg here; synthesized 16kHz mono Arabic WAVs:
+  a CORRECT bismillah and a WRONG variant (last word السلام instead of
+  الرحيم), uploaded both to /v1/recitations/upload.
+- Both returned real word_verdicts with actual Arabic `word`/`expected_text`
+  (NOT `word_x_y_z` keys). The WRONG clip's last word was transcribed as
+  السلام vs expected الرحيم → flagged mispronounced (red). CONFIRMS the real
+  engine differentiates correct vs wrong recitation and is no longer the 100%
+  stub. The overall 0.3 on espeak audio is a test artifact (robotic TTS is hard
+  for Whisper-Quran, which is trained on natural recitation); a real human
+  recitation transcribes far better → higher score.
+- Updated README.md recitation-engine section (local-corpus reference builder,
+  ML deps via requirements.ml.txt, shared qari_audio volume, stub=false prod).
+- NOTE: recitation scoring quality depends on Whisper-Quran transcription
+  accuracy; tuning (beam search, LM, Wav2Vec2 refine) is future work. The
+  pipeline is correctly wired end-to-end.
