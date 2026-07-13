@@ -1,0 +1,14 @@
+# ML Recitation Engine — runtime deps for the inference worker (CPU-only).
+# Kept separate from the slim API requirements so the base image stays light.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.2.2
+torchaudio==2.2.2
+transformers==4.39.3
+accelerate==0.27.2
+numpy==1.26.4
+scipy==1.12.0
+librosa==0.10.1
+soundfile==0.12.1
+python-Levenshtein==0.25.1
+huggingface-hub==0.23.0
+onnxruntime==1.17.1

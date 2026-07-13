@@ -68,6 +68,7 @@ services:
       redis:
         condition: service_healthy
     volumes:
+      - qari_audio:/tmp/qari_audio
       - ../backend/recitation_api:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 
@@ -80,11 +81,16 @@ services:
       QARI_REDIS_URL: redis://redis:6379/1
       QARI_ENVIRONMENT: dev
       QARI_ML_USE_STUB: "false"
+      QARI_REFERENCE_DATA_DIR: /app/reference_data
+      QARI_CORE_API_BASE_URL: http://core-api:8000
+      PYTHONPATH: /app
     depends_on:
       redis:
         condition: service_healthy
     volumes:
+      - qari_audio:/tmp/qari_audio
       - ../backend/recitation_api:/app
+      - ../ml:/app/ml
     command: python -m app.workers.inference_worker
 
   minio:
@@ -117,3 +123,4 @@ volumes:
   pgdata:
   redisdata:
   miniodata:
+  qari_audio:

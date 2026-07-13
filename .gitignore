@@ -54,6 +54,9 @@ infra/certs/
 infra/data/
 infra/docker-compose.override.yml
 
+# Generated recitation reference bundle (regenerate via scripts/build_reference_from_local_corpus.py)
+backend/recitation_api/reference_data/
+
 # Release signing (do not commit)
 mobile/android/upload-keystore.jks
 mobile/android/key.properties

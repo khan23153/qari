@@ -3,11 +3,15 @@ FROM python:3.12-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential curl \
+    build-essential curl ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# ML engine deps (CPU-only) for the real recitation inference pipeline.
+COPY requirements.ml.txt .
+RUN pip install --no-cache-dir -r requirements.ml.txt
 
 COPY . .
 

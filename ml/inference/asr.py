@@ -254,7 +254,7 @@ class QuranASR:
         sample_rate: int = 16000,
         *,
         language: str = WHISPER_LANGUAGE,
-        return_timestamps: bool = True,
+        return_timestamps: bool = False,
     ) -> ASRResult:
         """
         Transcribe Quranic recitation audio.
