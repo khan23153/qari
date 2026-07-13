@@ -8,7 +8,7 @@
 - **Qari**: AI-powered Quran learning app (Flutter mobile + Python/FastAPI backend).
 - Repo: https://github.com/khan23153/qari
 - Mobile app lives in `mobile/`, backend in repo root (core_api, infra, etl, etc).
-- Current app version: **1.0.1+6** (versionCode 6).
+- Current app version: **1.0.13+19** (versionCode 19).
 - Flutter SDK location (not in PATH by default): `/home/Innocent/flutter/bin/flutter`
   - Build APK: `cd mobile && flutter pub get && flutter build apk --release`
   - Output: `mobile/build/app/outputs/flutter-apk/app-release.apk` → copy to `releases/app-release.apk`
@@ -19,6 +19,47 @@
 - Direct APK in repo: https://github.com/khan23153/qari/raw/main/releases/app-release.apk
 - Release metadata: `releases/app_release.json` (bump `version_code` + `version` on each release).
 - NOTE: VPS sometimes auto-shuts off → work/session lost. Re-read this file on restart.
+
+## Session 2026-07-13 (v1.0.13+18) — audio "0 source error" RE-FIX
+User reported ayah audio STILL showing "Audio not available / 0 source error".
+Root cause: the reader (`quran_reader_page._playAyahAudio`) played a SINGLE
+source with no fallback — `if (ayah.audioUrl != null) playUrl(ayah.audioUrl)`.
+The network merge in `_loadAyahs` fills `audioUrl` from the backend; when that
+URL points at a dead host, ExoPlayer throws "(0) Source error". The working
+everyayah.com constructed URL was only used in the `else` branch, so it got
+bypassed. Verified everyayah CDN works (HTTP 200, audio/mpeg, CORS open); the
+bundled corpus has `audio_url: null` for all rows (offline path was fine).
+FIX (this session):
+- `quran_reader_page.dart`: build the everyayah CDN url up front via
+  `buildAyahUrl`; play `ayah.audioUrl` first (if any) then ALWAYS retry with the
+  CDN url on failure before showing the toast.
+- `recitation_page.dart` ("Listen First"): if backend referenceUrl fails to
+  play, retry with `playAyah(...)` (constructed CDN) instead of erroring.
+- Word bottom sheet left as-is (silently no-ops with no url, no toast).
+Built APK v1.0.13+18 → copied to `releases/app-release.apk` (74.3MB). Bumped
+`pubspec.yaml` + `releases/app_release.json` (version_code 18). NOT committed/
+pushed (no git action requested). VPS still needs the APK served for OTA.
+
+## Session 2026-07-13 (v1.0.13+19) — whole-surah playback + voice picker
+User: "audio working now" → add (1) play the WHOLE surah in one tap instead of
+a single ayah, and (2) a voice/reciter picker so the user can choose the qari.
+Changes (all committed + pushed, APK rebuilt to version_code 19):
+- `audio_service.dart`: new `playSurahSequence({urls, initialIndex})` that loads
+  a `ConcatenatingAudioSource` of per-ayah URLs for gapless whole-surah playback;
+  new `currentIndexStream` (from `sequenceStateStream`) so the UI can follow the
+  active ayah; `isSequential` flag; `stop()` resets it.
+- `quran_reader_page.dart`: tapping an ayah's play button now queues the rest of
+  the surah (sublist from tapped ayah) and plays it in one go. The highlighted
+  ayah follows playback via `currentIndexStream`; tapping the active ayah
+  pauses/resumes; tapping another restarts from there. On `ProcessingState
+  .completed` the session resets. Added a **Voice** chip in the settings bar
+  that opens a sheet listing all 5 reciters (Abdul Basit, Al-Sudais, Al-Minshawi,
+  Al-Husary, Al-Afasy) — persists via `LocalStorageService.setSelectedQari` and
+  applies immediately to the AudioService. URLs are built with the selected
+  reciter (`_selectedQari`).
+- Carried over (committed now): everyayah.com CDN `audioCdnUrl` fix, recitation
+  "Listen First" CDN fallback, `pubspec.yaml` + `app_release.json` (v1.0.13+19).
+- Flutter SDK path: `/home/Innocent/flutter/bin/flutter` (NOT in PATH).
 
 ## Last session (2026-07-13, commit b70e27d)
 Fixed 7 reported mobile bugs:

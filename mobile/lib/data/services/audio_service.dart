@@ -6,6 +6,19 @@ import 'local_storage_service.dart';
 /// Audio service wrapping just_audio for Quran ayah playback.
 /// Supports speed control, reciter selection, and audio session management.
 class AudioService {
+  /// Maps the app's reciter keys (stored via LocalStorageService) to the
+  /// folder name used by the everyayah.com audio CDN.
+  static const Map<String, String> _reciterFolders = {
+    'abdul_basit': 'Abdul_Basit_Murattal_192kbps',
+    'sudais': 'Abdurrahmaan_As-Sudais_192kbps',
+    'minshawi': 'Minshawy_Murattal_128kbps',
+    'husary': 'Husary_128kbps',
+    'afasy': 'Alafasy_128kbps',
+  };
+
+  /// Falls back to Al-Afasy if an unknown reciter key is selected.
+  static String _folderFor(String reciter) =>
+      _reciterFolders[reciter] ?? 'Alafasy_128kbps';
   final AudioPlayer _player = AudioPlayer();
   final LocalStorageService _storage = LocalStorageService();
 
@@ -13,6 +26,7 @@ class AudioService {
   String _currentReciter = 'abdul_basit';
   double _currentSpeed = AppConstants.defaultPlaybackSpeed;
   String? _currentUrl;
+  bool _isSequential = false;
 
   AudioService() {
     _init();
@@ -36,10 +50,10 @@ class AudioService {
     required int ayahNumber,
     String? reciter,
   }) {
-    final r = reciter ?? _currentReciter;
+    final folder = _folderFor(reciter ?? _currentReciter);
     final paddedSurah = surahNumber.toString().padLeft(3, '0');
     final paddedAyah = ayahNumber.toString().padLeft(3, '0');
-    return '${AppConstants.audioCdnUrl}/ayah/$r/$paddedSurah$paddedAyah.mp3';
+    return '${AppConstants.audioCdnUrl}/$folder/$paddedSurah$paddedAyah.mp3';
   }
 
   /// Builds the audio URL for a full surah.
@@ -47,10 +61,47 @@ class AudioService {
     required int surahNumber,
     String? reciter,
   }) {
-    final r = reciter ?? _currentReciter;
+    final folder = _folderFor(reciter ?? _currentReciter);
     final paddedSurah = surahNumber.toString().padLeft(3, '0');
-    return '${AppConstants.audioCdnUrl}/surah/$r/$paddedSurah.mp3';
+    return '${AppConstants.audioCdnUrl}/$folder/$paddedSurah.mp3';
   }
+
+  /// Plays a sequence of ayah URLs as one continuous, gapless track — i.e. the
+  /// whole surah played in a single tap instead of one ayah at a time.
+  ///
+  /// [urls] is the ordered list of per-ayah audio URLs (e.g. the remaining
+  /// ayahs of a surah). [initialIndex] lets playback start partway through the
+  /// list (defaults to 0).
+  Future<void> playSurahSequence({
+    required List<String> urls,
+    int initialIndex = 0,
+  }) async {
+    if (urls.isEmpty) return;
+    debugPrint('AudioService: playing surah sequence (${urls.length} ayahs, '
+        'start @ $initialIndex)');
+    try {
+      final sources = urls
+          .map((u) => AudioSource.uri(Uri.parse(u)))
+          .toList(growable: false);
+      final concat = ConcatenatingAudioSource(children: sources);
+      await _player.setAudioSource(concat, initialIndex: initialIndex);
+      await _player.setSpeed(_currentSpeed);
+      await _player.play();
+      _isSequential = true;
+      _currentUrl = null;
+    } catch (e) {
+      debugPrint('AudioService playSurahSequence error: $e');
+      rethrow;
+    }
+  }
+
+  /// Stream of the index of the currently playing item within a sequential
+  /// (whole-surah) queue. Emits null when not playing a sequence.
+  Stream<int?> get currentIndexStream =>
+      _player.sequenceStateStream.map((s) => s?.currentIndex);
+
+  /// Whether a whole-surah sequence is currently loaded.
+  bool get isSequential => _isSequential;
 
   /// Plays a single ayah audio.
   Future<void> playAyah({
@@ -82,6 +133,7 @@ class AudioService {
       await _player.setSpeed(_currentSpeed);
       await _player.play();
       _currentUrl = url;
+      _isSequential = false;
     } catch (e) {
       debugPrint('AudioService play error: $e');
       rethrow;
@@ -102,6 +154,7 @@ class AudioService {
   Future<void> stop() async {
     await _player.stop();
     _currentUrl = null;
+    _isSequential = false;
   }
 
   /// Seeks to a position in the audio.

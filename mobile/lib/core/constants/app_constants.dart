@@ -23,7 +23,10 @@ class AppConstants {
     if (env.isNotEmpty) return env;
     return 'https://20.197.40.13/v1';
   }
-  static const String audioCdnUrl = 'https://audio.qari.app';
+  /// Public Quran audio CDN (everyayah.com) — hosts per-ayah MP3s for many
+  /// reciters. The previous `audio.qari.app` host does not resolve (it produced
+  /// the "0 source error" / "Audio not available" toast in the reader).
+  static const String audioCdnUrl = 'https://everyayah.com/data';
   static const int apiTimeoutSeconds = 90;
   /// Longer timeout specifically for the (potentially large) recitation audio
   /// upload + long-running AI analysis poll.

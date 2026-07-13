@@ -99,32 +99,33 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
     debugPrint('Recitation reference audio url: $referenceUrl');
 
     if (mounted) {
-      if (referenceUrl != null && referenceUrl.isNotEmpty) {
-        try {
-          await _audioService.playUrl(referenceUrl);
-        } catch (e) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Could not play reference audio: $e'),
-              duration: const Duration(seconds: 3),
-            ),
-          );
-        }
-      } else {
-        // Fallback to the (possibly unavailable) constructed CDN url.
-        try {
+      try {
+        if (referenceUrl != null && referenceUrl.isNotEmpty) {
+          try {
+            await _audioService.playUrl(referenceUrl);
+          } catch (e) {
+            // The backend url may point at a dead host ("0 source error") —
+            // retry with the reliable constructed everyayah.com CDN url.
+            debugPrint('Recitation reference url failed, retrying CDN: $e');
+            await _audioService.playAyah(
+              surahNumber: _surahNumber,
+              ayahNumber: _ayahNumber,
+            );
+          }
+        } else {
+          // Fallback to the constructed CDN url.
           await _audioService.playAyah(
             surahNumber: _surahNumber,
             ayahNumber: _ayahNumber,
           );
-        } catch (e) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Could not play reference audio: $e'),
-              duration: const Duration(seconds: 3),
-            ),
-          );
         }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not play reference audio: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
       }
     }
 

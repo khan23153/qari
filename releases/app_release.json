@@ -1,12 +1,12 @@
 {
-  "version": "1.0.11",
-  "version_code": 16,
+  "version": "1.0.13",
+  "version_code": 19,
   "min_version": "1.0.0",
   "min_version_code": 1,
   "apk_url": "https://20.197.40.13/v1/app/download",
   "force_update": false,
-  "notes_en": "Fix: Quran reader now bundles the full Quran corpus offline, so every surah shows all its ayahs instantly — no more blank screen when the backend is unreachable. Removed fragile background-isolate gzip decode.",
-  "notes_ur": "درست: اب ہر سورہ اپنی تمام آیات کے ساتھ فوراً دکھاتی ہے۔",
-  "notes_hi": "Fix: Quran reader ab blank screen nahi dikhata. Ab 114 surahs dikhte hain.",
+  "notes_en": "New: tap play to recite the whole surah in one go (gapless). New: choose your reciter (Voice) right in the reader. Plus audio CDN fallback fix.",
+  "notes_ur": "نیا: پلے دبائیں تو پوری سورت ایک ساتھ چلے۔ نیا: ریڈر میں ہی قاری منتخب کریں۔",
+  "notes_hi": "Fix: Ayah audio '0 source error' — ab reliable CDN par auto fallback hota hai.",
   "data_version": 1
 }

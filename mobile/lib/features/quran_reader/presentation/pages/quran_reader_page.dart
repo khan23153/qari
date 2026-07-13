@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:haptic_feedback/haptic_feedback.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -46,6 +48,23 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
   int? _playingAyahIndex;
   double _playbackSpeed = AppConstants.defaultPlaybackSpeed;
 
+  // Whole-surah (sequential) playback state
+  bool _isSurahSession = false;
+  int _surahStartIndex = 0;
+  StreamSubscription<int?>? _sequenceSub;
+  StreamSubscription<PlayerState>? _stateSub;
+
+  // Selected reciter (voice) for audio playback
+  String _selectedQari = 'abdul_basit';
+
+  static const Map<String, String> _reciterLabels = {
+    'abdul_basit': 'Abdul Basit',
+    'sudais': 'Al-Sudais',
+    'minshawi': 'Al-Minshawi',
+    'husary': 'Al-Husary',
+    'afasy': 'Al-Afasy',
+  };
+
   // Ayah data — fetched live from the API; falls back to sample data on error
   // so the screen is never blank.
   List<AyahModel> _ayahs = [];
@@ -61,6 +80,27 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
     _ayahs = _generateSampleAyahs(widget.surahNumber);
     _loadSettings();
     _loadAyahs();
+
+    // Keep the highlighted ayah in sync with the whole-surah playback queue,
+    // and reset state once the surah finishes.
+    _sequenceSub = _audioService.currentIndexStream.listen((currentIndex) {
+      if (!mounted) return;
+      setState(() {
+        _playingAyahIndex =
+            currentIndex == null ? null : _surahStartIndex + currentIndex;
+      });
+    });
+
+    // Reset the session once playback reaches the end of the surah.
+    _stateSub = _audioService.playerStateStream.listen((state) {
+      if (!mounted) return;
+      if (state.processingState == ProcessingState.completed) {
+        setState(() {
+          _playingAyahIndex = null;
+          _isSurahSession = false;
+        });
+      }
+    });
   }
 
   /// Loads the ayahs for this surah. The bundled local corpus is the source of
@@ -109,6 +149,7 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
     final tajweed = await storage.getTajweedColorsEnabled();
     final density = await storage.getDensityLevel();
     final lang = await storage.getSelectedLanguage();
+    final qari = await storage.getSelectedQari();
 
     if (mounted) {
       setState(() {
@@ -116,6 +157,7 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
         _tajweedColorsEnabled = tajweed;
         _densityLevel = density;
         _selectedLanguage = lang ?? 'en';
+        _selectedQari = qari;
       });
     }
   }
@@ -171,28 +213,40 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
 
   Future<void> _playAyahAudio(int index) async {
     await Haptics.vibrate(HapticsType.selection);
-    final ayah = _ayahs[index];
 
-    if (_playingAyahIndex == index && _audioService.isPlaying) {
-      await _audioService.pause();
-      setState(() => _playingAyahIndex = null);
-      return;
+    // Toggle behaviour for an active whole-surah session:
+    //  - tap the currently-playing ayah  -> pause / resume
+    //  - tap a different ayah            -> restart the surah from there
+    if (_isSurahSession) {
+      if (_audioService.isPlaying) {
+        if (index == _playingAyahIndex) {
+          await _audioService.pause();
+          setState(() {}); // keep highlight so we can resume
+          return;
+        }
+      } else if (index == _playingAyahIndex) {
+        await _audioService.resume();
+        return;
+      }
     }
 
+    // Start playing the whole surah from the tapped ayah to the end in one go.
+    _surahStartIndex = index;
     setState(() => _playingAyahIndex = index);
 
+    final urls = _ayahs
+        .sublist(index)
+        .map((a) => _audioService.buildAyahUrl(
+              surahNumber: a.surahNumber,
+              ayahNumber: a.ayahNumber,
+              reciter: _selectedQari,
+            ))
+        .toList();
+
     try {
-      if (ayah.audioUrl != null) {
-        await _audioService.playUrl(ayah.audioUrl!);
-      } else {
-        // Use constructed URL
-        await _audioService.playAyah(
-          surahNumber: ayah.surahNumber,
-          ayahNumber: ayah.ayahNumber,
-        );
-      }
+      await _audioService.playSurahSequence(urls: urls);
+      _isSurahSession = true;
     } catch (e) {
-      // Handle error silently — audio may not be available in demo
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -200,10 +254,12 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
             duration: const Duration(seconds: 2),
           ),
         );
+        setState(() {
+          _playingAyahIndex = null;
+          _isSurahSession = false;
+        });
       }
     }
-
-    setState(() => _playingAyahIndex = null);
   }
 
   void _showSpeedSelector() {
@@ -248,6 +304,8 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
 
   @override
   void dispose() {
+    _sequenceSub?.cancel();
+    _stateSub?.cancel();
     _audioService.dispose();
     super.dispose();
   }
@@ -436,6 +494,13 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
               label: 'Legend',
               onTap: () => _showLegend(theme),
             ),
+            const SizedBox(width: 8),
+            // Voice (reciter) picker
+            _SettingChip(
+              icon: Icons.record_voice_over_rounded,
+              label: 'Voice: ${_reciterLabels[_selectedQari] ?? _selectedQari}',
+              onTap: () => _showReciterSheet(theme),
+            ),
           ],
         ),
       ),
@@ -461,6 +526,44 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
     showModalBottomSheet(
       context: context,
       builder: (context) => const GrammarLegend(),
+    );
+  }
+
+  void _showReciterSheet(ThemeData theme) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Reciter (Voice)',
+                style: theme.textTheme.titleLarge),
+            const SizedBox(height: 16),
+            ...AppConstants.availableReciters.map((key) {
+              final isSelected = key == _selectedQari;
+              return ListTile(
+                leading: Icon(
+                  isSelected ? Icons.check_circle : Icons.person_rounded,
+                  color: isSelected ? theme.colorScheme.primary : null,
+                ),
+                title: Text(_reciterLabels[key] ?? key),
+                selected: isSelected,
+                onTap: () async {
+                  final storage = LocalStorageService();
+                  await storage.setSelectedQari(key);
+                  await _audioService.setReciter(key);
+                  if (mounted) {
+                    setState(() => _selectedQari = key);
+                  }
+                  Navigator.pop(context);
+                },
+              );
+            }),
+          ],
+        ),
+      ),
     );
   }
 
