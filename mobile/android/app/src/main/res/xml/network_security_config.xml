@@ -10,7 +10,7 @@
     <!-- Direct-to-VPS access (fallback / OTA over the raw IP) uses the
          self-signed qari_ca. Cleartext is allowed for local dev. -->
     <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">20.244.30.169</domain>
+        <domain includeSubdomains="true">20.197.40.13</domain>
         <trust-anchors>
             <certificates src="@raw/qari_ca" />
         </trust-anchors>
