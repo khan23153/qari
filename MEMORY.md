@@ -386,4 +386,9 @@ for $surahNumber:$ayahNumber')`). FIX (working tree, uncommitted):
   plus errorMicDenied / errorTooNoisy / errorLowConfidence / errorAnalysisFailed.
 - NOTE: `widget_test.dart` "Grammar color-coding follows spec" still fails — it's a
   pre-existing stale constants assertion, unrelated to this change.
+- COMMITTED + PUSHED (commit df8cea6) with the user's GitHub token. Version
+  bumped to v1.0.13+23; `releases/app-release.apk` rebuilt (74.4MB) and copied
+  to `releases/`, `releases/app_release.json` bumped to 23. APK push warned
+  >50MB (use Git LFS later). OTA still serves from VPS 20.197.40.13 — to push
+  to users, deploy the new APK to the VPS (`/v1/app/download`).
 

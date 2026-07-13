@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:haptic_feedback/haptic_feedback.dart';
 
-import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../data/models/recitation_model.dart';
 
@@ -10,6 +9,7 @@ import '../../../../data/models/recitation_model.dart';
 /// with green/red tinting, and feedback. Red words are tappable.
 class RecitationResults extends StatelessWidget {
   final RecitationResult result;
+  final List<String> ayahWords;
   final void Function(WordVerdict verdict) onWordTapped;
   final VoidCallback onRetry;
   final ThemeData theme;
@@ -17,6 +17,7 @@ class RecitationResults extends StatelessWidget {
   const RecitationResults({
     super.key,
     required this.result,
+    this.ayahWords = const [],
     required this.onWordTapped,
     required this.onRetry,
     required this.theme,
@@ -55,6 +56,7 @@ class RecitationResults extends StatelessWidget {
 
           _WordByWordDisplay(
             result: result,
+            ayahWords: ayahWords,
             onWordTapped: onWordTapped,
             theme: theme,
           )
@@ -298,11 +300,13 @@ class _SubScoreCard extends StatelessWidget {
 /// Word-by-word display with green/red tinting.
 class _WordByWordDisplay extends StatelessWidget {
   final RecitationResult result;
+  final List<String> ayahWords;
   final void Function(WordVerdict verdict) onWordTapped;
   final ThemeData theme;
 
   const _WordByWordDisplay({
     required this.result,
+    required this.ayahWords,
     required this.onWordTapped,
     required this.theme,
   });
@@ -347,7 +351,7 @@ class _WordByWordDisplay extends StatelessWidget {
                 child: Column(
                   children: [
                     Text(
-                      verdict.word,
+                      verdict.displayWord(ayahWords),
                       style: AppTheme.arabicTextStyle(
                         fontSize: 26,
                         color: color,

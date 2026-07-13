@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:haptic_feedback/haptic_feedback.dart';
 
-import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../data/models/recitation_model.dart';
 import '../../../../data/services/audio_service.dart';
@@ -12,11 +11,13 @@ import '../../../../data/services/audio_service.dart';
 /// phoneme error details.
 class WordComparisonSheet extends StatefulWidget {
   final WordVerdict verdict;
+  final List<String> ayahWords;
   final AudioService audioService;
 
   const WordComparisonSheet({
     super.key,
     required this.verdict,
+    this.ayahWords = const [],
     required this.audioService,
   });
 
@@ -86,7 +87,7 @@ class _WordComparisonSheetState extends State<WordComparisonSheet> {
             child: Directionality(
               textDirection: TextDirection.rtl,
               child: Text(
-                v.word,
+                widget.verdict.displayWord(widget.ayahWords),
                 style: AppTheme.arabicTextStyle(
                   fontSize: 36,
                   color: Colors.red,

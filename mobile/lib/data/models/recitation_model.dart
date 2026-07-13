@@ -107,3 +107,29 @@ extension RecitationResultX on RecitationResult {
   List<WordVerdict> get incorrectVerdicts =>
       wordVerdicts.where((v) => !v.isCorrect).toList();
 }
+
+/// Returns true if [s] contains any Arabic-script character.
+bool _isArabic(String s) {
+  for (final r in s.runes) {
+    if (r >= 0x0600 && r <= 0x06FF) return true;
+  }
+  return false;
+}
+
+extension WordVerdictX on WordVerdict {
+  /// Resolves the human-readable arabic word to display for this verdict.
+  ///
+  /// The backend may return either the actual arabic text or a database
+  /// identifier key (e.g. `word_2_1_1`). This prefers real arabic already
+  /// present on the verdict, then falls back to the actual arabic word from
+  /// the target ayah's word payload (indexed by [wordIndex]) so the UI always
+  /// shows the script the user recited rather than a raw backend key.
+  String displayWord(List<String> ayahWords) {
+    if (_isArabic(word)) return word;
+    if (expectedText != null && _isArabic(expectedText!)) return expectedText!;
+    if (wordIndex >= 0 && wordIndex < ayahWords.length) {
+      return ayahWords[wordIndex];
+    }
+    return word;
+  }
+}

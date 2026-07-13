@@ -58,6 +58,7 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
   int _surahNumber = 1;
   int _ayahNumber = 1;
   String _ayahText = 'بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ';
+  List<String> _ayahWords = const [];
 
   // Reference audio playback
   bool _isPlayingReference = false;
@@ -85,8 +86,12 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
           break;
         }
       }
-      if (match != null && mounted) {
-        setState(() => _ayahText = match!.ayahText);
+      final ayah = match;
+      if (ayah != null && mounted) {
+        setState(() {
+          _ayahText = ayah.ayahText;
+          _ayahWords = ayah.words.map((w) => w.text).toList();
+        });
       }
     } catch (e) {
       debugPrint('Recitation: could not load target ayah text: $e');
@@ -301,6 +306,7 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
       useSafeArea: true,
       builder: (context) => WordComparisonSheet(
         verdict: verdict,
+        ayahWords: _ayahWords,
         audioService: _audioService,
       ),
     );
@@ -397,6 +403,7 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
       case RecitationState.results:
         return RecitationResults(
           result: _result!,
+          ayahWords: _ayahWords,
           onWordTapped: _onWordTapped,
           onRetry: _reset,
           theme: theme,
