@@ -137,9 +137,38 @@ User pasted real device error text. Key findings:
 
 Open items from device paste:
 - **405 STILL shows on device** despite "already in VPS" claim — nginx fix
-  likely NOT actually redeployed, or recitation_api container down. Needs
-  `docker compose restart` on VPS / verify recitation_api is up.
+   likely NOT actually redeployed, or recitation_api container down. Needs
+   `docker compose restart` on VPS / verify recitation_api is up.
 - **Audio (0) Source error** on "Listen First" — just_audio can't load the
-  backend `audio_url`. URL is logged at recitation_page.dart:99; need the
-  logged URL to tell if it's a bad/blocked/CORS URL vs format issue.
+   backend `audio_url`. URL is logged at recitation_page.dart:99; need the
+   logged URL to tell if it's a bad/blocked/CORS URL vs format issue.
+
+## Session 2026-07-13 (v1.0.6+11) — MaterialLocalizations crash ROOT CAUSED
+User pasted device screenshots: Home (RefreshIndicator) + a TextField screen
+both threw `Null check operator used on a null value` from
+`MaterialLocalizations.of`. Previous v1.0.5+10 note wrongly concluded this was
+a stale build / "locale is always en". It was NOT stale — real root cause:
+
+- **ROOT CAUSE**: `main.dart` `MaterialApp`s used
+  `DefaultMaterialLocalizations.delegate`, which supports **English only**.
+  But the app lets the user pick Urdu/Arabic (`locale: locale` in main.dart:236,
+  set from stored language in `_checkAuthStatus`). For `ur`/`ar`, Flutter cannot
+  resolve `MaterialLocalizations` → `MaterialLocalizations.of` returns null →
+  the `!` null-check in `RefreshIndicator` (home tab) and `TextField`
+  (surah search / ask-scholar / root-explorer) throws. The Urdu text on the
+  screenshots is the giveaway that locale = ur.
+- **FIX**: switched all 3 `MaterialApp`s in `main.dart` (loading splash,
+  error fallback, and main) to `GlobalMaterialLocalizations.delegate` +
+  `GlobalWidgetsLocalizations.delegate` (from `flutter_localizations`, already
+  a dependency), which support ur/ar/en. Added `import
+  'package:flutter_localizations/flutter_localizations.dart';`.
+- Rebuilt APK v1.0.6+11 (version_code 11). Output
+  `mobile/build/app/outputs/flutter-apk/app-release.apk` → copied to
+  `releases/app-release.apk`. `releases/app_release.json` bumped to 1.0.6/11.
+- NOT pushed (needs GitHub token). Does NOT require VPS redeploy (frontend-only).
+
+CORRECTION to earlier note: locale is NOT always `Locale('en')` — it follows
+the user's selected language (en/ur/ar), so any widget relying on
+`MaterialLocalizations` will crash on non-English locales unless the Global
+delegates are used.
 

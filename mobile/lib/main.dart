@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 
@@ -72,8 +73,8 @@ Future<void> main() async {
       MaterialApp(
         debugShowCheckedModeBanner: false,
         localizationsDelegates: const [
-          DefaultMaterialLocalizations.delegate,
-          DefaultWidgetsLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
         ],
         supportedLocales: AppConstants.supportedLocales,
         home: Scaffold(
@@ -212,8 +213,8 @@ class _QariAppState extends ConsumerState<QariApp> {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         localizationsDelegates: const [
-          DefaultMaterialLocalizations.delegate,
-          DefaultWidgetsLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
         ],
         supportedLocales: AppConstants.supportedLocales,
         home: const Scaffold(
@@ -235,8 +236,8 @@ class _QariAppState extends ConsumerState<QariApp> {
       locale: locale,
       supportedLocales: AppConstants.supportedLocales,
       localizationsDelegates: const [
-        DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
       ],
       home: _initialPage ?? const HomePage(),
     );

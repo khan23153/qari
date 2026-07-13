@@ -1,12 +1,12 @@
 {
-  "version": "1.0.5",
-  "version_code": 10,
+  "version": "1.0.6",
+  "version_code": 11,
   "min_version": "1.0.0",
   "min_version_code": 1,
   "apk_url": "https://20.197.40.13/v1/app/download",
   "force_update": false,
-  "notes_en": "Fix: module/lesson screen red error box — GrammarCardWidget underline used a single-sided Border with strokeAlignCenter (invalid, non-uniform colors) that crashed on paint. ErrorWidget.builder now returns Material+SafeArea+SingleChildScrollView+SelectableText so the exact build exception can be long-pressed and copied.",
-  "notes_ur": "درست: ماڈیول اسکرین کا ریڈ ایرر (GrammarCardWidget بارڈر کریش)۔ ErrorWidget اب کاپی کے قابل ہے۔",
-  "notes_hi": "Fix: module screen red error (GrammarCardWidget border crash). ErrorWidget ab copy karne ke liye SelectableText use karta hai.",
+  "notes_en": "Fix: Home/Quran tabs crashed with 'Null check operator used on a null value' (MaterialLocalizations.of returned null). Root cause: MaterialApp used DefaultMaterialLocalizations.delegate which only supports English, but the app sets locale to Urdu/Arabic. Switched all three MaterialApps in main.dart to GlobalMaterialLocalizations.delegate / GlobalWidgetsLocalizations.delegate (flutter_localizations), which support ur/ar/en.",
+  "notes_ur": "درست: ہوم/قرآن ٹیب کریش (MaterialLocalizations null)۔ اب گلوبل لوکلائزیشن ڈیلیگیٹ استعمال ہو رہے ہیں (اردو/عربی/انگریزی)。",
+  "notes_hi": "Fix: Home/Quran tab crash (MaterialLocalizations null). Ab Global localization delegates use ho rahe hain (ur/ar/en).",
   "data_version": 1
 }
