@@ -113,3 +113,33 @@ screen). Findings:
 
 Next: rebuilt APK v1.0.4+9 (committed locally, NOT pushed — needs GitHub
 token). Still need to **redeploy the VPS** for the 405 fix to take effect.
+
+## Session 2026-07-13 (v1.0.5+10) — device logs + actual repro
+User pasted real device error text. Key findings:
+1. **Issue 2 (module red box) ROOT CAUSED & FIXED** — it was NOT
+   MaterialLocalizations. `GrammarCardWidget._UnderlineIndicator` drew a
+   single-sided `Border` with `strokeAlign: BorderSide.strokeAlignCenter`,
+   which is invalid for non-uniform border colors → throws during PAINT of the
+   lesson concept screen. FIXED in grammar_card_widget.dart (removed
+   strokeAlignCenter). Reproduced + verified with a widget test that drives
+   LessonListPage → lesson → concept → fill-blank quiz.
+2. **Issue 1 (MaterialLocalizations null on TextField)** — could NOT reproduce:
+   the fill-blank `TextField` builds fine under `MaterialApp` in tests, and
+   `appLocaleProvider` is always `Locale('en')` (in supportedLocales), so
+   `DefaultMaterialLocalizations` always resolves. Likely a stale device build.
+   If it recurs on v1.0.5+10, the new copyable ErrorWidget will show the exact
+   cause.
+3. **ErrorWidget.builder** updated per user request: now returns
+   `Material`+`SafeArea`+`SingleChildScrollView`+`SelectableText` of
+   `details.exceptionAsString()` + `details.stack`. Lets them long-press to
+   copy the error. (Note: `SelectableText` needs MaterialLocalizations, which
+   the root MaterialApp always provides — safe here.)
+
+Open items from device paste:
+- **405 STILL shows on device** despite "already in VPS" claim — nginx fix
+  likely NOT actually redeployed, or recitation_api container down. Needs
+  `docker compose restart` on VPS / verify recitation_api is up.
+- **Audio (0) Source error** on "Listen First" — just_audio can't load the
+  backend `audio_url`. URL is logged at recitation_page.dart:99; need the
+  logged URL to tell if it's a bad/blocked/CORS URL vs format issue.
+

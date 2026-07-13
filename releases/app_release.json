@@ -1,12 +1,12 @@
 {
-  "version": "1.0.4",
-  "version_code": 9,
+  "version": "1.0.5",
+  "version_code": 10,
   "min_version": "1.0.0",
   "min_version_code": 1,
   "apk_url": "https://20.197.40.13/v1/app/download",
   "force_update": false,
-  "notes_en": "Hardening: every MaterialApp (loading/error states) now provides MaterialLocalizations delegates, removing the 'null check on MaterialLocalizations' class of error for TextFields. UI build errors are now also logged to the console for faster diagnosis.",
-  "notes_ur": "بہتری: ہر MaterialApp اب مقامی کاری فراہم کرتا ہے؛ UI خرابیاں اب کنسول میں بھی لکھی جاتی ہیں۔",
-  "notes_hi": "Hardening: har MaterialApp ab MaterialLocalizations deta hai; UI build errors ab console me bhi log hote hain.",
+  "notes_en": "Fix: module/lesson screen red error box — GrammarCardWidget underline used a single-sided Border with strokeAlignCenter (invalid, non-uniform colors) that crashed on paint. ErrorWidget.builder now returns Material+SafeArea+SingleChildScrollView+SelectableText so the exact build exception can be long-pressed and copied.",
+  "notes_ur": "درست: ماڈیول اسکرین کا ریڈ ایرر (GrammarCardWidget بارڈر کریش)۔ ErrorWidget اب کاپی کے قابل ہے۔",
+  "notes_hi": "Fix: module screen red error (GrammarCardWidget border crash). ErrorWidget ab copy karne ke liye SelectableText use karta hai.",
   "data_version": 1
 }

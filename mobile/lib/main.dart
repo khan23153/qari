@@ -28,13 +28,13 @@ Future<void> main() async {
     // Also surface the exception to the debug console so the exact child
     // widget that threw during build (e.g. in the lesson/module screen) can
     // be identified from `flutter logs` / the terminal.
-    debugPrint('UI build error: ${details.exception}\n${details.stack}');
-    return Scaffold(
-      body: SafeArea(
+    debugPrint('UI build error: ${details.exceptionAsString()}\n${details.stack}');
+    return Material(
+      child: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
-          child: Text(
-            'UI error:\n${details.exception}\n\n${details.stack}',
+          child: SelectableText(
+            'UI error:\n${details.exceptionAsString()}\n\n${details.stack.toString()}',
             style: const TextStyle(color: Colors.red, fontSize: 12),
           ),
         ),

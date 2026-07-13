@@ -168,7 +168,6 @@ class _UnderlineIndicator extends StatelessWidget {
                     bottom: BorderSide(
                       color: color,
                       width: 2,
-                      strokeAlign: BorderSide.strokeAlignCenter,
                       style: BorderStyle.solid,
                     ),
                   )
