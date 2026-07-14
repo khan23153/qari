@@ -2,6 +2,7 @@
 
 from .word_alignment import WordAligner, WordVerdict, AlignmentResult
 from .forced_alignment import ForcedAligner, ForcedAlignmentResult, WordTimestamp
+from .streaming_matcher import StreamingMatcher, WordStatus, WordState
 
 __all__ = [
     "WordAligner",
@@ -10,4 +11,7 @@ __all__ = [
     "ForcedAligner",
     "ForcedAlignmentResult",
     "WordTimestamp",
+    "StreamingMatcher",
+    "WordStatus",
+    "WordState",
 ]

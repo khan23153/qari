@@ -641,8 +641,103 @@ fixes into one release.
   PAT (inline, not stored; `GIT_TERMINAL_PROMPT=0` + `-c credential.helper=`,
   token not persisted in git config). Large-APK (>50MB) warning as before —
   Git LFS still planned. REMAINING: deploy `releases/app-release.apk` to VPS
-  20.197.40.13 (`/v1/app/download`) for OTA users to actually receive v1.0.16.
+   20.197.40.13 (`/v1/app/download`) for OTA users to actually receive v1.0.16.
 - APK >50MB warning persists (Git LFS planned later).
+
+
+## Session 2026-07-14 — Real-time voice tracking + Memorization (Hifz) Mode (Tarteel-style)
+Upgraded the **AI Recitation section** (home practice FAB) with continuous
+real-time streaming, live word-by-word tracking, Memorization Mode, live error
+detection and a hands-free always-listening visualizer.
+
+IMPORTANT SCOPE RULE (per user): the Quran reader's per-ayah **"Recite" option
+is UNTOUCHED**. Both entry points previously reused the SAME `RecitationPage`:
+  - home FAB → `const RecitationPage()`  (the AI Recitation section — upgraded)
+  - quran_reader `RecitationPageRoute` → `RecitationPage(surah, ayah)` (LEFT AS-IS)
+So instead of editing `RecitationPage`, I built a **brand-new** page and only
+re-pointed the home FAB. `RecitationPage` + its `RecitationState` enum are
+byte-for-byte unchanged (widget_test 9-state count + recitation_screen_test
+still pass).
+
+### Backend (recitation_api + ml) — real-time streaming pipeline
+- NEW `ml/alignment/streaming_matcher.py` `StreamingMatcher`: pure-Python
+  incremental aligner. `evaluate(hyp_words)` greedily maps a *growing* ASR
+  hypothesis onto the reference word list and returns stable per-word states
+  (matched / error / skipped; unresolved = pending/masked). Handles skips,
+  inserted/repeated words, and near-match ASR noise (char-sim >= 0.80). Robust
+  to re-transcription revising earlier words. Unit tests:
+  `ml/tests/test_streaming_matcher.py` (8, all pass).
+- NEW `backend/recitation_api/app/services/streaming_session.py`
+  `StreamingRecitationSession`: buffers PCM16, re-transcribes every ~1.2s of new
+  audio in a thread, feeds the matcher, diffs status maps → incremental `word`
+  events. Resolves reference words from the ml ReferenceStore → core_api
+  fallback. Pluggable transcriber: real `QuranASR` (Whisper) OR a duration-based
+  **stub** (used when `QARI_ML_USE_STUB=true` or no reference) that reveals words
+  over time so the live flow is demoable without model weights. `finalize()`
+  writes the full WAV to disk + persists a mobile-shaped RecitationAnalysisResult
+  to Redis (so `GET /{session_id}`, history, A/B playback keep working).
+- NEW WebSocket `WS /ws/recitation/stream` in `app/api/routes/websocket.py`.
+  MUST be registered BEFORE `/ws/recitation/{session_id}` (else Starlette
+  matches `stream` as a session_id path param — that was the initial bug).
+  Protocol: client sends `{type:start,...}` → server `{type:ready, words:[...]}`
+  → client streams binary PCM16 frames → server emits `{type:word, word_index,
+  status, expected, spoken}` live → client `{type:stop}` → server `{type:final,
+  result}`. Ping/pong keep-alive. Tests: `tests/test_streaming.py` (4, pass).
+- `infra/nginx.conf`: added `proxy_read_timeout 3600s` + `proxy_send_timeout
+  3600s` + `proxy_buffering off` to BOTH `/ws/` blocks so long hands-free
+  sessions aren't dropped (default nginx WS read timeout is only 60s). Needs a
+  VPS nginx reload to take effect.
+
+### Frontend (Flutter) — all NEW files, legacy RecitationPage untouched
+- `mobile/lib/data/models/recitation_stream_event.dart`: plain-Dart event model
+  (`LiveWordStatus` {pending,matched,error,skipped}, `RecitationStreamEvent`).
+- `mobile/lib/data/services/streaming_recitation_service.dart`: streams mic via
+  `record`'s `startStream(pcm16bits,16k,mono)` → `dart:io WebSocket.connect(...,
+  customClient:)` (trusts the VPS self-signed cert via badCertificateCallback).
+  Exposes `events`, `amplitude` (RMS 0–1 for the visualizer), `connectionState`.
+  `start/stop/cancel`; 20s ping keep-alive; NO auto-stop.
+- `widgets/memorization_ayah_view.dart`: RTL word grid. Hifz mode blurs pending
+  words (ImageFiltered) and reveals green when matched; red = mispronounced,
+  amber+underline = skipped, live. Tracking mode shows all words, tints as they
+  resolve.
+- `widgets/mic_visualizer.dart`: always-on bottom bar visualizer (pulsing mic
+  dot + scrolling RMS bars + "Listening") — shows the mic is continuously live.
+- `pages/live_recitation_page.dart` NEW `LiveRecitationPage`: setup (target
+  picker + Memorization toggle + Listen First + ayah preview) → live (real-time
+  MemorizationAyahView + LIVE count-up timer that NEVER auto-stops + bottom
+  MicVisualizer + Stop/Cancel) → results (reuses existing `RecitationResults` +
+  `WordComparisonSheet`; synthesizes a result from live statuses if the final
+  payload is missing). Own `LiveRecitationUiState` enum (does NOT touch
+  `RecitationState`).
+- `home_page.dart`: practice FAB now opens `LiveRecitationPage` (was
+  `RecitationPage`). This is the ONLY change to an existing screen's behaviour.
+- `app_constants.dart`: added `wsBaseUrl` / `recitationStreamWsUrl` (derived
+  from baseUrl: http→ws, drop `/v1`), `trustedSelfSignedHost`, and live
+  streaming constants (sample rate, ping interval, visualizer bar count).
+- Tests: `mobile/test/live_recitation_test.dart` (7, all pass) — event parsing,
+  setup UI (Hifz toggle + Start), memorization masking vs tracking.
+
+### Verification
+- `flutter analyze` clean on ALL new files. `flutter test live_recitation_test`
+  7/7 pass. `recitation_screen_test` (Quran reader recite) + widget_test state
+  count STILL pass (legacy untouched). Only pre-existing `widget_test` "Grammar
+  color-coding" fails (references non-existent `fiil` key — unrelated).
+- `pytest ml/tests/test_streaming_matcher.py` 8/8; recitation_api
+  `tests/test_streaming.py` 4/4. The 2 pre-existing recitation test failures
+  (no Redis running + intentional ayah-range clamp) are unchanged.
+- Installed backend deps into the VPS venv (`/home/Innocent/venv`): fastapi,
+  httpx, pytest-asyncio, redis, etc.
+
+### DEPLOY NOTES
+- VPS: reload nginx (WS timeouts) + restart `recitation-api` so the new
+  `/ws/recitation/stream` route is served. The `inference-worker` is unaffected
+  (streaming runs inside recitation-api, not the worker). Real live transcription
+  needs the Whisper model available in recitation-api; otherwise it falls back to
+  the duration-based stub (still reveals words live). Consider running with
+  `QARI_ML_USE_STUB=false` once Whisper is loaded there.
+- Mobile: APK NOT rebuilt this session (rebuild with `flutter build apk
+  --release` then deploy to VPS `/v1/app/download`; bump pubspec + app_release).
+- NOT yet bumped pubspec version — do that with the APK rebuild.
 
 
 

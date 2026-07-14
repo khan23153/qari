@@ -23,6 +23,26 @@ class AppConstants {
     if (env.isNotEmpty) return env;
     return 'https://20.197.40.13/v1';
   }
+
+  /// WebSocket base URL for real-time recitation streaming.
+  ///
+  /// Derived from [baseUrl]: swaps `http(s)` → `ws(s)` and drops the `/v1`
+  /// suffix (WebSocket routes are mounted at `/ws/...`, not under `/v1`).
+  /// Override at run time with `--dart-define=WS_BASE_URL=ws://10.0.2.2:8001`.
+  static String get wsBaseUrl {
+    const env = String.fromEnvironment('WS_BASE_URL');
+    if (env.isNotEmpty) return env;
+    var ws = baseUrl.replaceFirst(RegExp(r'^http'), 'ws');
+    ws = ws.replaceFirst(RegExp(r'/v1/?$'), '');
+    return ws;
+  }
+
+  /// Full endpoint for the live recitation streaming WebSocket.
+  static String get recitationStreamWsUrl => '$wsBaseUrl/ws/recitation/stream';
+
+  /// Host whose self-signed TLS cert the app trusts (see ApiClient / the
+  /// streaming service's custom HttpClient). Matches [baseUrl]'s VPS host.
+  static const String trustedSelfSignedHost = '20.197.40.13';
   /// Public Quran audio CDN (everyayah.com) — hosts per-ayah MP3s for many
   /// reciters. The previous `audio.qari.app` host does not resolve (it produced
   /// the "0 source error" / "Audio not available" toast in the reader).
@@ -246,6 +266,15 @@ class AppConstants {
   static const int recitationMaxPollAttempts = 60;
   static const double minConfidenceThreshold = 0.55;
   static const double maxNoiseThreshold = 0.35;
+
+  // ─── Live Recitation (real-time streaming / Memorization Mode) ───────────
+  /// PCM sample rate streamed to the backend (mono 16-bit).
+  static const int liveRecitationSampleRate = 16000;
+  /// Interval between keep-alive ping frames on the streaming socket so a long
+  /// hands-free session is never dropped by the proxy during quiet pauses.
+  static const int liveRecitationPingIntervalSeconds = 20;
+  /// Bars shown in the always-listening bottom mic visualizer.
+  static const int liveVisualizerBarCount = 40;
 
   // ─── Scholar ────────────────────────────────────────────────────────────
   static const int maxScholarAudioSeconds = 120;

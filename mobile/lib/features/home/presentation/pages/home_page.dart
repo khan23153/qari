@@ -8,7 +8,7 @@ import '../../../../data/repositories/user_repository.dart';
 import '../../../../data/models/user_model.dart';
 import '../../../../data/models/lesson_model.dart';
 import '../../../quran_reader/presentation/pages/surah_list_page.dart';
-import '../../../recitation/presentation/pages/recitation_page.dart';
+import '../../../recitation/presentation/pages/live_recitation_page.dart';
 import '../../../profile/presentation/pages/profile_page.dart';
 import '../../../lessons/presentation/pages/lesson_player_page.dart';
 import '../../../lessons/presentation/pages/lesson_list_page.dart';
@@ -132,7 +132,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       onTap: () async {
         await Haptics.vibrate(HapticsType.medium);
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const RecitationPage()),
+          MaterialPageRoute(builder: (_) => const LiveRecitationPage()),
         );
       },
       child: Container(

@@ -1,4 +1,14 @@
-"""WebSocket route for real-time recitation results."""
+"""WebSocket routes for recitation.
+
+Two endpoints:
+
+* ``/ws/recitation/stream`` — **real-time streaming** recitation. The client
+  streams audio continuously and receives word-by-word match events live
+  (Tarteel-style live tracking + memorization mode). MUST be declared before
+  the ``{session_id}`` route so ``stream`` isn't matched as a path param.
+* ``/ws/recitation/{session_id}`` — result feed for the batch upload flow
+  (subscribes to the session's Redis Pub/Sub channel).
+"""
 
 import asyncio
 import json
@@ -9,6 +19,7 @@ import redis.asyncio as redis
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.services.streaming_session import StreamingRecitationSession
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["websocket"])
@@ -21,6 +32,138 @@ def _get_redis() -> redis.Redis:
     if _redis is None:
         _redis = redis.from_url(settings.redis_url, decode_responses=True)
     return _redis
+
+
+async def _safe_close(websocket: WebSocket, code: int = 1000) -> None:
+    try:
+        await websocket.close(code=code)
+    except Exception:
+        pass
+
+
+# NOTE: this MUST be registered before ``/ws/recitation/{session_id}`` below,
+# otherwise Starlette matches ``stream`` as a session_id path parameter.
+@router.websocket("/ws/recitation/stream")
+async def recitation_stream(websocket: WebSocket):
+    """Real-time streaming recitation (Tarteel-style live word tracking).
+
+    Protocol
+    --------
+    client → server (first message, JSON text)::
+
+        {"type": "start", "surah_number": 1, "ayah_number": 1,
+         "ayah_from": 1, "ayah_to": 1, "mode": "memorization"|"tracking",
+         "sample_rate": 16000}
+
+    server → client::
+
+        {"type": "ready", "session_id": ..., "words": [{index, text}...]}
+
+    client → server: raw PCM16 mono audio frames as **binary** messages,
+    streamed continuously (the session never times out server-side).
+
+    server → client (as words resolve)::
+
+        {"type": "word", "word_index": i, "status": "matched"|"error"|"skipped",
+         "expected": ..., "spoken": ..., "timestamp_ms": ...}
+
+    client → server: ``{"type": "stop"}`` (or disconnect) → server replies with
+    ``{"type": "final", "result": <RecitationAnalysisResult>}`` and closes.
+    """
+    await websocket.accept()
+
+    # --- Handshake: wait for the start message ---
+    try:
+        start = await websocket.receive_json()
+    except (WebSocketDisconnect, json.JSONDecodeError, RuntimeError):
+        await _safe_close(websocket)
+        return
+
+    if not isinstance(start, dict) or start.get("type") != "start":
+        await websocket.send_json({
+            "type": "error",
+            "detail": "First message must be {'type': 'start', ...}",
+        })
+        await _safe_close(websocket, code=4000)
+        return
+
+    surah = int(start.get("surah_number", 1))
+    ayah_number = start.get("ayah_number")
+    ayah_from = int(start.get("ayah_from", ayah_number or 1))
+    ayah_to = int(start.get("ayah_to", ayah_number or ayah_from))
+    mode = start.get("mode", "tracking")
+    sample_rate = int(start.get("sample_rate", settings.audio_sample_rate))
+
+    session = StreamingRecitationSession(
+        surah=surah,
+        ayah_from=ayah_from,
+        ayah_to=ayah_to,
+        mode=mode,
+        sample_rate=sample_rate,
+    )
+    try:
+        await asyncio.to_thread(session.load_reference)
+    except Exception as exc:
+        logger.error("ws.stream.load_ref_failed", error=str(exc))
+
+    await websocket.send_json(session.ready_payload())
+    logger.info(
+        "ws.stream.started",
+        session_id=session.session_id,
+        surah=surah,
+        ayah_range=f"{ayah_from}-{ayah_to}",
+        mode=mode,
+        words=len(session.reference_words),
+    )
+
+    finalized = False
+    try:
+        while True:
+            message = await websocket.receive()
+
+            if message.get("type") == "websocket.disconnect":
+                break
+
+            data = message.get("bytes")
+            if data:
+                session.add_audio(data)
+                for event in await session.maybe_transcribe():
+                    await websocket.send_json(event)
+                continue
+
+            text = message.get("text")
+            if text:
+                try:
+                    payload = json.loads(text)
+                except json.JSONDecodeError:
+                    continue
+                if payload.get("type") == "stop":
+                    for event in await session.maybe_transcribe(force=True):
+                        await websocket.send_json(event)
+                    result = await session.finalize()
+                    await websocket.send_json({
+                        "type": "final",
+                        "session_id": session.session_id,
+                        "status": "completed",
+                        "result": result,
+                    })
+                    finalized = True
+                    break
+                if payload.get("type") == "ping":
+                    await websocket.send_json({"type": "pong"})
+
+    except WebSocketDisconnect:
+        logger.info("ws.stream.disconnected", session_id=session.session_id)
+    except Exception as exc:
+        logger.error("ws.stream.error", session_id=session.session_id, error=str(exc))
+    finally:
+        if not finalized:
+            # Persist whatever we captured so history / A/B playback still work.
+            try:
+                await session.finalize()
+            except Exception:
+                pass
+        await _safe_close(websocket)
 
 
 @router.websocket("/ws/recitation/{session_id}")
