@@ -581,7 +581,27 @@ Maududi but heard Jalandhari. ROOT CAUSE: `scripts/build_local_corpus.py`
 - Backend `translation_ur` comes from its (empty) corpus DB; no override of the
   local Jalandhari text. If backend is ever seeded, seed it with Jalandhari too.
 - NOTE: `quran_corpus.json.gz` is a bundled APK asset — must REBUILD the APK
-  (`flutter build apk --release`) to ship the corrected text. No backend change.
+   (`flutter build apk --release`) to ship the corrected text. No backend change.
+
+## Session 2026-07-14 — Rebuilt APK + committed (v1.0.16+27)
+Combined the Urdu audio+text fixes AND the earlier uncommitted v1.0.15 auth/UI
+fixes into one release.
+- **APK built successfully** (Android SDK present this time): `flutter build
+  apk --release` → `mobile/build/app/outputs/flutter-apk/app-release.apk`
+  (74.3MB). Copied to `releases/app-release.apk`. The APK was built AFTER the
+  regenerated `quran_corpus.json.gz`, so it ships Jalandhari text.
+- **Version bump**: `pubspec.yaml` → `1.0.16+27`; `releases/app_release.json`
+  → version 1.0.16 / version_code 27, with en+ur+hi notes for the Urdu fix.
+- **Committed** locally as `fdda3bb` (17 files: the Urdu audio/text fixes,
+  audio_service resilience, auth/UI fixes, app_navigator, regenerated corpus
+  .gz, rebuilt APK, bumped metadata, .gitignore now ignores the uncompressed
+  `mobile/assets/quran_corpus.json` build artifact).
+- **PUSHED** ✓ (commit fdda3bb) to origin/main with the user-supplied GitHub
+  PAT (inline, not stored; `GIT_TERMINAL_PROMPT=0` + `-c credential.helper=`,
+  token not persisted in git config). Large-APK (>50MB) warning as before —
+  Git LFS still planned. REMAINING: deploy `releases/app-release.apk` to VPS
+  20.197.40.13 (`/v1/app/download`) for OTA users to actually receive v1.0.16.
+- APK >50MB warning persists (Git LFS planned later).
 
 
 
