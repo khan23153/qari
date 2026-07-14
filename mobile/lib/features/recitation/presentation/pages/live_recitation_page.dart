@@ -277,6 +277,9 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
         ayahFrom: _scope == RecitationScope.surah ? 1 : _ayah,
         ayahTo: _scope == RecitationScope.surah ? _ayahCount : _ayah,
         ayahRefs: _ayahRefs,
+        // Full target word list sent so the backend can score even if its own
+        // reference store is empty (prevents "0 of 0 words correct").
+        words: _words,
         // Reveal-as-you-speak is the ONLY behaviour on this screen.
         memorizationMode: false,
       );
@@ -303,8 +306,20 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
 
   void _finishWith(RecitationResult? result) {
     if (!mounted) return;
+    // Prefer the backend's result, but if it came back with ZERO word verdicts
+    // (e.g. server reference was empty, or audio never reached it) fall back to
+    // the words we revealed live so the results screen is never "0 of 0". The
+    // full target list (_words) is always passed as `ayahWords` to
+    // RecitationResults so the word-by-word grid has the canonical text.
+    final useResult = (result != null && result.wordVerdicts.isNotEmpty)
+        ? result
+        : _synthesizeResult();
+    debugPrint('[LiveRecitation] finish: backendVerdicts='
+        '${result?.wordVerdicts.length ?? -1}, '
+        'revealedWords=${_revealedWords.length}, '
+        'targetWords=${_words.length}');
     setState(() {
-      _result = result ?? _synthesizeResult();
+      _result = useResult;
       _ui = LiveRecitationUiState.results;
     });
   }

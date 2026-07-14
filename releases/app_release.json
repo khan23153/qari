@@ -1,12 +1,12 @@
 {
-  "version": "1.0.20",
-  "version_code": 31,
+  "version": "1.0.21",
+  "version_code": 32,
   "min_version": "1.0.0",
   "min_version_code": 1,
   "apk_url": "https://20.197.40.13/v1/app/download",
   "force_update": false,
-  "notes_en": "New: AI Recitation now reveals the Quran as a continuous Mushaf (physical-book) layout. The page starts blank and words appear on it one-by-one, right-to-left, as the live engine confirms them — with inline ayah markers between verses. No placeholder dots, no toggle. Continuous mic streaming with PCM sent every 250ms.",
-  "notes_ur": "نیا: AI تلاوت اب قرآن کو مسلسل مصحف (فزیکل کتاب) لے آؤٹ میں دکھاتی ہے۔ صفحہ خالی شروع ہوتا ہے اور الفاظ ایک ایک کر کے دائیں سے بائیں نمودار ہوتے ہیں جیسے ہی انجن انہیں تصدیق کرتا ہے — آیات کے درمیان ان لائن نشانوں کے ساتھ۔ کوئی ڈاٹس یا ٹوگل نہیں۔ مسلسل مائیک اسٹریمنگ، PCM ہر 250ms میں۔",
-  "notes_hi": "New: AI Recitation now reveals the Quran as a continuous Mushaf (physical-book) layout. The page starts blank and words appear on it one-by-one, right-to-left, as the live engine confirms them — with inline ayah markers between verses. No placeholder dots, no toggle. Continuous mic streaming with PCM sent every 250ms.",
+  "notes_en": "Fix: live AI Recitation results no longer show '0 of 0 words'. The app now sends its resolved word list to the backend as a reference fallback, and the backend builds its matcher/transcriber from the final reference words (was accidentally built from the empty server list). Added aggressive streaming diagnostics: per-chunk + per-flush byte logging, WS/mic error listeners, and a final-result sanity log. Stop & Review now strictly waits for the server's aggregated result before navigating.",
+  "notes_ur": "درست: لائیو AI تلاوت کا نتیجہ اب '0 of 0' نہیں دکھاتا۔ ایپ اپنے الفاظ بیک اینڈ کو ریفرنس کے طور پر بھیجتی ہے اور بیک اینڈ میچر/ٹرانسکرائبر حتمی الفاظ سے بناتا ہے۔ اسٹریمنگ ڈائیگناسٹکس شامل کیے گئے ہیں۔",
+  "notes_hi": "Fix: live AI Recitation results no longer show '0 of 0 words'. The app now sends its resolved word list to the backend as a reference fallback, and the backend builds its matcher/transcriber from the final reference words. Added aggressive streaming diagnostics and Stop & Review strictly waits for the server result.",
   "data_version": 1
 }

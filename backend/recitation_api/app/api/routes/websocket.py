@@ -118,6 +118,12 @@ async def recitation_stream(websocket: WebSocket):
     # of [surah, ayah] pairs. Fall back to a single-surah range when absent.
     ayah_refs = _parse_ayah_refs(start.get("ayahs"))
 
+    # Client-supplied word list (sent by the app) — used as a fallback reference
+    # when the server's own reference store is empty.
+    client_words = start.get("words")
+    if not isinstance(client_words, list):
+        client_words = None
+
     session = StreamingRecitationSession(
         surah=surah,
         ayah_from=ayah_from,
@@ -125,6 +131,7 @@ async def recitation_stream(websocket: WebSocket):
         ayah_refs=ayah_refs,
         mode=mode,
         sample_rate=sample_rate,
+        client_words=client_words,
     )
     try:
         await asyncio.to_thread(session.load_reference)

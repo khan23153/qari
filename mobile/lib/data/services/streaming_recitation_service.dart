@@ -49,6 +49,11 @@ class StreamingRecitationService {
   Completer<RecitationStreamEvent?>? _finalCompleter;
   LiveConnectionState _state = LiveConnectionState.idle;
 
+  /// Total PCM bytes sent to the server (for debugging the "Duration: 0s" bug).
+  int _totalSentBytes = 0;
+  int _chunkCount = 0;
+  DateTime? _firstChunkAt;
+
   /// Real-time backend events (ready / word / final / error).
   Stream<RecitationStreamEvent> get events => _events.stream;
 
@@ -91,9 +96,13 @@ class StreamingRecitationService {
     int? ayahTo,
     List<(int, int)>? ayahRefs,
     required bool memorizationMode,
+    List<String>? words,
   }) async {
     if (isActive) return;
     _setState(LiveConnectionState.connecting);
+    _totalSentBytes = 0;
+    _chunkCount = 0;
+    _firstChunkAt = null;
 
     if (!await hasPermission()) {
       final granted = await requestPermission();
@@ -108,23 +117,28 @@ class StreamingRecitationService {
       ..badCertificateCallback =
           (cert, host, port) => host == AppConstants.trustedSelfSignedHost;
     try {
+      debugPrint('[Streaming] connecting to ${AppConstants.recitationStreamWsUrl}');
       _socket = await WebSocket.connect(
         AppConstants.recitationStreamWsUrl,
         customClient: httpClient,
       );
     } catch (e) {
       _setState(LiveConnectionState.error);
+      debugPrint('[Streaming] WS CONNECT FAILED: $e');
       throw StreamingConnectionException('Could not connect: $e');
     }
 
     _socketSub = _socket!.listen(
       _onSocketData,
-      onError: (Object e) {
-        debugPrint('StreamingRecitation socket error: $e');
+      onError: (Object e, StackTrace? st) {
+        // A WebSocket-level error (handshake failure, 400/500, dropped
+        // connection). Surface it loudly so "Duration 0s" can be diagnosed.
+        debugPrint('[Streaming] WS ERROR: $e');
+        if (st != null) debugPrint('$st');
         _setState(LiveConnectionState.error);
       },
       onDone: () {
-        debugPrint('StreamingRecitation socket closed');
+        debugPrint('[Streaming] WS CLOSED (done). state=${_state.name}');
         if (_state != LiveConnectionState.finishing) {
           _setState(LiveConnectionState.closed);
         }
@@ -135,7 +149,9 @@ class StreamingRecitationService {
     // --- Handshake ---
     // Send the explicit ordered ayah sequence so the backend can resolve the
     // concatenated reference list and track words seamlessly across ayah
-    // boundaries (full-page / full-surah continuous recitation).
+    // boundaries (full-page / full-surah continuous recitation). Also send the
+    // client's resolved word list as a fallback reference so the backend can
+    // still score when its own reference store is empty (prevents "0 of 0").
     final List<List<int>> refs = ayahRefs == null
         ? []
         : ayahRefs.map((r) => [r.$1, r.$2]).toList();
@@ -146,28 +162,53 @@ class StreamingRecitationService {
       'ayah_from': ayahFrom ?? ayahNumber,
       'ayah_to': ayahTo ?? ayahNumber,
       if (refs.isNotEmpty) 'ayahs': refs,
+      if (words != null && words.isNotEmpty) 'words': words,
       'mode': memorizationMode ? 'memorization' : 'tracking',
       'sample_rate': AppConstants.liveRecitationSampleRate,
     }));
-    debugPrint('StreamingRecitation: sent start handshake '
-        '(surah=$surahNumber, ayah=$ayahNumber, refs=${refs.length})');
+    debugPrint('[Streaming] sent start handshake '
+        '(surah=$surahNumber, ayah=$ayahNumber, refs=${refs.length}, '
+        'clientWords=${(words?.length) ?? 0})');
 
     // --- Start the continuous PCM audio stream ---
-    final audioStream = await _recorder.startStream(
-      const RecordConfig(
-        encoder: AudioEncoder.pcm16bits,
-        sampleRate: AppConstants.liveRecitationSampleRate,
-        numChannels: 1,
-      ),
-    );
+    try {
+      final audioStream = await _recorder.startStream(
+        const RecordConfig(
+          encoder: AudioEncoder.pcm16bits,
+          sampleRate: AppConstants.liveRecitationSampleRate,
+          numChannels: 1,
+        ),
+      );
+      debugPrint('[Streaming] mic recorder STARTED (stream open).');
 
-    _audioSub = audioStream.listen((chunk) {
-      _emitAmplitude(chunk);
-      // Buffer the raw PCM16 chunk; it is flushed to the socket on the fixed
-      // 250–400ms cadence rather than on every micro-frame, so the server
-      // always receives real, non-empty audio windows.
-      _audioBuffer.add(chunk);
-    });
+      _audioSub = audioStream.listen(
+        (chunk) {
+          _emitAmplitude(chunk);
+          // ACHTUNG: if this logs 0-length chunks continuously, the local
+          // recorder is broken (no mic data).
+          _chunkCount++;
+          _firstChunkAt ??= DateTime.now();
+          if (chunk.isNotEmpty) {
+            _audioBuffer.add(chunk);
+          }
+          if (_chunkCount <= 5 || _chunkCount % 50 == 0) {
+            debugPrint('[Streaming] mic chunk #$_chunkCount '
+                'len=${chunk.length} bytes (buffered=${_audioBuffer.length})');
+          }
+        },
+        onError: (Object e, StackTrace? st) {
+          // The mic/recorder errored — the stream would otherwise die silently
+          // and the backend would receive no audio (=> Duration 0s).
+          debugPrint('[Streaming] MIC STREAM ERROR: $e');
+          if (st != null) debugPrint('$st');
+        },
+        cancelOnError: false,
+      );
+    } catch (e, st) {
+      debugPrint('[Streaming] mic startStream FAILED: $e\n$st');
+      _setState(LiveConnectionState.error);
+      throw StreamingConnectionException('Mic could not start: $e');
+    }
 
     // --- Keep-alive pings so long hands-free sessions never drop ---
     _pingTimer = Timer.periodic(
@@ -180,7 +221,7 @@ class StreamingRecitationService {
       },
     );
 
-    // --- Chunked upload: emit buffered audio every ~300ms (within 250–400ms) ---
+    // --- Chunked upload: emit buffered audio every 250ms ---
     _flushTimer = Timer.periodic(_flushInterval, (_) {
       _flushAudio();
     });
@@ -197,24 +238,44 @@ class StreamingRecitationService {
     final sock = _socket;
     if (sock != null && sock.readyState == WebSocket.open) {
       final frame = Uint8List.fromList(_audioBuffer.takeBytes());
+      _totalSentBytes += frame.length;
       sock.add(frame);
+      debugPrint('[Streaming] FLUSH #$_chunkCount -> sent ${frame.length} bytes '
+          '(totalSent=$_totalSentBytes)');
     } else {
+      debugPrint('[Streaming] FLUSH skipped: socket not open '
+          '(state=${_state.name}, buffered=${_audioBuffer.length})');
       _audioBuffer.clear();
     }
   }
 
   void _onSocketData(dynamic data) {
-    if (data is! String) return;
+    if (data is! String) {
+      // Server should only send JSON; a binary frame here is unexpected.
+      debugPrint('[Streaming] received non-string frame (ignored).');
+      return;
+    }
     try {
       final json = jsonDecode(data) as Map<String, dynamic>;
       final event = RecitationStreamEvent.fromJson(json);
+      if (event.type == RecitationStreamEventType.word) {
+        debugPrint('[Streaming] RX word event idx=${event.wordIndex} '
+            'status=${event.status.name} expected=${event.expected}');
+      } else if (event.type == RecitationStreamEventType.ready) {
+        debugPrint('[Streaming] RX ready (${event.words.length} words)');
+      } else if (event.type == RecitationStreamEventType.finalResult) {
+        debugPrint('[Streaming] RX final (duration=${event.result?.durationSeconds}s, '
+            'verdicts=${event.result?.wordVerdicts.length})');
+      } else if (event.type == RecitationStreamEventType.error) {
+        debugPrint('[Streaming] RX ERROR: ${event.detail}');
+      }
       if (!_events.isClosed) _events.add(event);
       if (event.type == RecitationStreamEventType.finalResult) {
         _finalCompleter?.complete(event);
         _finalCompleter = null;
       }
     } catch (e) {
-      debugPrint('StreamingRecitation decode error: $e');
+      debugPrint('[Streaming] decode error: $e');
     }
   }
 
@@ -239,11 +300,15 @@ class StreamingRecitationService {
 
   /// Stops recording, tells the backend to finalize, and awaits the final
   /// result (bounded by [timeout]). Returns the final result event if received.
+  /// IMPORTANT: the caller must NOT navigate to results until this resolves —
+  /// it blocks until the server sends the aggregated `final` payload.
   Future<RecitationStreamEvent?> stop({
-    Duration timeout = const Duration(seconds: 20),
+    Duration timeout = const Duration(seconds: 30),
   }) async {
     if (_state == LiveConnectionState.idle ||
         _state == LiveConnectionState.closed) {
+      debugPrint('[Streaming] stop() called but session not active '
+          '(state=${_state.name}) — nothing to finalize.');
       return null;
     }
     _setState(LiveConnectionState.finishing);
@@ -257,14 +322,19 @@ class StreamingRecitationService {
     try {
       await _recorder.stop();
     } catch (e) {
-      debugPrint('StreamingRecitation recorder stop error: $e');
+      debugPrint('[Streaming] recorder stop error: $e');
     }
+
+    debugPrint('[Streaming] requesting finalize from server '
+        '(totalSentBytes=$_totalSentBytes, micChunks=$_chunkCount)');
 
     _finalCompleter = Completer<RecitationStreamEvent?>();
     final sock = _socket;
     if (sock != null && sock.readyState == WebSocket.open) {
       sock.add(jsonEncode({'type': 'stop'}));
     } else {
+      debugPrint('[Streaming] cannot send stop: socket not open '
+          '(state=${_state.name})');
       _finalCompleter?.complete(null);
     }
 
@@ -272,12 +342,19 @@ class StreamingRecitationService {
     try {
       finalEvent = await _finalCompleter!.future.timeout(timeout);
     } on TimeoutException {
-      debugPrint('StreamingRecitation: timed out waiting for final result');
+      debugPrint('[Streaming] TIMEOUT waiting for server final result '
+          '(server did not respond in ${timeout.inSeconds}s).');
     } finally {
       _finalCompleter = null;
       await _closeSocket();
       _setState(LiveConnectionState.closed);
     }
+
+    final r = finalEvent?.result;
+    debugPrint('[Streaming] FINAL result received: '
+        'duration=${r?.durationSeconds}s, '
+        'verdicts=${r?.wordVerdicts.length}, '
+        'score=${r?.overallScore}');
     return finalEvent;
   }
 

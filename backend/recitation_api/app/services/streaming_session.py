@@ -233,6 +233,7 @@ class StreamingRecitationSession:
         mode: str = "tracking",
         sample_rate: int = 16000,
         transcriber: Optional[Transcriber] = None,
+        client_words: Optional[list[str]] = None,
     ) -> None:
         self.session_id = str(uuid.uuid4())
 
@@ -257,6 +258,11 @@ class StreamingRecitationSession:
         self.word_entries: list[dict] = []
         self.ayah_boundaries: list[dict] = []
 
+        # Client-supplied word list (sent in the `start` handshake). Used as a
+        # fallback reference when the server's own reference store / corpus is
+        # empty, so the matcher still produces verdicts (fixes "0 of 0 words").
+        self._client_words: list[str] = list(client_words or [])
+
         self._pcm = bytearray()
         self._samples_at_last_transcribe = 0
         self._transcribe_lock = asyncio.Lock()
@@ -279,12 +285,33 @@ class StreamingRecitationSession:
         self.reference_audio_url = ref_url
         self.word_entries = entries
         self.ayah_boundaries = boundaries
-        self._matcher = StreamingMatcher(norm)
+
+        # Fallback: if the server resolved NO reference words (empty reference
+        # store / corpus), trust the client's own resolved word list so we can
+        # still score and emit word events instead of "0 of 0".
+        if not self.reference_words and self._client_words:
+            logger.warning(
+                "stream.using_client_words_fallback",
+                session_id=self.session_id,
+                count=len(self._client_words),
+            )
+            c_display = list(self._client_words)
+            c_norm = [_normalize(w) for w in c_display]
+            c_entries, c_display, c_norm = _pack_entries(c_display, c_norm)
+            self.display_words = c_display
+            self.reference_words = c_norm
+            self.word_entries = c_entries
+            self.ayah_boundaries = []
+
+        # Build the matcher + transcriber from the FINAL reference words (which
+        # may be the client-words fallback), not the original (possibly empty)
+        # `norm` returned by the server's own resolver.
+        self._matcher = StreamingMatcher(self.reference_words)
 
         if self._explicit_transcriber is not None:
             self._transcriber = self._explicit_transcriber
-        elif settings.ml_use_stub or not norm:
-            self._transcriber = _make_stub_transcriber(norm)
+        elif settings.ml_use_stub or not self.reference_words:
+            self._transcriber = _make_stub_transcriber(self.reference_words)
         else:
             self._transcriber = _real_transcriber
 

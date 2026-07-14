@@ -876,7 +876,65 @@ Android SDK (`ANDROID_HOME=/home/Innocent/Android`) →
 to **v1.0.20+31**. NOT committed/pushed (no git action requested; needs GitHub
 PAT). REMAINING: push to origin/main + deploy APK to VPS host `/app/releases`
 (OTA `/v1/app/download`) + reload nginx (WS timeouts) + ensure `recitation-api`
-serves `/ws/recitation/stream` with the reference bundle present.
+ serves `/ws/recitation/stream` with the reference bundle present.
+
+## Session 2026-07-14 — Live Recitation results: fix "0 of 0" + "Duration 0s"
+User tested the v1.0.20 Mushaf build: UI/live state correct, but Results screen
+showed **"0 of 0 words correct"** AND **"Duration: 0s"**. Root-caused both:
+
+1. **BACKEND BUG (the real "0 of 0" cause)** — in
+   `backend/recitation_api/app/services/streaming_session.py` `load_reference`,
+   after the (new) client-words fallback populated `self.reference_words`,
+   the code still built `StreamingMatcher(norm)` and
+   `_make_stub_transcriber(norm)` from the ORIGINAL local `norm` variable —
+   which was EMPTY when the server's own reference store was empty. So the
+   matcher tracked 0 reference words and the stub revealed 0 words → 0 verdicts
+   → "0 of 0". FIX: build matcher + transcriber from `self.reference_words`
+   (and gate the stub on `not self.reference_words`). Verified with a harness:
+   empty server ref + client_words(6) now yields 4 live word events,
+   `duration_seconds: 4`, 6 verdicts, score 0.67. Backend `tests/test_streaming.py`
+   5/5 still pass.
+
+2. **CLIENT-WORDS REFERENCE FALLBACK (defends against empty server ref)** —
+   `streaming_recitation_service._start` now sends `words: _words` (the full
+   resolved Mushaf/surah target) in the `start` handshake. `websocket.py`
+   reads `start["words"]` → `StreamingRecitationSession(client_words=...)`.
+   `load_reference` uses them only when its own reference resolves empty.
+
+3. **RESULTS RESILIENCE** — `live_recitation_page._finishWith` now prefers the
+   backend result ONLY if it has >0 word verdicts; otherwise it synthesizes
+   from the live `_revealedWords` so the screen is never "0 of 0". `_words`
+   (full target) is always passed as `ayahWords` to `RecitationResults`.
+
+4. **AGGRESSIVE STREAMING DIAGNOSTICS (user-requested, for Duration 0s)** —
+   `streaming_recitation_service.dart`:
+   - `_audioSub` now has `onError` (logs MIC STREAM ERROR) + logs each mic
+     chunk's byte length (first 5 + every 50th) and the cumulative buffered size.
+   - `_flushAudio` logs bytes sent per 250ms flush (`totalSent=…`) and warns if
+     the socket isn't open (so 0-byte sends are obvious).
+   - WS `onError`/`onDone` listeners log connection drops / handshake errors.
+   - `_onSocketData` logs RX ready/word/final/error events.
+   - `_stop` logs `totalSentBytes` + mic chunks, the `stop` send, and the final
+     result's `duration_seconds`/verdict count; timeout bumped 20s→30s.
+   - `_start` wraps `startStream` in try/catch logging mic failure; connect logs
+     the WS URL. `Stop & Review` ALREADY awaited the server `final` before
+     navigating (via `_finalCompleter`) — confirmed untouched.
+
+NOTE: a true "Duration 0s" on a device almost always means no PCM reached the
+server. The code path is correct (binary frames flushed every 250ms; nginx
+`/ws/` proxy has Upgrade headers + `proxy_buffering off` + 3600s timeouts, both
+server blocks). The new per-flush byte logs will show `totalSent=0` if the
+local recorder yields nothing (broken mic/permission) vs a healthy count. If
+audio reaches the server but server ref was empty, the client-words fallback now
+still scores. Also ensure the VPS `recitation-api` is actually serving the new
+code + the reference bundle, and nginx was reloaded.
+
+VERIFY: `flutter analyze lib` → 0 errors; `flutter test test/live_recitation_test`
+8/8 pass; backend `pytest tests/test_streaming.py` 5/5. APK rebuilt (75.6MB) →
+`releases/app-release.apk`; bumped to **v1.0.21+32**. NOT pushed (needs GitHub
+PAT — none in env). REMAINING: push + deploy APK to VPS `/app/releases` + reload
+nginx + restart `recitation-api` so the new stream route + client-words fallback
+ship.
 
 
 
