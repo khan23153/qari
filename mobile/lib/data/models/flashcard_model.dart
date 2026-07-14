@@ -16,7 +16,6 @@ abstract class FlashcardModel with _$FlashcardModel {
     @JsonKey(name: 'transliteration') String? transliteration,
     @JsonKey(name: 'meaning_en') String? meaningEn,
     @JsonKey(name: 'meaning_ur') String? meaningUr,
-    @JsonKey(name: 'meaning_hi') String? meaningHi,
     @JsonKey(name: 'root_arabic') String? rootArabic,
     @JsonKey(name: 'pos_group') String? posGroup,
     @JsonKey(name: 'audio_url') String? audioUrl,
@@ -43,8 +42,6 @@ extension FlashcardModelX on FlashcardModel {
     switch (langCode) {
       case 'ur':
         return meaningUr;
-      case 'hi':
-        return meaningHi;
       default:
         return meaningEn;
     }

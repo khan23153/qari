@@ -30,6 +30,7 @@ void main() {
           body: AyahWidget(
             ayah: _sampleAyah(),
             languageCode: 'en',
+            translationLanguageCode: 'en',
             arabicFontSize: 24,
             densityLevel: 3,
             grammarColorsEnabled: true,

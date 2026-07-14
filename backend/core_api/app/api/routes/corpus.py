@@ -185,6 +185,7 @@ async def get_surah_ayahs(
             page=a.page,
             sajda=a.sajda,
             audio_url=a.audio_url,
+            audio_url_ur=a.audio_url_ur,
             words=[
                 WordBrief(
                     word_id=w.id,

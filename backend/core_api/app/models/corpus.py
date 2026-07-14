@@ -109,6 +109,7 @@ class Ayah(Base):
     hizb_quarter: Mapped[Optional[int]] = mapped_column(SmallInteger, nullable=True)
     sajda: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     audio_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    audio_url_ur: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     qari_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("qaris.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=__import__("sqlalchemy").func.now())
 

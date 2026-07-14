@@ -12,6 +12,7 @@ import '../../../../core/utils/arabic_text_utils.dart';
 class AyahWidget extends StatelessWidget {
   final AyahModel ayah;
   final String languageCode;
+  final String translationLanguageCode;
   final double arabicFontSize;
   final int densityLevel; // 0=Arabic only, 1=+translit, 2=+word meaning, 3=+full translation
   final bool grammarColorsEnabled;
@@ -28,6 +29,7 @@ class AyahWidget extends StatelessWidget {
     super.key,
     required this.ayah,
     required this.languageCode,
+    required this.translationLanguageCode,
     required this.arabicFontSize,
     required this.densityLevel,
     required this.grammarColorsEnabled,
@@ -185,7 +187,7 @@ class AyahWidget extends StatelessWidget {
   }
 
   Widget _buildTranslation(ThemeData theme) {
-    final translation = ayah.translationFor(languageCode);
+    final translation = ayah.translationFor(translationLanguageCode);
     if (translation == null) return const SizedBox.shrink();
 
     return Container(

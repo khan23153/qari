@@ -32,8 +32,6 @@ mixin _$FlashcardModel {
   String? get meaningEn;
   @JsonKey(name: 'meaning_ur')
   String? get meaningUr;
-  @JsonKey(name: 'meaning_hi')
-  String? get meaningHi;
   @JsonKey(name: 'root_arabic')
   String? get rootArabic;
   @JsonKey(name: 'pos_group')
@@ -90,8 +88,6 @@ mixin _$FlashcardModel {
                 other.meaningEn == meaningEn) &&
             (identical(other.meaningUr, meaningUr) ||
                 other.meaningUr == meaningUr) &&
-            (identical(other.meaningHi, meaningHi) ||
-                other.meaningHi == meaningHi) &&
             (identical(other.rootArabic, rootArabic) ||
                 other.rootArabic == rootArabic) &&
             (identical(other.posGroup, posGroup) ||
@@ -129,7 +125,6 @@ mixin _$FlashcardModel {
         transliteration,
         meaningEn,
         meaningUr,
-        meaningHi,
         rootArabic,
         posGroup,
         audioUrl,
@@ -146,7 +141,7 @@ mixin _$FlashcardModel {
 
   @override
   String toString() {
-    return 'FlashcardModel(cardId: $cardId, userId: $userId, wordId: $wordId, surahNumber: $surahNumber, ayahNumber: $ayahNumber, wordText: $wordText, transliteration: $transliteration, meaningEn: $meaningEn, meaningUr: $meaningUr, meaningHi: $meaningHi, rootArabic: $rootArabic, posGroup: $posGroup, audioUrl: $audioUrl, ayahText: $ayahText, ayahTranslation: $ayahTranslation, ease: $ease, interval: $interval, repetitions: $repetitions, nextReview: $nextReview, lastReviewed: $lastReviewed, isDue: $isDue, createdAt: $createdAt)';
+    return 'FlashcardModel(cardId: $cardId, userId: $userId, wordId: $wordId, surahNumber: $surahNumber, ayahNumber: $ayahNumber, wordText: $wordText, transliteration: $transliteration, meaningEn: $meaningEn, meaningUr: $meaningUr, rootArabic: $rootArabic, posGroup: $posGroup, audioUrl: $audioUrl, ayahText: $ayahText, ayahTranslation: $ayahTranslation, ease: $ease, interval: $interval, repetitions: $repetitions, nextReview: $nextReview, lastReviewed: $lastReviewed, isDue: $isDue, createdAt: $createdAt)';
   }
 }
 
@@ -166,7 +161,6 @@ abstract mixin class $FlashcardModelCopyWith<$Res> {
       @JsonKey(name: 'transliteration') String? transliteration,
       @JsonKey(name: 'meaning_en') String? meaningEn,
       @JsonKey(name: 'meaning_ur') String? meaningUr,
-      @JsonKey(name: 'meaning_hi') String? meaningHi,
       @JsonKey(name: 'root_arabic') String? rootArabic,
       @JsonKey(name: 'pos_group') String? posGroup,
       @JsonKey(name: 'audio_url') String? audioUrl,
@@ -203,7 +197,6 @@ class _$FlashcardModelCopyWithImpl<$Res>
     Object? transliteration = freezed,
     Object? meaningEn = freezed,
     Object? meaningUr = freezed,
-    Object? meaningHi = freezed,
     Object? rootArabic = freezed,
     Object? posGroup = freezed,
     Object? audioUrl = freezed,
@@ -253,10 +246,6 @@ class _$FlashcardModelCopyWithImpl<$Res>
       meaningUr: freezed == meaningUr
           ? _self.meaningUr
           : meaningUr // ignore: cast_nullable_to_non_nullable
-              as String?,
-      meaningHi: freezed == meaningHi
-          ? _self.meaningHi
-          : meaningHi // ignore: cast_nullable_to_non_nullable
               as String?,
       rootArabic: freezed == rootArabic
           ? _self.rootArabic
@@ -413,7 +402,6 @@ extension FlashcardModelPatterns on FlashcardModel {
             @JsonKey(name: 'transliteration') String? transliteration,
             @JsonKey(name: 'meaning_en') String? meaningEn,
             @JsonKey(name: 'meaning_ur') String? meaningUr,
-            @JsonKey(name: 'meaning_hi') String? meaningHi,
             @JsonKey(name: 'root_arabic') String? rootArabic,
             @JsonKey(name: 'pos_group') String? posGroup,
             @JsonKey(name: 'audio_url') String? audioUrl,
@@ -442,7 +430,6 @@ extension FlashcardModelPatterns on FlashcardModel {
             _that.transliteration,
             _that.meaningEn,
             _that.meaningUr,
-            _that.meaningHi,
             _that.rootArabic,
             _that.posGroup,
             _that.audioUrl,
@@ -485,7 +472,6 @@ extension FlashcardModelPatterns on FlashcardModel {
             @JsonKey(name: 'transliteration') String? transliteration,
             @JsonKey(name: 'meaning_en') String? meaningEn,
             @JsonKey(name: 'meaning_ur') String? meaningUr,
-            @JsonKey(name: 'meaning_hi') String? meaningHi,
             @JsonKey(name: 'root_arabic') String? rootArabic,
             @JsonKey(name: 'pos_group') String? posGroup,
             @JsonKey(name: 'audio_url') String? audioUrl,
@@ -513,7 +499,6 @@ extension FlashcardModelPatterns on FlashcardModel {
             _that.transliteration,
             _that.meaningEn,
             _that.meaningUr,
-            _that.meaningHi,
             _that.rootArabic,
             _that.posGroup,
             _that.audioUrl,
@@ -555,7 +540,6 @@ extension FlashcardModelPatterns on FlashcardModel {
             @JsonKey(name: 'transliteration') String? transliteration,
             @JsonKey(name: 'meaning_en') String? meaningEn,
             @JsonKey(name: 'meaning_ur') String? meaningUr,
-            @JsonKey(name: 'meaning_hi') String? meaningHi,
             @JsonKey(name: 'root_arabic') String? rootArabic,
             @JsonKey(name: 'pos_group') String? posGroup,
             @JsonKey(name: 'audio_url') String? audioUrl,
@@ -583,7 +567,6 @@ extension FlashcardModelPatterns on FlashcardModel {
             _that.transliteration,
             _that.meaningEn,
             _that.meaningUr,
-            _that.meaningHi,
             _that.rootArabic,
             _that.posGroup,
             _that.audioUrl,
@@ -615,7 +598,6 @@ class _FlashcardModel implements FlashcardModel {
       @JsonKey(name: 'transliteration') this.transliteration,
       @JsonKey(name: 'meaning_en') this.meaningEn,
       @JsonKey(name: 'meaning_ur') this.meaningUr,
-      @JsonKey(name: 'meaning_hi') this.meaningHi,
       @JsonKey(name: 'root_arabic') this.rootArabic,
       @JsonKey(name: 'pos_group') this.posGroup,
       @JsonKey(name: 'audio_url') this.audioUrl,
@@ -658,9 +640,6 @@ class _FlashcardModel implements FlashcardModel {
   @override
   @JsonKey(name: 'meaning_ur')
   final String? meaningUr;
-  @override
-  @JsonKey(name: 'meaning_hi')
-  final String? meaningHi;
   @override
   @JsonKey(name: 'root_arabic')
   final String? rootArabic;
@@ -734,8 +713,6 @@ class _FlashcardModel implements FlashcardModel {
                 other.meaningEn == meaningEn) &&
             (identical(other.meaningUr, meaningUr) ||
                 other.meaningUr == meaningUr) &&
-            (identical(other.meaningHi, meaningHi) ||
-                other.meaningHi == meaningHi) &&
             (identical(other.rootArabic, rootArabic) ||
                 other.rootArabic == rootArabic) &&
             (identical(other.posGroup, posGroup) ||
@@ -773,7 +750,6 @@ class _FlashcardModel implements FlashcardModel {
         transliteration,
         meaningEn,
         meaningUr,
-        meaningHi,
         rootArabic,
         posGroup,
         audioUrl,
@@ -790,7 +766,7 @@ class _FlashcardModel implements FlashcardModel {
 
   @override
   String toString() {
-    return 'FlashcardModel(cardId: $cardId, userId: $userId, wordId: $wordId, surahNumber: $surahNumber, ayahNumber: $ayahNumber, wordText: $wordText, transliteration: $transliteration, meaningEn: $meaningEn, meaningUr: $meaningUr, meaningHi: $meaningHi, rootArabic: $rootArabic, posGroup: $posGroup, audioUrl: $audioUrl, ayahText: $ayahText, ayahTranslation: $ayahTranslation, ease: $ease, interval: $interval, repetitions: $repetitions, nextReview: $nextReview, lastReviewed: $lastReviewed, isDue: $isDue, createdAt: $createdAt)';
+    return 'FlashcardModel(cardId: $cardId, userId: $userId, wordId: $wordId, surahNumber: $surahNumber, ayahNumber: $ayahNumber, wordText: $wordText, transliteration: $transliteration, meaningEn: $meaningEn, meaningUr: $meaningUr, rootArabic: $rootArabic, posGroup: $posGroup, audioUrl: $audioUrl, ayahText: $ayahText, ayahTranslation: $ayahTranslation, ease: $ease, interval: $interval, repetitions: $repetitions, nextReview: $nextReview, lastReviewed: $lastReviewed, isDue: $isDue, createdAt: $createdAt)';
   }
 }
 
@@ -812,7 +788,6 @@ abstract mixin class _$FlashcardModelCopyWith<$Res>
       @JsonKey(name: 'transliteration') String? transliteration,
       @JsonKey(name: 'meaning_en') String? meaningEn,
       @JsonKey(name: 'meaning_ur') String? meaningUr,
-      @JsonKey(name: 'meaning_hi') String? meaningHi,
       @JsonKey(name: 'root_arabic') String? rootArabic,
       @JsonKey(name: 'pos_group') String? posGroup,
       @JsonKey(name: 'audio_url') String? audioUrl,
@@ -849,7 +824,6 @@ class __$FlashcardModelCopyWithImpl<$Res>
     Object? transliteration = freezed,
     Object? meaningEn = freezed,
     Object? meaningUr = freezed,
-    Object? meaningHi = freezed,
     Object? rootArabic = freezed,
     Object? posGroup = freezed,
     Object? audioUrl = freezed,
@@ -899,10 +873,6 @@ class __$FlashcardModelCopyWithImpl<$Res>
       meaningUr: freezed == meaningUr
           ? _self.meaningUr
           : meaningUr // ignore: cast_nullable_to_non_nullable
-              as String?,
-      meaningHi: freezed == meaningHi
-          ? _self.meaningHi
-          : meaningHi // ignore: cast_nullable_to_non_nullable
               as String?,
       rootArabic: freezed == rootArabic
           ? _self.rootArabic

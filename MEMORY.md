@@ -476,4 +476,34 @@ VALIDATION (real end-to-end on the VPS worker):
   ML deps via requirements.ml.txt, shared qari_audio volume, stub=false prod).
 - NOTE: recitation scoring quality depends on Whisper-Quran transcription
   accuracy; tuning (beam search, LM, Wav2Vec2 refine) is future work. The
-  pipeline is correctly wired end-to-end.
+   pipeline is correctly wired end-to-end.
+
+## Session 2026-07-14 — Urdu Tarjuma (text + sequential audio) in Surah view
+Added an optional Urdu translation feature to the Quran reader.
+- **Model**: `AyahModel` gained `audioUrlUr` (`audio_url_ur`) — regenerated
+  freezed. Urdu text already existed via `translationUr`.
+- **Audio source**: Urdu tarjuma audio uses everyayah.com CDN
+  `https://everyayah.com/data/urdu_shamshad_ali_khan_46kbps/{surah:03d}{ayah:03d}.mp3`,
+  exposed as `AppConstants.urduTranslationCdnUrl` + `AudioService.buildUrduTranslationUrl`
+  (mirrors the Arabic `buildAyahUrl`). Falls back to `ayah.audioUrlUr` if present.
+- **UI/State**: settings bar "Tarjuma" chip opens a sheet — choose English/Urdu
+  translation + a "Play Translation Audio" switch. Both persisted in
+  `LocalStorageService` (`translation_language`, `play_translation_audio`).
+  `AyahWidget` takes a new `translationLanguageCode` that drives the density>=3
+  full-translation block (word meanings still use app `languageCode`).
+- **Sequential queue**: `_playAyahAudio` queues [Arabic, Urdu] per ayah when the
+  toggle is on; `_audioItemsPerAyah` (1 or 2) maps the player's sequence index
+  back to the highlighted ayah in `currentIndexStream`.
+- **Backend**: `Ayah.audio_url_ur` column + migration `0003_ayah_audio_url_ur`;
+  `AyahOut.audio_url_ur` (serialization_alias `audio_url_ur`), populated in
+  `corpus.py` route + `content_bundle_service.py`. Migration MUST be applied on
+  the VPS (alembic upgrade) or the `ayahs` table query fails.
+- **Build script**: `scripts/build_local_corpus.py` writes `audio_url_ur` per
+  ayah when `URDU_AUDIO_BASE_URL` env is set (else omitted; runtime still
+  constructs it from the constant).
+- Verified: `flutter analyze` clean on changed files; `ayah_widget_visibility_test`
+  passes. `reader_render_test` FAILS but is pre-existing (fires a real 90s Dio
+  timer in initState; fails before this change too). APK not rebuilt here
+  (no Android SDK); user must build + deploy + run `alembic upgrade head`.
+
+

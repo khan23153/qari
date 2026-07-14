@@ -29,6 +29,14 @@ UR_RES = 97   # Urdu
 PER_PAGE = 300
 RATE_DELAY = 0.25
 
+# Optional base URL for per-ayah Urdu translation audio. When set, everyayah-
+# style "{base}/{surah:03d}{ayah:03d}.mp3" URLs are written into the offline
+# corpus so the reader can queue Urdu tarjuma audio without a network call.
+# Leave unset (empty) to omit Urdu audio URLs from the bundle (the app also
+# constructs them from AppConstants.urduTranslationCdnUrl at runtime).
+import os
+URDU_AUDIO_BASE_URL = os.environ.get("URDU_AUDIO_BASE_URL", "").rstrip("/")
+
 
 async def fetch_surah(client: httpx.AsyncClient, surah: int) -> dict:
     params = {
@@ -120,6 +128,12 @@ def build_surah(surah: int, verses: list[dict]) -> dict:
 
         transliteration = " ".join(p for p in word_translit_parts if p) or None
 
+        audio_url_ur = None
+        if URDU_AUDIO_BASE_URL:
+            audio_url_ur = (
+                f"{URDU_AUDIO_BASE_URL}/{surah:03d}{ayah_number:03d}.mp3"
+            )
+
         ayahs.append({
             "ayah_id": surah * 1000 + ayah_number,
             "surah_number": surah,
@@ -131,6 +145,7 @@ def build_surah(surah: int, verses: list[dict]) -> dict:
             "translation_hi": None,
             "transliteration": transliteration,
             "audio_url": None,
+            "audio_url_ur": audio_url_ur,
             "page_number": page_number,
             "juz_number": juz_number,
             "is_bismillah": surah == 1 and ayah_number == 1,

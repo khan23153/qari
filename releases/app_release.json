@@ -1,12 +1,12 @@
 {
-  "version": "1.0.13",
-  "version_code": 24,
+  "version": "1.0.14",
+  "version_code": 25,
   "min_version": "1.0.0",
   "min_version_code": 1,
   "apk_url": "https://20.197.40.13/v1/app/download",
   "force_update": false,
-  "notes_en": "Recitation: word-by-word grid now shows real Arabic (mapped from ayah data, not backend keys); backend ML engine enabled (stub removed).",
-  "notes_ur": "تلاوت: لفظ بہ لفظ گرڈ اب اصل عربی دکھاتا ہے؛ ML انجن فعال (stub ہٹایا گیا)۔",
-  "notes_hi": "Recitation: word-by-word grid ab asli Arabic dikhata hai (backend keys ki jagah ayah data se); ML engine on (stub hata).",
+  "notes_en": "Quran reader: optional Urdu (Tarjuma) translation — pick English/Urdu text and queue Urdu tarjuma audio after each ayah's Arabic recitation.",
+  "notes_ur": "قرآن ریڈر: اختیاری اردو ترجمہ — انگریزی/اردو متن منتخب کریں اور ہر آیت کی عربی تلاوت کے بعد اردو ترجمہ آڈیو چلائیں۔",
+  "notes_hi": "Quran reader: optional Urdu (Tarjuma) translation — English/Urdu text choose karein aur har ayah ki Arabic recitation ke baad Urdu tarjuma audio queue karein.",
   "data_version": 1
 }

@@ -49,6 +49,8 @@ class LocalStorageService {
   static const _kGrammarColorsEnabled = 'grammar_colors_enabled';
   static const _kTajweedColorsEnabled = 'tajweed_colors_enabled';
   static const _kDensityLevel = 'density_level';
+  static const _kTranslationLanguage = 'translation_language';
+  static const _kPlayTranslationAudio = 'play_translation_audio';
   static const _kUserId = 'user_id';
   static const _kDailyGoal = 'daily_goal';
   static const _kStreakCount = 'streak_count';
@@ -189,6 +191,29 @@ class LocalStorageService {
   Future<void> setDensityLevel(int level) async {
     await ensureInitialized();
     await _prefs.setInt(_kDensityLevel, level);
+  }
+
+  // ─── Translation Language (Surah view) ──────────────────────────────────
+  /// 'en' or 'ur' — which tarjuma to show in the Quran reader.
+  Future<String> getTranslationLanguage() async {
+    await ensureInitialized();
+    return _prefs.getString(_kTranslationLanguage) ?? 'en';
+  }
+
+  Future<void> setTranslationLanguage(String code) async {
+    await ensureInitialized();
+    await _prefs.setString(_kTranslationLanguage, code);
+  }
+
+  // ─── Play Translation Audio ─────────────────────────────────────────────
+  Future<bool> getPlayTranslationAudio() async {
+    await ensureInitialized();
+    return _prefs.getBool(_kPlayTranslationAudio) ?? false;
+  }
+
+  Future<void> setPlayTranslationAudio(bool value) async {
+    await ensureInitialized();
+    await _prefs.setBool(_kPlayTranslationAudio, value);
   }
 
   // ─── User ID ─────────────────────────────────────────────────────────────

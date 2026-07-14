@@ -1263,6 +1263,8 @@ mixin _$AyahModel {
   String? get transliteration;
   @JsonKey(name: 'audio_url')
   String? get audioUrl;
+  @JsonKey(name: 'audio_url_ur')
+  String? get audioUrlUr;
   @JsonKey(name: 'page_number')
   int? get pageNumber;
   @JsonKey(name: 'juz_number')
@@ -1310,6 +1312,8 @@ mixin _$AyahModel {
                 other.transliteration == transliteration) &&
             (identical(other.audioUrl, audioUrl) ||
                 other.audioUrl == audioUrl) &&
+            (identical(other.audioUrlUr, audioUrlUr) ||
+                other.audioUrlUr == audioUrlUr) &&
             (identical(other.pageNumber, pageNumber) ||
                 other.pageNumber == pageNumber) &&
             (identical(other.juzNumber, juzNumber) ||
@@ -1336,6 +1340,7 @@ mixin _$AyahModel {
       translationHi,
       transliteration,
       audioUrl,
+      audioUrlUr,
       pageNumber,
       juzNumber,
       isBismillah,
@@ -1345,7 +1350,7 @@ mixin _$AyahModel {
 
   @override
   String toString() {
-    return 'AyahModel(ayahId: $ayahId, surahNumber: $surahNumber, ayahNumber: $ayahNumber, ayahText: $ayahText, ayahTextSimple: $ayahTextSimple, translationEn: $translationEn, translationUr: $translationUr, translationHi: $translationHi, transliteration: $transliteration, audioUrl: $audioUrl, pageNumber: $pageNumber, juzNumber: $juzNumber, isBismillah: $isBismillah, words: $words, sajda: $sajda, contextStory: $contextStory)';
+    return 'AyahModel(ayahId: $ayahId, surahNumber: $surahNumber, ayahNumber: $ayahNumber, ayahText: $ayahText, ayahTextSimple: $ayahTextSimple, translationEn: $translationEn, translationUr: $translationUr, translationHi: $translationHi, transliteration: $transliteration, audioUrl: $audioUrl, audioUrlUr: $audioUrlUr, pageNumber: $pageNumber, juzNumber: $juzNumber, isBismillah: $isBismillah, words: $words, sajda: $sajda, contextStory: $contextStory)';
   }
 }
 
@@ -1365,6 +1370,7 @@ abstract mixin class $AyahModelCopyWith<$Res> {
       @JsonKey(name: 'translation_hi') String? translationHi,
       @JsonKey(name: 'transliteration') String? transliteration,
       @JsonKey(name: 'audio_url') String? audioUrl,
+      @JsonKey(name: 'audio_url_ur') String? audioUrlUr,
       @JsonKey(name: 'page_number') int? pageNumber,
       @JsonKey(name: 'juz_number') int? juzNumber,
       @JsonKey(name: 'is_bismillah') bool isBismillah,
@@ -1395,6 +1401,7 @@ class _$AyahModelCopyWithImpl<$Res> implements $AyahModelCopyWith<$Res> {
     Object? translationHi = freezed,
     Object? transliteration = freezed,
     Object? audioUrl = freezed,
+    Object? audioUrlUr = freezed,
     Object? pageNumber = freezed,
     Object? juzNumber = freezed,
     Object? isBismillah = null,
@@ -1442,6 +1449,10 @@ class _$AyahModelCopyWithImpl<$Res> implements $AyahModelCopyWith<$Res> {
       audioUrl: freezed == audioUrl
           ? _self.audioUrl
           : audioUrl // ignore: cast_nullable_to_non_nullable
+              as String?,
+      audioUrlUr: freezed == audioUrlUr
+          ? _self.audioUrlUr
+          : audioUrlUr // ignore: cast_nullable_to_non_nullable
               as String?,
       pageNumber: freezed == pageNumber
           ? _self.pageNumber
@@ -1575,6 +1586,7 @@ extension AyahModelPatterns on AyahModel {
             @JsonKey(name: 'translation_hi') String? translationHi,
             @JsonKey(name: 'transliteration') String? transliteration,
             @JsonKey(name: 'audio_url') String? audioUrl,
+            @JsonKey(name: 'audio_url_ur') String? audioUrlUr,
             @JsonKey(name: 'page_number') int? pageNumber,
             @JsonKey(name: 'juz_number') int? juzNumber,
             @JsonKey(name: 'is_bismillah') bool isBismillah,
@@ -1598,6 +1610,7 @@ extension AyahModelPatterns on AyahModel {
             _that.translationHi,
             _that.transliteration,
             _that.audioUrl,
+            _that.audioUrlUr,
             _that.pageNumber,
             _that.juzNumber,
             _that.isBismillah,
@@ -1635,6 +1648,7 @@ extension AyahModelPatterns on AyahModel {
             @JsonKey(name: 'translation_hi') String? translationHi,
             @JsonKey(name: 'transliteration') String? transliteration,
             @JsonKey(name: 'audio_url') String? audioUrl,
+            @JsonKey(name: 'audio_url_ur') String? audioUrlUr,
             @JsonKey(name: 'page_number') int? pageNumber,
             @JsonKey(name: 'juz_number') int? juzNumber,
             @JsonKey(name: 'is_bismillah') bool isBismillah,
@@ -1657,6 +1671,7 @@ extension AyahModelPatterns on AyahModel {
             _that.translationHi,
             _that.transliteration,
             _that.audioUrl,
+            _that.audioUrlUr,
             _that.pageNumber,
             _that.juzNumber,
             _that.isBismillah,
@@ -1693,6 +1708,7 @@ extension AyahModelPatterns on AyahModel {
             @JsonKey(name: 'translation_hi') String? translationHi,
             @JsonKey(name: 'transliteration') String? transliteration,
             @JsonKey(name: 'audio_url') String? audioUrl,
+            @JsonKey(name: 'audio_url_ur') String? audioUrlUr,
             @JsonKey(name: 'page_number') int? pageNumber,
             @JsonKey(name: 'juz_number') int? juzNumber,
             @JsonKey(name: 'is_bismillah') bool isBismillah,
@@ -1715,6 +1731,7 @@ extension AyahModelPatterns on AyahModel {
             _that.translationHi,
             _that.transliteration,
             _that.audioUrl,
+            _that.audioUrlUr,
             _that.pageNumber,
             _that.juzNumber,
             _that.isBismillah,
@@ -1741,6 +1758,7 @@ class _AyahModel implements AyahModel {
       @JsonKey(name: 'translation_hi') this.translationHi,
       @JsonKey(name: 'transliteration') this.transliteration,
       @JsonKey(name: 'audio_url') this.audioUrl,
+      @JsonKey(name: 'audio_url_ur') this.audioUrlUr,
       @JsonKey(name: 'page_number') this.pageNumber,
       @JsonKey(name: 'juz_number') this.juzNumber,
       @JsonKey(name: 'is_bismillah') this.isBismillah = false,
@@ -1781,6 +1799,9 @@ class _AyahModel implements AyahModel {
   @override
   @JsonKey(name: 'audio_url')
   final String? audioUrl;
+  @override
+  @JsonKey(name: 'audio_url_ur')
+  final String? audioUrlUr;
   @override
   @JsonKey(name: 'page_number')
   final int? pageNumber;
@@ -1845,6 +1866,8 @@ class _AyahModel implements AyahModel {
                 other.transliteration == transliteration) &&
             (identical(other.audioUrl, audioUrl) ||
                 other.audioUrl == audioUrl) &&
+            (identical(other.audioUrlUr, audioUrlUr) ||
+                other.audioUrlUr == audioUrlUr) &&
             (identical(other.pageNumber, pageNumber) ||
                 other.pageNumber == pageNumber) &&
             (identical(other.juzNumber, juzNumber) ||
@@ -1871,6 +1894,7 @@ class _AyahModel implements AyahModel {
       translationHi,
       transliteration,
       audioUrl,
+      audioUrlUr,
       pageNumber,
       juzNumber,
       isBismillah,
@@ -1880,7 +1904,7 @@ class _AyahModel implements AyahModel {
 
   @override
   String toString() {
-    return 'AyahModel(ayahId: $ayahId, surahNumber: $surahNumber, ayahNumber: $ayahNumber, ayahText: $ayahText, ayahTextSimple: $ayahTextSimple, translationEn: $translationEn, translationUr: $translationUr, translationHi: $translationHi, transliteration: $transliteration, audioUrl: $audioUrl, pageNumber: $pageNumber, juzNumber: $juzNumber, isBismillah: $isBismillah, words: $words, sajda: $sajda, contextStory: $contextStory)';
+    return 'AyahModel(ayahId: $ayahId, surahNumber: $surahNumber, ayahNumber: $ayahNumber, ayahText: $ayahText, ayahTextSimple: $ayahTextSimple, translationEn: $translationEn, translationUr: $translationUr, translationHi: $translationHi, transliteration: $transliteration, audioUrl: $audioUrl, audioUrlUr: $audioUrlUr, pageNumber: $pageNumber, juzNumber: $juzNumber, isBismillah: $isBismillah, words: $words, sajda: $sajda, contextStory: $contextStory)';
   }
 }
 
@@ -1903,6 +1927,7 @@ abstract mixin class _$AyahModelCopyWith<$Res>
       @JsonKey(name: 'translation_hi') String? translationHi,
       @JsonKey(name: 'transliteration') String? transliteration,
       @JsonKey(name: 'audio_url') String? audioUrl,
+      @JsonKey(name: 'audio_url_ur') String? audioUrlUr,
       @JsonKey(name: 'page_number') int? pageNumber,
       @JsonKey(name: 'juz_number') int? juzNumber,
       @JsonKey(name: 'is_bismillah') bool isBismillah,
@@ -1933,6 +1958,7 @@ class __$AyahModelCopyWithImpl<$Res> implements _$AyahModelCopyWith<$Res> {
     Object? translationHi = freezed,
     Object? transliteration = freezed,
     Object? audioUrl = freezed,
+    Object? audioUrlUr = freezed,
     Object? pageNumber = freezed,
     Object? juzNumber = freezed,
     Object? isBismillah = null,
@@ -1980,6 +2006,10 @@ class __$AyahModelCopyWithImpl<$Res> implements _$AyahModelCopyWith<$Res> {
       audioUrl: freezed == audioUrl
           ? _self.audioUrl
           : audioUrl // ignore: cast_nullable_to_non_nullable
+              as String?,
+      audioUrlUr: freezed == audioUrlUr
+          ? _self.audioUrlUr
+          : audioUrlUr // ignore: cast_nullable_to_non_nullable
               as String?,
       pageNumber: freezed == pageNumber
           ? _self.pageNumber

@@ -60,6 +60,7 @@ abstract class AyahModel with _$AyahModel {
     @JsonKey(name: 'translation_hi') String? translationHi,
     @JsonKey(name: 'transliteration') String? transliteration,
     @JsonKey(name: 'audio_url') String? audioUrl,
+    @JsonKey(name: 'audio_url_ur') String? audioUrlUr,
     @JsonKey(name: 'page_number') int? pageNumber,
     @JsonKey(name: 'juz_number') int? juzNumber,
     @JsonKey(name: 'is_bismillah') @Default(false) bool isBismillah,

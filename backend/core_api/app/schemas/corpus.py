@@ -177,6 +177,7 @@ class AyahOut(BaseModel):
     page: Optional[int] = Field(default=None, serialization_alias="page_number")
     sajda: bool = False
     audio_url: Optional[str] = None
+    audio_url_ur: Optional[str] = Field(default=None, serialization_alias="audio_url_ur")
     words: list[WordBrief] = []
 
 

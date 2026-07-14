@@ -56,6 +56,21 @@ class AudioService {
     return '${AppConstants.audioCdnUrl}/$folder/$paddedSurah$paddedAyah.mp3';
   }
 
+  /// Builds the Urdu translation audio URL for a given surah and ayah.
+  ///
+  /// Uses the everyayah.com Urdu tarjuma CDN ([AppConstants.urduTranslationCdnUrl])
+  /// with the same 3-digit `{surah}{ayah}.mp3` layout as the Arabic recitation.
+  /// Returns null if no Urdu CDN is configured.
+  String? buildUrduTranslationUrl({
+    required int surahNumber,
+    required int ayahNumber,
+  }) {
+    if (AppConstants.urduTranslationCdnUrl.isEmpty) return null;
+    final paddedSurah = surahNumber.toString().padLeft(3, '0');
+    final paddedAyah = ayahNumber.toString().padLeft(3, '0');
+    return '${AppConstants.urduTranslationCdnUrl}/$paddedSurah$paddedAyah.mp3';
+  }
+
   /// Builds the audio URL for a full surah.
   String buildSurahUrl({
     required int surahNumber,

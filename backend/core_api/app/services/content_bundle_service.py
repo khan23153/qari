@@ -130,6 +130,7 @@ async def generate_bundle_manifest(
                 "page": a.page,
                 "sajda": a.sajda,
                 "audio_url": a.audio_url,
+                "audio_url_ur": a.audio_url_ur,
             }
             for a in ayahs
         ],

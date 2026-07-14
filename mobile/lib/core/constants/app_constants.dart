@@ -27,6 +27,12 @@ class AppConstants {
   /// reciters. The previous `audio.qari.app` host does not resolve (it produced
   /// the "0 source error" / "Audio not available" toast in the reader).
   static const String audioCdnUrl = 'https://everyayah.com/data';
+  /// CDN base for Urdu (Shamshad Ali Khan) translation audio. Mirrors the
+  /// everyayah.com per-ayah MP3 layout used for Arabic recitation; the app
+  /// constructs `{base}/{surah}{ayah}.mp3` (3-digit zero-padded) just like
+  /// [audioCdnUrl] so Urdu tarjuma audio can be queued after the Arabic.
+  static const String urduTranslationCdnUrl =
+      'https://everyayah.com/data/urdu_shamshad_ali_khan_46kbps';
   static const int apiTimeoutSeconds = 90;
   /// Longer timeout specifically for the (potentially large) recitation audio
   /// upload + long-running AI analysis poll.

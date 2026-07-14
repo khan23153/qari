@@ -44,10 +44,18 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
   double _arabicFontSize = AppConstants.arabicFontDefaultSize;
   String _selectedLanguage = 'en';
 
+  // Translation (tarjuma) preferences for this Surah view
+  String _translationLanguage = 'en';
+  bool _playTranslationAudio = false;
+
   // Audio
   final AudioService _audioService = AudioService();
   int? _playingAyahIndex;
   double _playbackSpeed = AppConstants.defaultPlaybackSpeed;
+
+  // Items per ayah in the sequential queue (1 = Arabic only, 2 = + Urdu audio).
+  // Used to map the player's sequence index back to the highlighted ayah.
+  int _audioItemsPerAyah = 1;
 
   // Whole-surah (sequential) playback state
   bool _isSurahSession = false;
@@ -87,8 +95,11 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
     _sequenceSub = _audioService.currentIndexStream.listen((currentIndex) {
       if (!mounted) return;
       setState(() {
-        _playingAyahIndex =
-            currentIndex == null ? null : _surahStartIndex + currentIndex;
+        // Each ayah occupies _audioItemsPerAyah slots in the queue
+        // (Arabic, then optionally Urdu). Map back to the ayah index.
+        _playingAyahIndex = currentIndex == null
+            ? null
+            : _surahStartIndex + (currentIndex ~/ _audioItemsPerAyah);
       });
     });
 
@@ -151,6 +162,8 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
     final density = await storage.getDensityLevel();
     final lang = await storage.getSelectedLanguage();
     final qari = await storage.getSelectedQari();
+    final translationLang = await storage.getTranslationLanguage();
+    final playTranslationAudio = await storage.getPlayTranslationAudio();
 
     if (mounted) {
       setState(() {
@@ -159,6 +172,8 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
         _densityLevel = density;
         _selectedLanguage = lang ?? 'en';
         _selectedQari = qari;
+        _translationLanguage = translationLang;
+        _playTranslationAudio = playTranslationAudio;
       });
     }
   }
@@ -235,14 +250,26 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
     _surahStartIndex = index;
     setState(() => _playingAyahIndex = index);
 
-    final urls = _ayahs
-        .sublist(index)
-        .map((a) => _audioService.buildAyahUrl(
+    // Build the playback queue. When "Play Translation Audio" is on, each ayah
+    // is followed by its Urdu tarjuma audio so the Arabic recitation and the
+    // Urdu translation play back-to-back for every ayah in the surah.
+    _audioItemsPerAyah = _playTranslationAudio ? 2 : 1;
+    final urls = <String>[];
+    for (final a in _ayahs.sublist(index)) {
+      urls.add(_audioService.buildAyahUrl(
+        surahNumber: a.surahNumber,
+        ayahNumber: a.ayahNumber,
+        reciter: _selectedQari,
+      ));
+      if (_playTranslationAudio) {
+        final urduUrl = a.audioUrlUr ??
+            _audioService.buildUrduTranslationUrl(
               surahNumber: a.surahNumber,
               ayahNumber: a.ayahNumber,
-              reciter: _selectedQari,
-            ))
-        .toList();
+            );
+        if (urduUrl != null) urls.add(urduUrl);
+      }
+    }
 
     try {
       await _audioService.playSurahSequence(urls: urls);
@@ -298,7 +325,7 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
 
   void _shareAyah(AyahModel ayah) {
     final text = '${ayah.ayahText}\n\n'
-        '${ayah.translationFor(_selectedLanguage) ?? ""}\n\n'
+        '${ayah.translationFor(_translationLanguage) ?? ""}\n\n'
         'Surah ${widget.surahName} ${ayah.reference}';
     Share.share(text);
   }
@@ -348,6 +375,7 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
                               return AyahWidget(
                                 ayah: ayah,
                                 languageCode: _selectedLanguage,
+                                translationLanguageCode: _translationLanguage,
                                 arabicFontSize: _arabicFontSize,
                                 densityLevel: _densityLevel,
                                 grammarColorsEnabled: _grammarColorsEnabled,
@@ -502,6 +530,15 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
               label: 'Voice: ${_reciterLabels[_selectedQari] ?? _selectedQari}',
               onTap: () => _showReciterSheet(theme),
             ),
+            const SizedBox(width: 8),
+            // Translation (tarjuma) language + audio toggle
+            _SettingChip(
+              icon: Icons.translate_rounded,
+              label: _translationLanguage == 'ur' ? 'Tarjuma: Urdu' : 'Tarjuma: English',
+              isActive: _translationLanguage == 'ur' || _playTranslationAudio,
+              activeColor: theme.colorScheme.primary,
+              onTap: () => _showTranslationSheet(theme),
+            ),
           ],
         ),
       ),
@@ -566,6 +603,77 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
         ),
       ),
     );
+  }
+
+  void _showTranslationSheet(ThemeData theme) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Translation (Tarjuma)', style: theme.textTheme.titleLarge),
+              const SizedBox(height: 8),
+              Text(
+                'Choose which translation text appears under each ayah, and '
+                'optionally play the Urdu tarjuma audio after the Arabic recitation.',
+                style: theme.textTheme.bodySmall,
+              ),
+              const SizedBox(height: 16),
+              Text('Translation language', style: theme.textTheme.labelLarge),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [
+                  ChoiceChip(
+                    label: const Text('English'),
+                    selected: _translationLanguage == 'en',
+                    onSelected: (_) {
+                      setSheetState(() => _translationLanguage = 'en');
+                      _persistTranslationLanguage('en');
+                    },
+                  ),
+                  ChoiceChip(
+                    label: const Text('اردو (Urdu)'),
+                    selected: _translationLanguage == 'ur',
+                    onSelected: (_) {
+                      setSheetState(() => _translationLanguage = 'ur');
+                      _persistTranslationLanguage('ur');
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Play Translation Audio'),
+                subtitle: const Text('Queue Urdu tarjuma audio after each ayah'),
+                value: _playTranslationAudio,
+                onChanged: (value) {
+                  setSheetState(() => _playTranslationAudio = value);
+                  _persistPlayTranslationAudio(value);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _persistTranslationLanguage(String code) async {
+    await Haptics.vibrate(HapticsType.selection);
+    setState(() => _translationLanguage = code);
+    await LocalStorageService().setTranslationLanguage(code);
+  }
+
+  Future<void> _persistPlayTranslationAudio(bool value) async {
+    await Haptics.vibrate(HapticsType.selection);
+    setState(() => _playTranslationAudio = value);
+    await LocalStorageService().setPlayTranslationAudio(value);
   }
 
   void _showContextStory(AyahModel ayah) {
