@@ -1,12 +1,12 @@
 {
-  "version": "1.0.17",
-  "version_code": 28,
+  "version": "1.0.18",
+  "version_code": 29,
   "min_version": "1.0.0",
   "min_version_code": 1,
   "apk_url": "https://20.197.40.13/v1/app/download",
   "force_update": false,
-  "notes_en": "Tajweed colour-coding now works in the Surah reader. Toggle 'Tajweed' in the settings bar to colour each letter by its rule (Ghunnah, Ikhfa, Qalqalah, Idgham, Iqlab, Madd, etc.); tap a word to see its tajweed rule(s) in the detail sheet. Grammar and Tajweed colours are mutually exclusive.",
-  "notes_ur": "سورہ ریڈر میں تجوید کا رنگ کوڈنگ اب کام کرتا ہے۔ سیٹنگ بار میں 'تجوید' چنیں تاکہ ہر حرف اپنے قاعدے کے رنگ سے نظر آئے (غُنّہ، اخفاء، قلقلة، ادغام، إقلاب، مد وغیرہ)؛ کسی لفظ پر ٹیپ کریں تو تفصیل میں اس کی تجوید کے قواعد دکھائی دیں گے۔ گرامر اور تجوید کے رنگ ایک ساتھ نہیں چلتے۔",
-  "notes_hi": "Tajweed colour-coding now works in the Surah reader. Toggle 'Tajweed' in the settings bar to colour each letter by its rule (Ghunnah, Ikhfa, Qalqalah, Idgham, Iqlab, Madd, etc.); tap a word to see its tajweed rule(s) in the detail sheet. Grammar and Tajweed colours are mutually exclusive.",
+  "notes_en": "New: real-time AI Recitation with live word-by-word tracking and a Tarteel-style Memorization (Hifz) Mode. Recite hands-free while the app listens continuously, reveals each word as you get it right, and flags mispronounced or skipped words instantly.",
+  "notes_ur": "نیا: حقیقی وقت میں AI تلاوت، لفظ بہ لفظ لائیو ٹریکنگ اور ترتیل طرز کا حفظ موڈ۔ ہاتھ لگائے بغیر تلاوت کریں، ایپ مسلسل سنتی رہتی ہے، ہر درست لفظ ظاہر کرتی ہے اور غلط یا چھوٹے ہوئے الفاظ فوراً نشان زد کرتی ہے۔",
+  "notes_hi": "New: real-time AI Recitation with live word-by-word tracking and a Tarteel-style Memorization (Hifz) Mode. Recite hands-free while the app listens continuously, reveals each word as you get it right, and flags mispronounced or skipped words instantly.",
   "data_version": 1
 }

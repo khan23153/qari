@@ -47,6 +47,22 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   List<String> _words = const [];
   final Map<int, LiveWordStatus> _statuses = {};
 
+  /// Index of the next word the reciter is expected to say. In Memorization
+  /// Mode the placeholder dot at this index is revealed (as Arabic text) and
+  /// the index is incremented whenever the backend confirms a correct word.
+  int _currentWordIndex = 0;
+
+  /// Word index currently flashing (temporarily tinted) after a mistake. -1
+  /// when nothing is flashing.
+  int _flashIndex = -1;
+  Timer? _flashTimer;
+
+  /// Stable keys (one per word) so we can scroll the active word to center.
+  List<GlobalKey> _wordKeys = const [];
+
+  /// Drives the auto-scroll so the active word stays centered as words wrap.
+  final ScrollController _scrollController = ScrollController();
+
   final List<double> _levels = [];
   RecitationResult? _result;
   String? _errorMessage;
@@ -75,12 +91,23 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   @override
   void dispose() {
     _elapsedTimer?.cancel();
+    _flashTimer?.cancel();
     _eventSub?.cancel();
     _ampSub?.cancel();
     _connSub?.cancel();
+    _scrollController.dispose();
     _service.dispose();
     _audioService.dispose();
     super.dispose();
+  }
+
+  /// (Re)initialises the per-word tracking state and regenerates one stable
+  /// [GlobalKey] per word so the live view can scroll the active word to center.
+  void _resetWordTracking() {
+    _flashTimer?.cancel();
+    _currentWordIndex = 0;
+    _flashIndex = -1;
+    _wordKeys = List.generate(_words.length, (_) => GlobalKey());
   }
 
   // ─── Data loading ─────────────────────────────────────────────────────────
@@ -100,6 +127,7 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
         setState(() {
           _words = match!.words.map((w) => w.text).toList();
           _statuses.clear();
+          _resetWordTracking();
         });
       }
     } catch (e) {
@@ -119,17 +147,39 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
           setState(() {
             _words = event.words.map((w) => w.text).toList();
             _statuses.clear();
+            _resetWordTracking();
           });
         }
         break;
       case RecitationStreamEventType.word:
         final idx = event.wordIndex;
         if (idx != null) {
-          if (event.status == LiveWordStatus.error ||
-              event.status == LiveWordStatus.skipped) {
-            Haptics.vibrate(HapticsType.warning);
+          final isMistake = event.status == LiveWordStatus.error ||
+              event.status == LiveWordStatus.skipped;
+          if (isMistake) Haptics.vibrate(HapticsType.warning);
+
+          if (_memorizationMode) {
+            if (event.status == LiveWordStatus.matched) {
+              // Reveal the correctly spoken word and advance the pointer.
+              setState(() {
+                _statuses[idx] = LiveWordStatus.matched;
+                _advanceCurrentIndex();
+              });
+              _scrollToCurrent();
+            } else {
+              // Incorrect word: flash the current placeholder, don't reveal it.
+              setState(() {
+                _flashIndex = _currentWordIndex;
+              });
+              _scheduleFlash();
+            }
+          } else {
+            setState(() => _statuses[idx] = event.status);
+            if (isMistake) {
+              setState(() => _flashIndex = idx);
+              _scheduleFlash();
+            }
           }
-          setState(() => _statuses[idx] = event.status);
         }
         break;
       case RecitationStreamEventType.finalResult:
@@ -167,6 +217,39 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
     }
   }
 
+  /// Advances [_currentWordIndex] past any already-revealed leading words.
+  void _advanceCurrentIndex() {
+    while (_currentWordIndex < _words.length &&
+        _statuses[_currentWordIndex]?.isResolved == true) {
+      _currentWordIndex++;
+    }
+  }
+
+  /// Briefly highlights a mistaken word (red/amber), then clears the flash.
+  void _scheduleFlash() {
+    _flashTimer?.cancel();
+    _flashTimer = Timer(const Duration(milliseconds: 900), () {
+      if (mounted) setState(() => _flashIndex = -1);
+    });
+  }
+
+  /// Smoothly scrolls the active word to the vertical center of the view as
+  /// words wrap onto new lines during continuous recitation.
+  void _scrollToCurrent() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _currentWordIndex >= _wordKeys.length) return;
+      final ctx = _wordKeys[_currentWordIndex].currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          alignment: 0.5,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
+  }
+
   // ─── Session control ──────────────────────────────────────────────────────
 
   Future<void> _start() async {
@@ -174,6 +257,7 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
     setState(() {
       _ui = LiveRecitationUiState.live;
       _statuses.clear();
+      _resetWordTracking();
       _levels.clear();
       _elapsedSeconds = 0;
       _errorMessage = null;
@@ -264,7 +348,13 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   Future<void> _cancel() async {
     _elapsedTimer?.cancel();
     await _service.cancel();
-    if (mounted) setState(() => _ui = LiveRecitationUiState.setup);
+    if (mounted) {
+      setState(() {
+        _ui = LiveRecitationUiState.setup;
+        _statuses.clear();
+        _resetWordTracking();
+      });
+    }
   }
 
   void _reset() {
@@ -272,6 +362,7 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
       _ui = LiveRecitationUiState.setup;
       _result = null;
       _statuses.clear();
+      _resetWordTracking();
       _levels.clear();
       _errorMessage = null;
       _elapsedSeconds = 0;
@@ -314,13 +405,6 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
         audioService: _audioService,
       ),
     );
-  }
-
-  int get _activeIndex {
-    for (var i = 0; i < _words.length; i++) {
-      if (!(_statuses[i]?.isResolved ?? false)) return i;
-    }
-    return -1;
   }
 
   // ─── Build ─────────────────────────────────────────────────────────────────
@@ -542,13 +626,16 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
         // Ayah with live word-by-word feedback
         Expanded(
           child: SingleChildScrollView(
+            controller: _scrollController,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             child: MemorizationAyahView(
               words: _words,
               statuses: _statuses,
               memorizationMode: _memorizationMode,
               fontSize: 34,
-              activeIndex: _activeIndex,
+              activeIndex: _memorizationMode ? _currentWordIndex : -1,
+              flashIndex: _flashIndex,
+              wordKeys: _wordKeys,
             ),
           ),
         ),

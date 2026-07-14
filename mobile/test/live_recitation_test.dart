@@ -81,7 +81,7 @@ void main() {
     expect(find.byType(Switch), findsOneWidget);
   });
 
-  testWidgets('MemorizationAyahView masks pending words and reveals matched',
+  testWidgets('MemorizationAyahView shows dots for pending, text for matched',
       (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -90,7 +90,7 @@ void main() {
             words: const ['بسم', 'الله', 'الرحمن'],
             statuses: const {
               0: LiveWordStatus.matched,
-              // index 1 & 2 pending → masked in memorization mode
+              // index 1 & 2 pending → circular placeholder dots in Hifz mode
             },
             memorizationMode: true,
           ),
@@ -99,10 +99,20 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Pending words are blurred (ImageFiltered present for the masked words).
-    expect(find.byType(ImageFiltered), findsWidgets);
-    // The matched word is rendered as visible text.
+    // Hidden (pending) words render as subtle circular placeholder dots.
+    final dots = find.byWidgetPredicate(
+      (w) =>
+          w is Container &&
+          w.decoration is BoxDecoration &&
+          (w.decoration as BoxDecoration).shape == BoxShape.circle,
+    );
+    expect(dots, findsWidgets);
+
+    // The matched word is revealed as visible Arabic text.
     expect(find.text('بسم'), findsWidgets);
+    // Pending words are NOT yet rendered as text.
+    expect(find.text('الله'), findsNothing);
+    expect(find.text('الرحمن'), findsNothing);
   });
 
   testWidgets('MemorizationAyahView (tracking mode) shows all words unmasked',
@@ -120,8 +130,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // No masking in tracking mode.
-    expect(find.byType(ImageFiltered), findsNothing);
+    // No dots in tracking mode — every word is shown as text.
+    final dots = find.byWidgetPredicate(
+      (w) =>
+          w is Container &&
+          w.decoration is BoxDecoration &&
+          (w.decoration as BoxDecoration).shape == BoxShape.circle,
+    );
+    expect(dots, findsNothing);
     expect(find.text('بسم'), findsOneWidget);
     expect(find.text('الله'), findsOneWidget);
   });

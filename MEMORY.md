@@ -739,5 +739,36 @@ still pass).
   --release` then deploy to VPS `/v1/app/download`; bump pubspec + app_release).
 - NOT yet bumped pubspec version — do that with the APK rebuild.
 
+## Session 2026-07-14 — Hifz (Memorization) Mode UI refined to Tarteel-style spec
+The prior commit (2951bc6) built the live recitation + Hifz mode but the hidden
+words used an `ImageFiltered` BLUR of the real glyphs. User asked for the exact
+Tarteel-style behaviour: a **page of subtle circular placeholder dots** (not
+blurred text), a `currentWordIndex` integer in state, auto-scroll so the active
+word stays centered, and a temporary RED flash on incorrect words. Refinements
+(working tree, not yet committed/built):
+- `memorization_ayah_view.dart`: pending words in Hifz mode now render as a
+  small `BoxShape.circle` dot using `theme.colorScheme.onSurface` @ 0.3 (the
+  primary text colour at reduced opacity — blends into the dark brown theme).
+  Revealed words use `AppTheme.arabicTextStyle(...)` with `onSurface` — the
+  EXACT same TextStyle/font-size/colour as the reader's ayah text (no green tint
+  in Hifz mode; only mistakes are coloured). Wrong = red, skipped = amber. The
+  `Wrap` keeps `TextDirection.rtl`. Each word gets a stable `GlobalKey` (via
+  `wordKeys`) for scrolling.
+- `live_recitation_page.dart`: added a `ScrollController` on the live
+  `SingleChildScrollView`; a `currentWordIndex` int + `flashIndex` int +
+  `_flashTimer`; `_onEvent` reveals sequentially (matched → reveal at
+  `currentWordIndex` + advance; error/skip in Hifz → flash the current dot,
+  do NOT reveal) and flashes red/amber for ~900ms; `_scrollToCurrent()` uses
+  `Scrollable.ensureVisible(alignment:0.5)` post-frame to center the active word
+  as words wrap. `_resetWordTracking()` rebuilds the per-word keys on ayah load /
+  `ready` / start / cancel / reset. `dispose()` disposes the controller + timer.
+  Removed the now-unused `_activeIndex` getter. Legacy `RecitationPage` untouched.
+- `test/live_recitation_test.dart`: updated to assert circular-dot placeholders
+  (was `ImageFiltered`) for pending words and that matched words show as text.
+- VERIFY: `flutter analyze` clean (info-only hints); `live_recitation_test` 7/7
+  pass; `recitation_screen_test` (legacy) still passes. APK NOT rebuilt — rebuild
+  `flutter build apk --release` + deploy to VPS + bump pubspec/app_release.
+
+
 
 
