@@ -583,6 +583,47 @@ Maududi but heard Jalandhari. ROOT CAUSE: `scripts/build_local_corpus.py`
 - NOTE: `quran_corpus.json.gz` is a bundled APK asset — must REBUILD the APK
    (`flutter build apk --release`) to ship the corrected text. No backend change.
 
+## Session 2026-07-14 — Tajweed colour-coding now works in Surah reader
+User: "in surah section I didn't see any use of tajweed, tajweed not working".
+ROOT CAUSE: two gaps.
+1. **No tajweed data** — `scripts/build_local_corpus.py` hardcoded
+   `"tajweed_spans": None` for every word, and the Quran.com request didn't
+   even ask for tajweed text. So the mobile reader (which reads the bundled
+   `quran_corpus.json(.gz)`) had nothing to colour. The ETL `tajweed_parser.py`
+   existed but its per-ayah annotations were never turned into the word-level
+   `tajweed_spans` the app expects.
+2. **Wrong rendering** — `ayah_widget.dart` `_WordTapTarget` only coloured the
+   WHOLE word by the FIRST span's rule (a known stub), not per-letter.
+FIXES:
+- `scripts/build_local_corpus.py`: added `text_uthmani_tajweed` to the API
+  `fields`; new `build_tajweed_spans()` strips the `<tajweed class=X>`
+  markup, computes each rule's char range in the plain ayah text, maps it to
+  word-relative `start`/`end` offsets, and writes per-word `tajweed_spans`
+  (`{start, end, rule, rule_name, rule_description}`). `TAJWEED_RULE_NAMES`
+  maps Quran.com classes → friendly English names. Regenerated the corpus:
+  45,874 of 83,665 words carry 61,173 tajweed spans (e.g. ghunnah on the
+  shadda'd meem of 2:3). Wrote `quran_corpus.json` (47.9 MB) + gz (4.8 MB).
+- `ayah_widget.dart` `_WordTapTarget`: now builds a `Text.rich` with one
+  `TextSpan` per character run sharing a tajweed rule, colouring exactly the
+  letters each rule covers (offsets are word-relative). `normal`/uncovered
+  letters keep the default ink colour. RTL kept.
+- `app_constants.dart` `tajweedColors`: re-keyed to the Quran.com v4 class
+  names (ghunnah, ikhafa, qalaqah, idgham_ghunnah, iqlab, madda_*, slnt,
+  ham_wasl, laam_shamsiyah, ...) with distinct colours; added
+  `tajweedRuleLabels` for friendly legend/sheet names.
+- `grammar_legend.dart`: tajweed chips now show `tajweedRuleLabels` names.
+- `word_bottom_sheet.dart`: shows each non-`normal` tajweed rule of the tapped
+  word (coloured) under a "Tajweed" row.
+USAGE: in the Surah reader settings bar, tap **Tajweed** (mutually exclusive
+with Grammar, which is on by default). Tap any word to see its rule(s).
+VERIFIED: `flutter analyze` clean (only 2 pre-existing info lints);
+`ayah_widget_visibility_test` passes. APK rebuilt (75.0 MB) and copied to
+`releases/app-release.apk`; `pubspec.yaml` + `releases/app_release.json`
+bumped to **v1.0.17+28**. NOTE: must REBUILD APK to ship the new corpus .gz
+(the tajweed data lives in the bundled asset, not the backend). Deploy the
+APK to VPS 20.197.40.13 (`/v1/app/download`) for OTA users. Not yet committed/
+pushed (no git action requested).
+
 ## Session 2026-07-14 — Rebuilt APK + committed (v1.0.16+27)
 Combined the Urdu audio+text fixes AND the earlier uncommitted v1.0.15 auth/UI
 fixes into one release.

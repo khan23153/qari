@@ -368,6 +368,30 @@ class _WordTapTarget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+
+    // Tajweed: colour each letter range by its rule span (per-character),
+    // so e.g. only the noon of ikhfa or the madd letter turns the rule colour
+    // while the rest of the word stays the default ink colour.
+    if (tajweedColorsEnabled &&
+        word.tajweedSpans != null &&
+        word.tajweedSpans!.isNotEmpty) {
+      return GestureDetector(
+        onTap: () async {
+          await Haptics.vibrate(HapticsType.selection);
+          onTap();
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+          child: Text.rich(
+            _buildTajweedTextSpan(brightness),
+            style: AppTheme.arabicTextStyle(fontSize: fontSize),
+            textDirection: TextDirection.rtl,
+          ),
+        ),
+      );
+    }
+
     Color? textColor;
     TextDecoration decoration = TextDecoration.none;
     Color? decorationColor;
@@ -375,19 +399,12 @@ class _WordTapTarget extends StatelessWidget {
 
     if (grammarColorsEnabled) {
       final config = AppTheme.getGrammarConfig(word.posGroup ?? 'default');
-      textColor = AppTheme.ensureContrast(config.color, Theme.of(context).brightness);
+      textColor = AppTheme.ensureContrast(config.color, brightness);
       decoration = AppTheme.toTextDecoration(config.underlineStyle);
       decorationColor = textColor;
       decorationStyle = config.underlineStyle == UnderlineStyle.dotted
           ? TextDecorationStyle.dotted
           : TextDecorationStyle.solid;
-    } else if (tajweedColorsEnabled && word.tajweedSpans != null) {
-      // For tajweed, we'd render per-span colors; here we use the first span's rule
-      if (word.tajweedSpans!.isNotEmpty) {
-        final tajColor =
-            AppTheme.getTajweedColor(word.tajweedSpans!.first.rule);
-        textColor = AppTheme.ensureContrast(tajColor, Theme.of(context).brightness);
-      }
     }
 
     return GestureDetector(
@@ -409,5 +426,44 @@ class _WordTapTarget extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Builds a [TextSpan] tree that paints the word with each tajweed rule's
+  /// colour on exactly the letters it covers (offsets are word-relative).
+  TextSpan _buildTajweedTextSpan(Brightness brightness) {
+    final text = word.text;
+    final spans = word.tajweedSpans!;
+
+    // Resolve the active rule for every character index of the word.
+    final ruleAt = List<String?>.filled(text.length, null);
+    for (final span in spans) {
+      final start = span.start.clamp(0, text.length);
+      final end = span.end.clamp(0, text.length);
+      for (int i = start; i < end && i < text.length; i++) {
+        ruleAt[i] = span.rule;
+      }
+    }
+
+    // Group consecutive characters sharing the same rule into one span.
+    final children = <TextSpan>[];
+    int i = 0;
+    while (i < text.length) {
+      final rule = ruleAt[i];
+      int j = i + 1;
+      while (j < text.length && ruleAt[j] == rule) {
+        j++;
+      }
+      final color = rule == null
+          ? null
+          : AppTheme.ensureContrast(AppTheme.getTajweedColor(rule), brightness);
+      children.add(
+        TextSpan(
+          text: text.substring(i, j),
+          style: AppTheme.arabicTextStyle(fontSize: fontSize, color: color),
+        ),
+      );
+      i = j;
+    }
+    return TextSpan(children: children);
   }
 }

@@ -201,7 +201,7 @@ class _TajweedChip extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            rule,
+            AppConstants.tajweedRuleLabels[rule] ?? rule,
             style: theme.textTheme.labelSmall?.copyWith(
               fontWeight: FontWeight.w600,
               color: color,

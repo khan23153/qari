@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from pathlib import Path
 
@@ -22,6 +23,90 @@ import httpx
 
 BASE = "https://api.quran.com/api/v4"
 OUT = Path(__file__).resolve().parent.parent / "mobile" / "assets" / "quran_corpus.json"
+
+# ─── Tajweed ────────────────────────────────────────────────────────────────
+# Quran.com v4 exposes `text_uthmani_tajweed`, which embeds <tajweed class=X>
+# tags around the letters each rule applies to. We strip the markup, compute
+# each rule's character range in the plain ayah text, then map those ranges to
+# word-relative offsets so the mobile reader can colour the precise letters.
+_TAJWEED_TAG_RE = re.compile(r"<tajweed class=([^>\s]+)>(.*?)</tajweed>", re.DOTALL)
+_SPAN_END_RE = re.compile(r"<span[^>]*>.*?</span>", re.DOTALL)
+_TAJWEED_MARKUP_RE = re.compile(r"</?tajweed[^>]*>")
+
+# Friendly English names for the markup classes (used for the reader legend
+# and the word detail sheet). Keys are the raw Quran.com class names.
+TAJWEED_RULE_NAMES: dict[str, str] = {
+    "ham_wasl": "Hamzat al-Wasl",
+    "laam_shamsiyah": "Lam Shamsiyyah",
+    "madda_normal": "Madd Tabii (Natural)",
+    "madda_permissible": "Madd Ja'iz (Permissible)",
+    "madda_obligatory": "Madd Wajib (Obligatory)",
+    "madda_necessary": "Madd Lazim (Necessary)",
+    "slnt": "Madd 'Arid (Silent)",
+    "ghunnah": "Ghunnah (Nasalisation)",
+    "ikhafa": "Ikhfa (Concealment)",
+    "ikhafa_shafawi": "Ikhfa Shafawi",
+    "qalaqah": "Qalqalah (Echoing)",
+    "idgham_ghunnah": "Idgham bi Ghunnah",
+    "idgham_wo_ghunnah": "Idgham bila Ghunnah",
+    "idgham_shafawi": "Idgham Shafawi",
+    "idgham_mutajanisayn": "Idgham Mutajanisayn",
+    "iqlab": "Iqlab (Conversion)",
+}
+
+
+def _strip_tajweed_markup(text: str) -> str:
+    """Remove tajweed markup + verse-end markers, leaving plain Uthmani text."""
+    text = _SPAN_END_RE.sub("", text)
+    text = _TAJWEED_MARKUP_RE.sub("", text)
+    return text
+
+
+def build_tajweed_spans(tajweed_text: str, words: list[dict]) -> list[list[dict] | None]:
+    """Return a list parallel to `words`; each item is a list of tajweed span
+    dicts (with offsets relative to that word's own `text`) or None.
+
+    Each span dict: {start, end, rule, rule_name, rule_description}.
+    """
+    if not tajweed_text:
+        return [None for _ in words]
+
+    # Word boundaries in the plain (markup-stripped) ayah text. Words are joined
+    # by single spaces, matching how Quran.com renders the ayah.
+    boundaries: list[tuple[int, int]] = []
+    pos = 0
+    for w in words:
+        form = w.get("text") or ""
+        start = pos
+        end = pos + len(form)
+        boundaries.append((start, end))
+        pos = end + 1  # +1 for the space separator
+
+    spans_per_word: list[list[dict]] = [[] for _ in words]
+
+    for match in _TAJWEED_TAG_RE.finditer(tajweed_text):
+        rule = match.group(1)
+        fragment = match.group(2)
+
+        # Character offset of this fragment in the plain ayah text.
+        tagged_before = tajweed_text[: match.start()]
+        plain_before = _strip_tajweed_markup(tagged_before)
+        a_start = len(plain_before)
+        a_end = a_start + len(fragment)
+
+        for idx, (w_start, w_end) in enumerate(boundaries):
+            ov_start = max(a_start, w_start)
+            ov_end = min(a_end, w_end)
+            if ov_start < ov_end:
+                spans_per_word[idx].append({
+                    "start": ov_start - w_start,
+                    "end": ov_end - w_start,
+                    "rule": rule,
+                    "rule_name": TAJWEED_RULE_NAMES.get(rule, rule),
+                    "rule_description": "",
+                })
+
+    return [spans or None for spans in spans_per_word]
 
 # Verified Quran.com translation resource IDs.
 EN_RES = 84   # English (Saheeh International-style)
@@ -46,7 +131,7 @@ URDU_AUDIO_BASE_URL = os.environ.get("URDU_AUDIO_BASE_URL", "").rstrip("/")
 
 async def fetch_surah(client: httpx.AsyncClient, surah: int) -> dict:
     params = {
-        "fields": "text_uthmani,text_imlaei",
+        "fields": "text_uthmani,text_imlaei,text_uthmani_tajweed",
         "translations": f"{EN_RES},{UR_RES}",
         "words": "true",
         "word_fields": "text_uthmani,transliteration,text_imlaei",
@@ -97,6 +182,13 @@ def build_surah(surah: int, verses: list[dict]) -> dict:
 
         words = []
         word_translit_parts = []
+
+        # Tajweed markup for this ayah (may be absent if the API omits it).
+        tajweed_text = (v.get("text_uthmani_tajweed") or "").strip()
+
+        # First pass: collect raw word dicts so we can compute tajweed spans
+        # (which need word boundaries across the whole ayah).
+        raw_words = []
         for w in v.get("words", []):
             word_number = w.get("position")
             text = (w.get("text_uthmani") or "").strip()
@@ -111,7 +203,7 @@ def build_surah(surah: int, verses: list[dict]) -> dict:
             word_translation_en = None
             if isinstance(wt, dict):
                 word_translation_en = (wt.get("text") or "").strip() or None
-            words.append({
+            raw_words.append({
                 "word_id": surah * 1_000_000 + ayah_number * 1000 + (word_number or 0),
                 "surah_number": surah,
                 "ayah_number": ayah_number,
@@ -131,6 +223,13 @@ def build_surah(surah: int, verses: list[dict]) -> dict:
                 "audio_url": None,
                 "tajweed_spans": None,
             })
+
+        # Second pass: attach per-word tajweed spans (word-relative offsets).
+        tajweed_spans = build_tajweed_spans(tajweed_text, raw_words)
+        words = []
+        for raw, spans in zip(raw_words, tajweed_spans):
+            raw["tajweed_spans"] = spans
+            words.append(raw)
 
         transliteration = " ".join(p for p in word_translit_parts if p) or None
 

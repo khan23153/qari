@@ -176,17 +176,49 @@ class AppConstants {
   };
 
   // ─── Tajweed Colors ─────────────────────────────────────────────────────
+  // Keyed by the Quran.com v4 tajweed markup class names (the `rule` field of
+  // each tajweed span produced by scripts/build_local_corpus.py), so the
+  // reader can colour each letter by its exact rule.
   static const Map<String, Color> tajweedColors = {
-    'idgham': Color(0xFF7B1FA2),
+    'ham_wasl': Color(0xFF607D8B),
+    'laam_shamsiyah': Color(0xFF00897B),
+    'madda_normal': Color(0xFF1B5E20),
+    'madda_permissible': Color(0xFF2E7D32),
+    'madda_obligatory': Color(0xFF1B5E20),
+    'madda_necessary': Color(0xFF0B3D0B),
+    'slnt': Color(0xFF558B2F),
     'ghunnah': Color(0xFF00838F),
+    'ikhafa': Color(0xFFAD1457),
+    'ikhafa_shafawi': Color(0xFFC2185B),
+    'qalaqah': Color(0xFF37474F),
+    'idgham_ghunnah': Color(0xFF7B1FA2),
+    'idgham_wo_ghunnah': Color(0xFF8E24AA),
+    'idgham_shafawi': Color(0xFF6A1B9A),
+    'idgham_mutajanisayn': Color(0xFF9C27B0),
     'iqlab': Color(0xFFEF6C00),
-    'ikhfa': Color(0xFFAD1457),
-    'qalqalah': Color(0xFF37474F),
-    'madd': Color(0xFF1B5E20),
-    'madd_wajib': Color(0xFF1B5E20),
-    'madd_jaiz': Color(0xFF2E7D32),
-    'silent': Color(0xFF9E9E9E),
     'normal': Color(0xFF212121),
+  };
+
+  /// Friendly English labels for the tajweed rule classes, used in the legend
+  /// and the word detail sheet. Falls back to the raw class name.
+  static const Map<String, String> tajweedRuleLabels = {
+    'ham_wasl': 'Hamzat al-Wasl',
+    'laam_shamsiyah': 'Lam Shamsiyyah',
+    'madda_normal': 'Madd (Natural)',
+    'madda_permissible': "Madd Ja'iz",
+    'madda_obligatory': 'Madd Wajib',
+    'madda_necessary': 'Madd Lazim',
+    'slnt': 'Madd (Silent)',
+    'ghunnah': 'Ghunnah',
+    'ikhafa': 'Ikhfa',
+    'ikhafa_shafawi': 'Ikhfa Shafawi',
+    'qalaqah': 'Qalqalah',
+    'idgham_ghunnah': 'Idgham + Ghunnah',
+    'idgham_wo_ghunnah': 'Idgham',
+    'idgham_shafawi': 'Idgham Shafawi',
+    'idgham_mutajanisayn': 'Idgham',
+    'iqlab': 'Iqlab',
+    'normal': 'Normal',
   };
 
   // ─── Audio ──────────────────────────────────────────────────────────────

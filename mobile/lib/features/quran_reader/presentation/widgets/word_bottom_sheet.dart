@@ -175,6 +175,26 @@ class _WordBottomSheetState extends State<WordBottomSheet> {
             valueColor: config.color,
           ),
 
+          // ─── Tajweed Rules ──────────────────────────────────────────
+          if (word.tajweedSpans != null && word.tajweedSpans!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            ...word.tajweedSpans!
+                .where((s) => s.rule != 'normal')
+                .map((s) {
+              final color = AppTheme.ensureContrast(
+                AppTheme.getTajweedColor(s.rule),
+                theme.brightness,
+              );
+              return _DetailRow(
+                icon: Icons.colorize_rounded,
+                label: 'Tajweed',
+                value: AppConstants.tajweedRuleLabels[s.rule] ?? s.rule,
+                theme: theme,
+                valueColor: color,
+              );
+            }),
+          ],
+
           // ─── Morphology ────────────────────────────────────────────
           if (word.morphology != null) ...[
             const SizedBox(height: 12),

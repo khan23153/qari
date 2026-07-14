@@ -1,12 +1,12 @@
 {
-  "version": "1.0.16",
-  "version_code": 27,
+  "version": "1.0.17",
+  "version_code": 28,
   "min_version": "1.0.0",
   "min_version_code": 1,
   "apk_url": "https://20.197.40.13/v1/app/download",
   "force_update": false,
-  "notes_en": "Urdu Tarjuma audio now plays (fixed everyayah /translations/ CDN path). Urdu translation text switched to Fateh Muhammad Jalandhari so the read text matches the Shamshad Ali Khan audio. Arabic recitation always plays even if translation audio is unavailable.",
-  "notes_ur": "اب اردو ترجمہ آڈیو چلتی ہے (everyayah /translations/ سی ڈی این پاتھ درست کی گئی)۔ اردو ترجمہ کا متن فتح محمد جالندھری والا کر دیا گیا ہے تاکہ پڑھا جانے والا متن شمشاد علی خان کی آڈیو سے میل کھائے۔ اردو آڈیو دستیاب نہ ہو تو بھی عربی تلاوت چلتی رہتی ہے۔",
-  "notes_hi": "Urdu Tarjuma audio now plays (fixed everyayah /translations/ CDN path). Urdu translation text switched to Fateh Muhammad Jalandhari so the read text matches the Shamshad Ali Khan audio. Arabic recitation always plays even if translation audio is unavailable.",
+  "notes_en": "Tajweed colour-coding now works in the Surah reader. Toggle 'Tajweed' in the settings bar to colour each letter by its rule (Ghunnah, Ikhfa, Qalqalah, Idgham, Iqlab, Madd, etc.); tap a word to see its tajweed rule(s) in the detail sheet. Grammar and Tajweed colours are mutually exclusive.",
+  "notes_ur": "سورہ ریڈر میں تجوید کا رنگ کوڈنگ اب کام کرتا ہے۔ سیٹنگ بار میں 'تجوید' چنیں تاکہ ہر حرف اپنے قاعدے کے رنگ سے نظر آئے (غُنّہ، اخفاء، قلقلة، ادغام، إقلاب، مد وغیرہ)؛ کسی لفظ پر ٹیپ کریں تو تفصیل میں اس کی تجوید کے قواعد دکھائی دیں گے۔ گرامر اور تجوید کے رنگ ایک ساتھ نہیں چلتے۔",
+  "notes_hi": "Tajweed colour-coding now works in the Surah reader. Toggle 'Tajweed' in the settings bar to colour each letter by its rule (Ghunnah, Ikhfa, Qalqalah, Idgham, Iqlab, Madd, etc.); tap a word to see its tajweed rule(s) in the detail sheet. Grammar and Tajweed colours are mutually exclusive.",
   "data_version": 1
 }
