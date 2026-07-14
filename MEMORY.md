@@ -766,8 +766,18 @@ word stays centered, and a temporary RED flash on incorrect words. Refinements
 - `test/live_recitation_test.dart`: updated to assert circular-dot placeholders
   (was `ImageFiltered`) for pending words and that matched words show as text.
 - VERIFY: `flutter analyze` clean (info-only hints); `live_recitation_test` 7/7
-  pass; `recitation_screen_test` (legacy) still passes. APK NOT rebuilt — rebuild
-  `flutter build apk --release` + deploy to VPS + bump pubspec/app_release.
+   pass; `recitation_screen_test` (legacy) still passes.
+- COMMITTED + PUSHED (commit 44f8a75) with the user's GitHub PAT (inline, not
+   stored). APK rebuilt cleanly (75.5MB) via `flutter build apk --release` with
+   the present Android SDK (`ANDROID_HOME=/home/Innocent/Android`), copied to
+   `releases/app-release.apk`; `pubspec.yaml` + `releases/app_release.json`
+   already bumped to **v1.0.18+29** (Hifz release notes). Large-APK (>50MB)
+   warning as before — Git LFS still planned.
+- REMAINING (blocked this session): deploy `releases/app-release.apk` +
+   `app_release.json` to the VPS host path `/app/releases` (OTA
+   `/v1/app/download`). SSH to 20.197.40.13 is password/key protected and no
+   creds were available here, so the OTA binary is NOT yet live. Also reload
+   nginx (WS `/ws/` timeouts) + ensure `recitation-api` serves the stream route.
 
 
 
