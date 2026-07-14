@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../services/api_client.dart';
@@ -20,6 +21,27 @@ class RecitationRepository {
     required String idempotencyKey,
     void Function(int sent, int total)? onProgress,
   }) async {
+    // ── Payload validation: never send a blank/empty file to the ML backend.
+    // A 0-byte upload is the classic cause of "0 words correct / Duration 0s"
+    // (the server has nothing to transcribe). Surface it as a clear error
+    // instead of silently uploading silence.
+    final file = File(filePath);
+    if (!file.existsSync()) {
+      throw const ApiException(
+        message: 'Audio recording failed',
+        errorCode: 'EMPTY_AUDIO',
+      );
+    }
+    final size = await file.length();
+    if (size == 0) {
+      throw const ApiException(
+        message: 'Audio recording failed',
+        errorCode: 'EMPTY_AUDIO',
+      );
+    }
+    debugPrint('RecitationRepository: uploading $size bytes for '
+        '$surahNumber:$ayahNumber');
+
     try {
       final response = await _client.uploadFile(
         '/recitations/upload',
@@ -35,6 +57,9 @@ class RecitationRepository {
           seconds: AppConstants.recitationApiTimeoutSeconds,
         ),
       );
+      // Log the server's exact JSON response so backend/ML issues are visible.
+      debugPrint('RecitationRepository upload response '
+          '(${response.statusCode}): ${response.data}');
       final data = response.data as Map<String, dynamic>;
       return data['session_id'] as String;
     } on DioException catch (e) {

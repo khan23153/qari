@@ -15,14 +15,20 @@ enum LiveWordStatus {
   /// Jumped over — reveal + flag (a later word matched instead).
   skipped;
 
+  /// Parses a backend ``status`` string. Understands both the blueprint wire
+  /// contract (``match`` / ``error_skipped``) and the legacy internal values
+  /// (``matched`` / ``error`` / ``skipped``) for backwards compatibility.
   static LiveWordStatus fromString(String? s) {
     switch (s) {
+      case 'match':
       case 'matched':
         return LiveWordStatus.matched;
       case 'error':
-        return LiveWordStatus.error;
+        // ``error_skipped`` folds skip + mispronunciation into one bucket on
+        // the wire (blueprint spec) — mapped to [error] for the UI.
+      case 'error_skipped':
       case 'skipped':
-        return LiveWordStatus.skipped;
+        return LiveWordStatus.error;
       default:
         return LiveWordStatus.pending;
     }
@@ -83,10 +89,17 @@ class RecitationStreamEvent {
               .toList(),
         );
       case 'word':
+        // Blueprint wire contract uses a 1-based ``word_id``; the legacy
+        // protocol used a 0-based ``word_index``. Accept either.
+        final rawIndex = json['word_index'] as num?;
+        final rawId = json['word_id'] as num?;
+        final wordIndex = rawIndex != null
+            ? rawIndex.toInt()
+            : (rawId != null ? rawId.toInt() - 1 : null);
         return RecitationStreamEvent(
           type: RecitationStreamEventType.word,
           sessionId: json['session_id'] as String?,
-          wordIndex: (json['word_index'] as num?)?.toInt(),
+          wordIndex: wordIndex,
           status: LiveWordStatus.fromString(json['status'] as String?),
           expected: json['expected'] as String?,
           spoken: json['spoken'] as String?,
@@ -113,15 +126,24 @@ class RecitationStreamEvent {
   }
 }
 
-/// A reference word sent in the `ready` payload (index + display Arabic text).
+/// A reference word sent in the `ready` payload. Mirrors the blueprint
+/// word-level model: ``word_id`` (1-based) / ``sequence_index``, the
+/// diacritic ``text_with_tashkeel`` (UI) and ``clean_text`` (ASR key), plus an
+/// initial ``state``. Tolerant of the legacy ``index`` / ``text`` keys.
 class StreamWord {
   final int index;
   final String text;
 
   const StreamWord({required this.index, required this.text});
 
-  factory StreamWord.fromJson(Map<String, dynamic> json) => StreamWord(
-        index: (json['index'] as num).toInt(),
-        text: json['text'] as String? ?? '',
-      );
+  factory StreamWord.fromJson(Map<String, dynamic> json) {
+    final rawId = json['word_id'] as num?;
+    final rawIndex = json['index'] as num?;
+    final index = rawId != null
+        ? rawId.toInt() - 1
+        : (rawIndex != null ? rawIndex.toInt() : 0);
+    final text =
+        (json['text_with_tashkeel'] as String?) ?? (json['text'] as String? ?? '');
+    return StreamWord(index: index, text: text);
+  }
 }

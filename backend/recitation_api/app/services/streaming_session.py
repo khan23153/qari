@@ -64,8 +64,33 @@ def _normalize(text: str) -> str:
         return re.sub(r"[\u064B-\u065F\u0670]", "", text or "")
 
 
-def resolve_reference_words(surah: int, ayah: int) -> tuple[list[str], list[str], str]:
-    """Return ``(display_words, normalized_words, reference_audio_url)``.
+def _pack_entries(display: list[str], norm: list[str]) -> list[dict]:
+    """Zip display + normalized words into the blueprint word-level model.
+
+    Keeps all three lists aligned (a reference word with no clean_text is
+    dropped from all three) so the matcher, the UI, and the ``ready`` payload
+    always agree on indices.
+    """
+    entries: list[dict] = []
+    kept_display: list[str] = []
+    kept_norm: list[str] = []
+    for d, n in zip(display, norm):
+        if not n:
+            continue
+        entries.append({"text_with_tashkeel": d, "clean_text": n})
+        kept_display.append(d)
+        kept_norm.append(n)
+    return entries, kept_display, kept_norm
+
+
+def resolve_reference_words(surah: int, ayah: int) -> tuple[list[str], list[str], str, list[dict]]:
+    """Resolve the expected (reference) word list for a single ayah.
+
+    Returns ``(display_words, normalized_words, reference_audio_url,
+    word_entries)`` where ``word_entries`` is a list (aligned 1:1 with the
+    returned ``display_words``) of the blueprint word-level model::
+
+        {"text_with_tashkeel": <UI Arabic>, "clean_text": <ASR key>}
 
     Tries the ML file-backed reference store first, then core_api. Returns
     empty lists when nothing is available (the client then falls back to its
@@ -78,10 +103,10 @@ def resolve_reference_words(surah: int, ayah: int) -> tuple[list[str], list[str]
         store = ReferenceStore(settings.reference_data_dir or None)
         if store.has(surah, ayah):
             ref = store.get(surah, ayah)
-            display = [w.word for w in ref.words]
+            display = [w.text_with_tashkeel or w.word for w in ref.words]
             norm = [_normalize(w.word) for w in ref.words]
-            norm = [w for w in norm if w]
-            return display, norm, ref.reference_audio_url or ""
+            entries, display, norm = _pack_entries(display, norm)
+            return display, norm, ref.reference_audio_url or "", entries
     except Exception as exc:  # pragma: no cover - ml deps optional
         logger.debug("stream.refstore_miss", surah=surah, ayah=ayah, error=str(exc))
 
@@ -103,12 +128,50 @@ def resolve_reference_words(surah: int, ayah: int) -> tuple[list[str], list[str]
             words = ayahs[0].get("words", [])
             display = [w.get("text_arabic", "") for w in words]
             norm = [_normalize(w.get("text_arabic", "")) for w in words]
-            norm = [w for w in norm if w]
-            return display, norm, ayahs[0].get("audio_url", "") or ""
+            entries, display, norm = _pack_entries(display, norm)
+            return display, norm, ayahs[0].get("audio_url", "") or "", entries
     except Exception as exc:
         logger.warning("stream.ref_fetch_failed", surah=surah, ayah=ayah, error=str(exc))
 
-    return [], [], ""
+    return [], [], "", []
+
+
+def resolve_reference_words_sequence(
+    ayah_refs: list[tuple[int, int]],
+) -> tuple[list[str], list[str], str, list[dict], list[dict]]:
+    """Resolve and **concatenate** the reference word lists for a sequence of
+    ``(surah, ayah)`` references — used for continuous full-page / full-surah
+    recitation.
+
+    Returns ``(display_words, normalized_words, first_audio_url,
+    word_entries, ayah_boundaries)`` where ``ayah_boundaries`` is a list
+    (one entry per ayah) of ``{"surah", "ayah", "word_index_end",
+    "word_count"}`` describing where each ayah ends in the global
+    (concatenated) word index. This lets the client render end-of-ayah markers
+    without re-deriving the split itself.
+    """
+    display: list[str] = []
+    norm: list[str] = []
+    audio_url = ""
+    entries: list[dict] = []
+    boundaries: list[dict] = []
+
+    for surah, ayah in ayah_refs:
+        d, n, url, e = resolve_reference_words(surah, ayah)
+        if not audio_url and url:
+            audio_url = url
+        # Record the boundary *before* extending so word_index_end is correct.
+        boundaries.append({
+            "surah": surah,
+            "ayah": ayah,
+            "word_index_end": len(display) + len(d) - 1,
+            "word_count": len(d),
+        })
+        display.extend(d)
+        norm.extend(n)
+        entries.extend(e)
+
+    return display, norm, audio_url, entries, boundaries
 
 
 # ---------------------------------------------------------------------------
@@ -163,23 +226,36 @@ class StreamingRecitationSession:
     def __init__(
         self,
         *,
-        surah: int,
-        ayah_from: int,
-        ayah_to: int,
+        surah: int = 1,
+        ayah_from: int = 1,
+        ayah_to: int = 1,
+        ayah_refs: Optional[list[tuple[int, int]]] = None,
         mode: str = "tracking",
         sample_rate: int = 16000,
         transcriber: Optional[Transcriber] = None,
     ) -> None:
         self.session_id = str(uuid.uuid4())
-        self.surah = surah
-        self.ayah_from = ayah_from
-        self.ayah_to = ayah_to
+
+        # `ayah_refs` is the authoritative, ordered list of (surah, ayah) the
+        # user will recite continuously (a full Mushaf page or a whole surah).
+        # When omitted we fall back to a single-surah range for backwards
+        # compatibility with older clients.
+        if ayah_refs:
+            self.ayah_refs: list[tuple[int, int]] = list(ayah_refs)
+        else:
+            self.ayah_refs = [(surah, a) for a in range(ayah_from, ayah_to + 1)]
+
+        self.surah = self.ayah_refs[0][0] if self.ayah_refs else surah
+        self.ayah_from = self.ayah_refs[0][1] if self.ayah_refs else ayah_from
+        self.ayah_to = self.ayah_refs[-1][1] if self.ayah_refs else ayah_to
         self.mode = mode
         self.sample_rate = sample_rate
 
         self.display_words: list[str] = []
         self.reference_words: list[str] = []
         self.reference_audio_url: str = ""
+        self.word_entries: list[dict] = []
+        self.ayah_boundaries: list[dict] = []
 
         self._pcm = bytearray()
         self._samples_at_last_transcribe = 0
@@ -192,13 +268,17 @@ class StreamingRecitationSession:
 
     # ------------------------------------------------------------------
     def load_reference(self) -> None:
-        """Resolve the expected word list and pick a transcriber."""
+        """Resolve the expected (concatenated) word list and pick a transcriber."""
         from ml.alignment.streaming_matcher import StreamingMatcher
 
-        display, norm, ref_url = resolve_reference_words(self.surah, self.ayah_from)
+        display, norm, ref_url, entries, boundaries = resolve_reference_words_sequence(
+            self.ayah_refs
+        )
         self.display_words = display
         self.reference_words = norm
         self.reference_audio_url = ref_url
+        self.word_entries = entries
+        self.ayah_boundaries = boundaries
         self._matcher = StreamingMatcher(norm)
 
         if self._explicit_transcriber is not None:
@@ -210,6 +290,19 @@ class StreamingRecitationSession:
 
     # ------------------------------------------------------------------
     def ready_payload(self) -> dict:
+        # Word-level model served to the client (per the Hifz data contract):
+        #   word_id, sequence_index, text_with_tashkeel, clean_text, state
+        # The first word is "active" (the next word the user must recite); the
+        # rest start "hidden" until revealed by the live engine.
+        words = []
+        for i, entry in enumerate(self.word_entries):
+            words.append({
+                "word_id": i + 1,
+                "sequence_index": i + 1,
+                "text_with_tashkeel": entry.get("text_with_tashkeel", self.display_words[i]),
+                "clean_text": entry.get("clean_text", self.display_words[i]),
+                "state": "active" if i == 0 else "hidden",
+            })
         return {
             "type": "ready",
             "session_id": self.session_id,
@@ -217,11 +310,9 @@ class StreamingRecitationSession:
             "ayah_from": self.ayah_from,
             "ayah_to": self.ayah_to,
             "mode": self.mode,
-            "words": [
-                {"index": i, "text": w}
-                for i, w in enumerate(self.display_words)
-            ],
+            "words": words,
             "word_count": len(self.reference_words),
+            "ayah_boundaries": self.ayah_boundaries,
         }
 
     # ------------------------------------------------------------------
@@ -276,11 +367,20 @@ class StreamingRecitationSession:
             if self._last_status.get(st.index) == st.status.value:
                 continue
             self._last_status[st.index] = st.status.value
+            # Blueprint contract: the client receives a stable ``status`` of
+            # ``match`` (correctly revealed) or ``error_skipped`` (skipped /
+            # mispronounced), keyed by the 1-based ``word_id``. We keep the
+            # richer fields (word_index, expected, spoken, confidence) for
+            # debugging and richer UI affordances — they are additive.
+            blueprint_status = (
+                "match" if st.status.value == "matched" else "error_skipped"
+            )
             events.append({
                 "type": "word",
                 "session_id": self.session_id,
+                "status": blueprint_status,
+                "word_id": st.index + 1,
                 "word_index": st.index,
-                "status": st.status.value,
                 "expected": st.expected,
                 "spoken": st.spoken,
                 "confidence": round(st.confidence, 3),

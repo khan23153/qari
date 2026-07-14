@@ -8,14 +8,18 @@ from app.main import app
 
 
 REFERENCE = ["بسم", "الله", "الرحمن", "الرحيم"]
+REFERENCE_ENTRIES = [
+    {"text_with_tashkeel": w, "clean_text": w} for w in REFERENCE
+]
 
 
 @pytest.fixture
 def stub_stream(monkeypatch):
     """Force stub transcriber + a fixed reference so the WS is model-free."""
     monkeypatch.setattr(
-        ss, "resolve_reference_words",
-        lambda surah, ayah: (REFERENCE, REFERENCE, "https://example/ref.mp3"),
+        ss,
+        "resolve_reference_words_sequence",
+        lambda ayah_refs: (REFERENCE, REFERENCE, "https://example/ref.mp3", REFERENCE_ENTRIES, []),
     )
     monkeypatch.setattr(ss.settings, "ml_use_stub", True, raising=False)
     # Don't touch Redis in tests.
@@ -37,7 +41,15 @@ def test_stream_handshake_sends_ready(stub_stream):
         ready = ws.receive_json()
         assert ready["type"] == "ready"
         assert ready["word_count"] == 4
-        assert [w["text"] for w in ready["words"]] == REFERENCE
+        # Blueprint word-level model: word_id, sequence_index, text_with_tashkeel,
+        # clean_text, state.
+        words = ready["words"]
+        assert len(words) == 4
+        assert [w["text_with_tashkeel"] for w in words] == REFERENCE
+        assert words[0]["word_id"] == 1
+        assert words[0]["sequence_index"] == 1
+        assert words[0]["state"] == "active"
+        assert words[1]["state"] == "hidden"
         ws.send_json({"type": "stop"})
         # Drain until the final message.
         final = _recv_until(ws, "final")
@@ -45,7 +57,7 @@ def test_stream_handshake_sends_ready(stub_stream):
 
 
 def test_stream_reveals_words_live(stub_stream):
-    """Streaming audio produces word 'matched' events as words are revealed."""
+    """Streaming audio produces word 'match' events as words are revealed."""
     client = TestClient(app)
     with client.websocket_connect("/ws/recitation/stream") as ws:
         ws.send_json({"type": "start", "surah_number": 1, "ayah_number": 1})
@@ -60,7 +72,9 @@ def test_stream_reveals_words_live(stub_stream):
         for _ in range(4):
             evt = ws.receive_json()
             assert evt["type"] == "word"
-            assert evt["status"] == "matched"
+            # Blueprint wire status is "match" (not "matched").
+            assert evt["status"] == "match"
+            assert "word_id" in evt and evt["word_id"] == evt["word_index"] + 1
             matched.append(evt["word_index"])
         assert matched == [0, 1, 2, 3]
 
@@ -94,6 +108,24 @@ def test_stream_requires_start_first(stub_stream):
         ws.send_json({"type": "audio"})  # wrong first message
         msg = ws.receive_json()
         assert msg["type"] == "error"
+
+
+def test_stream_multi_ayah_sequence(stub_stream):
+    """An explicit `ayahs` list is concatenated into one continuous word list."""
+    client = TestClient(app)
+    with client.websocket_connect("/ws/recitation/stream") as ws:
+        ws.send_json({
+            "type": "start",
+            "ayahs": [[1, 1], [1, 2]],
+            "mode": "memorization",
+        })
+        ready = ws.receive_json()
+        assert ready["type"] == "ready"
+        # The stub ignores the refs and returns the 4-word REFERENCE list.
+        assert ready["word_count"] == 4
+        assert [w["text_with_tashkeel"] for w in ready["words"]] == REFERENCE
+        ws.send_json({"type": "stop"})
+        _recv_until(ws, "final")
 
 
 def _recv_until(ws, msg_type, limit=50):

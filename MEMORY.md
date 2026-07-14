@@ -777,7 +777,53 @@ word stays centered, and a temporary RED flash on incorrect words. Refinements
    `app_release.json` to the VPS host path `/app/releases` (OTA
    `/v1/app/download`). SSH to 20.197.40.13 is password/key protected and no
    creds were available here, so the OTA binary is NOT yet live. Also reload
-   nginx (WS `/ws/` timeouts) + ensure `recitation-api` serves the stream route.
+    nginx (WS `/ws/` timeouts) + ensure `recitation-api` serves the stream route.
+
+## Session 2026-07-14 — Live Hifz streaming: two production fixes
+Found + fixed two genuine defects in the existing Hifz/live-tracking feature
+(code was already built in commits 2951bc6/44f8a75; these were latent bugs):
+
+1. **Streaming alignment misalignment (real correctness bug)** —
+   `ml/alignment/streaming_matcher.py` `StreamingMatcher.evaluate` reset the ASR
+   hypothesis cursor `j=0` on EVERY pass while the reference cursor `i` had
+   already advanced (`self._cursor`). Because the ASR hypothesis is *cumulative*
+   (re-transcribed from the whole audio buffer each pass), re-matching the
+   leading hypothesis words against the advanced reference cursor flagged
+   correctly-recited words as `error` — i.e. the live Hifz view would mark real
+   recitation RED. FIX: added `self._hyp_cursor` (hypothesis words consumed by
+   the resolved reference prefix) and resume `j` there each pass. The
+   order-preserving greedy alignment guarantees the resolved prefix maps 1:1 to
+   the consumed hypothesis prefix, so no spurious ERRORs. `evaluate`/`finalize`
+   verdicts now correct. `ml/tests/test_streaming_matcher.py::
+   test_sliding_window_limits_single_pass` now passes.
+2. **Build-breaking compile error** — `mobile/.../widgets/mic_visualizer.dart`
+   used `StreamSubscription` without `import 'dart:async';` → `flutter analyze`
+   ERROR (would break the APK build). Added the import. Removed an unused
+   `sentBytes` var in `streaming_recitation_service.dart`. `flutter analyze` on
+   both files: **No issues found**.
+
+VERIFY: `pytest ml/tests backend/recitation_api/tests` → only the 2 pre-existing
+Redis-less `test_api.py` failures remain (event loop closed; unrelated). The
+feature now satisfies the blueprint end-to-end (normalization, sliding window of
+15, `match`/`error_skipped` wire events, RTL Wrap, 0.3-opacity placeholder dots,
+granular per-word rebuild, auto-scroll, 300ms PCM16 streaming).
+
+### APK build + release (v1.0.19+30)
+While verifying the build, two MORE working-tree compile errors surfaced (the
+Hifz code had never been rebuilt since the refinements):
+- `recitation_repository.dart` used `File(...)` without `import 'dart:io';` →
+  added it.
+- `recording_service.dart` called `_recorder.isSupported()` but `record` v85's
+  `AudioRecorder` has no `isSupported()` method → dropped the guard and call
+  `stop()` directly inside the existing try/catch.
+After fixes `flutter analyze lib` → 0 errors (only info/warning lints). Rebuilt
+APK with present Android SDK (`ANDROID_HOME=/home/Innocent/Android`) →
+`mobile/build/app/outputs/flutter-apk/app-release.apk` (75.6MB) copied to
+`releases/app-release.apk`; `pubspec.yaml` + `releases/app_release.json` bumped
+to **v1.0.19+30**. Committed (amended into 48d9dc1). REMAINING: push to
+origin/main (needs GitHub PAT — none in this env) + deploy APK to VPS host
+`/app/releases` (OTA `/v1/app/download`) + reload nginx (WS timeouts) + ensure
+`recitation-api` serves `/ws/recitation/stream`.
 
 
 

@@ -19,17 +19,40 @@ import '../models/word_model.dart';
 class LocalCorpusRepository {
   static const _assetPath = 'assets/quran_corpus.json.gz';
 
-  final Map<int, List<AyahModel>> _cache = {};
+  Map<int, List<AyahModel>>? _allBySurah;
 
   /// Returns all ayahs (with word-by-word data) for a surah from the bundled
   /// asset. Returns an empty list if the surah is not present.
   Future<List<AyahModel>> getAyahs(int surahNumber) async {
-    if (_cache.containsKey(surahNumber)) return _cache[surahNumber]!;
+    final all = await _loadAll();
+    return all[surahNumber] ?? const <AyahModel>[];
+  }
 
-    final all = await _loadBundle();
-    final result = all[surahNumber] ?? const <AyahModel>[];
-    _cache[surahNumber] = result;
+  /// Returns every ayah whose `page_number` matches [page] (a standard 15-line
+  /// Madani Mushaf page), ordered by surah then ayah. Used for continuous
+  /// full-page (Mushaf) recitation. Returns an empty list if the page has no
+  /// ayahs in the bundle.
+  Future<List<AyahModel>> getAyahsByPage(int page) async {
+    final all = await _loadAll();
+    final result = <AyahModel>[];
+    for (final ayahs in all.values) {
+      for (final a in ayahs) {
+        if (a.pageNumber == page) result.add(a);
+      }
+    }
+    result.sort((x, y) {
+      if (x.surahNumber != y.surahNumber) {
+        return x.surahNumber.compareTo(y.surahNumber);
+      }
+      return x.ayahNumber.compareTo(y.ayahNumber);
+    });
     return result;
+  }
+
+  Future<Map<int, List<AyahModel>>> _loadAll() async {
+    if (_allBySurah != null) return _allBySurah!;
+    _allBySurah = await _loadBundle();
+    return _allBySurah!;
   }
 
   Future<Map<int, List<AyahModel>>> _loadBundle() async {

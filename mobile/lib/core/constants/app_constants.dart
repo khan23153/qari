@@ -101,6 +101,9 @@ class AppConstants {
   // ─── Quran ──────────────────────────────────────────────────────────────
   static const int totalSurahs = 114;
   static const int totalAyahs = 6236;
+  /// Standard 15-line Madani Mushaf has 604 pages. Used by the continuous
+  /// full-page (Mushaf) recitation scope.
+  static const int totalQuranPages = 604;
   static const int bismillahAyahNumber = 0;
   static const String bismillahText = 'بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ';
 

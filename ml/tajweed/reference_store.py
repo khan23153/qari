@@ -38,11 +38,14 @@ class TajweedAnnotation:
 @dataclass
 class WordReference:
     """Reference data for a single word in an ayah."""
-    word: str                           # Normalized Arabic word
+    word: str                           # Normalized Arabic word (clean_text / ASR key)
     phonemes: list[str] = field(default_factory=list)  # Expected phoneme sequence
     tajweed_checks: list[TajweedAnnotation] = field(default_factory=list)
     ref_start_ms: int = 0              # Reference qari start time
     ref_end_ms: int = 0                # Reference qari end time
+    # Arabic with full diacritics (tashkeel) for UI rendering. Falls back to the
+    # normalized ``word`` when the bundle was built without this field.
+    text_with_tashkeel: str = ""
 
 
 @dataclass
@@ -148,6 +151,7 @@ class ReferenceStore:
                 tajweed_checks=tajweed_checks,
                 ref_start_ms=w_data.get("ref_start_ms", 0),
                 ref_end_ms=w_data.get("ref_end_ms", 0),
+                text_with_tashkeel=w_data.get("text_with_tashkeel") or w_data["word"],
             ))
 
         return AyahReference(
@@ -227,6 +231,7 @@ class ReferenceStore:
                 {
                     "word": w.word,
                     "phonemes": w.phonemes,
+                    "text_with_tashkeel": w.text_with_tashkeel or w.word,
                     "tajweed_checks": [
                         {
                             "rule": tj.rule,

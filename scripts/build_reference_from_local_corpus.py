@@ -78,6 +78,7 @@ def main() -> None:
                     continue
                 words.append({
                     "word": normalize(wt),
+                    "text_with_tashkeel": wt,
                     "phonemes": [],
                     "tajweed_checks": [],
                     "ref_start_ms": 0,

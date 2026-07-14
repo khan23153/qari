@@ -30,16 +30,33 @@ class RecordingService {
 
   /// Starts recording audio to a temporary file.
   /// Returns the file path of the recording, or null if permission denied.
+  ///
+  /// Microphone permission is **strictly validated before** the recorder is
+  /// started: we never call [AudioRecorder.start] unless the user has granted
+  /// mic access. The recorder then captures continuously until [stopRecording]
+  /// / [cancelRecording] is called — it must not terminate on its own.
   Future<String?> startRecording() async {
     if (_isRecording) {
       debugPrint('RecordingService: already recording');
       return _currentFilePath;
     }
 
-    final hasMicPermission = await requestPermission();
+    // Cancel any stray prior session so a fresh start can't be aborted by a
+    // lingering recorder state (which would otherwise produce an empty file).
+    try {
+      await _recorder.stop();
+    } catch (_) {
+      // ignore — there may simply be nothing to stop.
+    }
+
+    // Strict permission gate: only start once we know we are allowed to record.
+    final hasMicPermission = await hasPermission();
     if (!hasMicPermission) {
-      debugPrint('RecordingService: microphone permission denied');
-      return null;
+      final granted = await requestPermission();
+      if (!granted) {
+        debugPrint('RecordingService: microphone permission denied');
+        return null;
+      }
     }
 
     try {
@@ -64,9 +81,21 @@ class RecordingService {
       debugPrint('RecordingService: started recording to $filePath');
       return filePath;
     } catch (e) {
+      _isRecording = false;
+      _currentFilePath = null;
       debugPrint('RecordingService start error: $e');
       return null;
     }
+  }
+
+  /// Returns the size in bytes of a finished recording, or 0 if missing.
+  /// Used by callers to reject empty recordings before upload.
+  Future<int> fileSize(String path) async {
+    try {
+      final f = File(path);
+      if (await f.exists()) return await f.length();
+    } catch (_) {}
+    return 0;
   }
 
   /// Stops recording and returns the file path.

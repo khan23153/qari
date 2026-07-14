@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:haptic_feedback/haptic_feedback.dart';
 
+import '../../../../core/constants/app_constants.dart';
 import '../../../../data/models/recitation_model.dart';
 import '../../../../data/models/recitation_stream_event.dart';
 import '../../../../data/models/word_model.dart';
-import '../../../../data/repositories/corpus_repository.dart';
 import '../../../../data/repositories/local_corpus_repository.dart';
 import '../../../../data/services/audio_service.dart';
 import '../../../../data/services/streaming_recitation_service.dart';
@@ -18,8 +19,14 @@ import '../widgets/word_comparison_sheet.dart';
 /// UI phases for the live (real-time) recitation experience.
 enum LiveRecitationUiState { setup, live, results, error }
 
+/// What block of Quran the user is reciting continuously.
+enum RecitationScope { page, surah }
+
 /// Upgraded AI Recitation section — real-time voice tracking + Memorization
-/// (Hifz) Mode, replicating Tarteel-style live feedback.
+/// (Hifz) Mode, replicating Tarteel-style live feedback. Supports continuous
+/// recitation of a full Mushaf **page** or a full **surah**: every ayah's words
+/// are combined into one continuous array so the ML backend tracks the user
+/// seamlessly across ayah boundaries (no stop/start between ayahs).
 ///
 /// This is a **separate** page from the legacy [RecitationPage] used by the
 /// Quran reader's per-ayah "Recite" button, which is intentionally left
@@ -41,11 +48,28 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   LiveRecitationUiState _ui = LiveRecitationUiState.setup;
   bool _memorizationMode = true;
 
+  RecitationScope _scope = RecitationScope.page;
   int _surah = 1;
   int _ayah = 1;
+  int _page = 1;
   int _ayahCount = 7;
+
+  /// Flat word array across all ayahs being recited (the whole page/surah).
   List<String> _words = const [];
-  final Map<int, LiveWordStatus> _statuses = {};
+
+  /// Ordered (surah, ayah) references for the loaded block — sent to the
+  /// backend so it can resolve the concatenated reference list.
+  List<(int, int)> _ayahRefs = const [];
+
+  /// 0-based index of the LAST word of each ayah in [_words] (for markers).
+  List<int> _ayahBoundaries = const [];
+
+  /// Ayah-number labels aligned 1:1 with [_ayahBoundaries].
+  List<String> _ayahLabels = const [];
+
+  /// Per-word granular state. Each entry owns its own notifiers so a word
+  /// status change rebuilds ONLY that word widget — never the whole Wrap.
+  List<HifzWordState> _wordStates = const [];
 
   /// Index of the next word the reciter is expected to say. In Memorization
   /// Mode the placeholder dot at this index is revealed (as Arabic text) and
@@ -60,41 +84,37 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   /// Stable keys (one per word) so we can scroll the active word to center.
   List<GlobalKey> _wordKeys = const [];
 
-  /// Drives the auto-scroll so the active word stays centered as words wrap.
+  /// Drives the auto-scroll so the active word stays in view as words wrap.
   final ScrollController _scrollController = ScrollController();
 
-  final List<double> _levels = [];
   RecitationResult? _result;
   String? _errorMessage;
 
-  int _elapsedSeconds = 0;
-  Timer? _elapsedTimer;
-
   StreamSubscription<RecitationStreamEvent>? _eventSub;
-  StreamSubscription<double>? _ampSub;
   StreamSubscription<LiveConnectionState>? _connSub;
 
   @override
   void initState() {
     super.initState();
     if (widget.surahNumber != null) {
+      _scope = RecitationScope.surah;
       _surah = widget.surahNumber!;
       _ayah = widget.ayahNumber ?? 1;
     }
-    _loadAyah();
+    _loadScope();
 
     _eventSub = _service.events.listen(_onEvent);
-    _ampSub = _service.amplitude.listen(_onAmplitude);
     _connSub = _service.connectionState.listen(_onConnectionState);
   }
 
   @override
   void dispose() {
-    _elapsedTimer?.cancel();
     _flashTimer?.cancel();
     _eventSub?.cancel();
-    _ampSub?.cancel();
     _connSub?.cancel();
+    for (final s in _wordStates) {
+      s.dispose();
+    }
     _scrollController.dispose();
     _service.dispose();
     _audioService.dispose();
@@ -105,33 +125,64 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   /// [GlobalKey] per word so the live view can scroll the active word to center.
   void _resetWordTracking() {
     _flashTimer?.cancel();
+    for (final s in _wordStates) {
+      s.dispose();
+    }
     _currentWordIndex = 0;
     _flashIndex = -1;
     _wordKeys = List.generate(_words.length, (_) => GlobalKey());
+    _wordStates = List.generate(
+      _words.length,
+      (_) => HifzWordState(),
+    );
+    // The first word is the "active" (expected-next) word.
+    if (_wordStates.isNotEmpty) {
+      _wordStates[0].isActive.value = true;
+    }
   }
 
   // ─── Data loading ─────────────────────────────────────────────────────────
 
-  Future<void> _loadAyah() async {
+  /// Loads the target block (a full Mushaf page or a full surah) from the
+  /// bundled corpus, flattens it into a single continuous word array, and
+  /// records where each ayah ends (for the end-of-ayah markers).
+  Future<void> _loadScope() async {
     try {
-      final ayahs = await LocalCorpusRepository().getAyahs(_surah);
-      _ayahCount = ayahs.isNotEmpty ? ayahs.length : _ayahCount;
-      AyahModel? match;
+      List<AyahModel> ayahs;
+      if (_scope == RecitationScope.page) {
+        ayahs = await LocalCorpusRepository().getAyahsByPage(_page);
+      } else {
+        ayahs = await LocalCorpusRepository().getAyahs(_surah);
+      }
+      if (ayahs.isEmpty) return;
+
+      final words = <String>[];
+      final refs = <(int, int)>[];
+      final boundaries = <int>[];
+      final labels = <String>[];
+
       for (final a in ayahs) {
-        if (a.ayahNumber == _ayah) {
-          match = a;
-          break;
+        final ayahWords = a.words.map((w) => w.text).toList();
+        words.addAll(ayahWords);
+        refs.add((a.surahNumber, a.ayahNumber));
+        if (ayahWords.isNotEmpty) {
+          boundaries.add(words.length - 1);
+          labels.add(a.ayahNumber.toString());
         }
       }
-      if (match != null && mounted) {
+
+      if (mounted) {
         setState(() {
-          _words = match!.words.map((w) => w.text).toList();
-          _statuses.clear();
+          _words = words;
+          _ayahRefs = refs;
+          _ayahBoundaries = boundaries;
+          _ayahLabels = labels;
+          _ayahCount = ayahs.length;
           _resetWordTracking();
         });
       }
     } catch (e) {
-      debugPrint('LiveRecitation: could not load ayah text: $e');
+      debugPrint('LiveRecitation: could not load scope: $e');
     }
   }
 
@@ -141,44 +192,44 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
     if (!mounted) return;
     switch (event.type) {
       case RecitationStreamEventType.ready:
-        // Prefer the backend's reference words so indices stay in sync; fall
-        // back to the locally-loaded ayah words if the server sent none.
-        if (event.words.isNotEmpty) {
+        // Prefer the backend's reference words (with tashkeel) so indices stay
+        // in sync; fall back to the locally-loaded ayah words if the server
+        // sent none or the count differs.
+        if (event.words.isNotEmpty && event.words.length == _words.length) {
           setState(() {
             _words = event.words.map((w) => w.text).toList();
-            _statuses.clear();
             _resetWordTracking();
           });
         }
         break;
       case RecitationStreamEventType.word:
         final idx = event.wordIndex;
-        if (idx != null) {
-          final isMistake = event.status == LiveWordStatus.error ||
-              event.status == LiveWordStatus.skipped;
-          if (isMistake) Haptics.vibrate(HapticsType.warning);
+        if (idx == null || idx < 0 || idx >= _wordStates.length) return;
 
-          if (_memorizationMode) {
-            if (event.status == LiveWordStatus.matched) {
-              // Reveal the correctly spoken word and advance the pointer.
-              setState(() {
-                _statuses[idx] = LiveWordStatus.matched;
-                _advanceCurrentIndex();
-              });
-              _scrollToCurrent();
-            } else {
-              // Incorrect word: flash the current placeholder, don't reveal it.
-              setState(() {
-                _flashIndex = _currentWordIndex;
-              });
-              _scheduleFlash();
-            }
+        final isMistake =
+            event.status == LiveWordStatus.error || event.status == LiveWordStatus.skipped;
+        if (isMistake) Haptics.vibrate(HapticsType.warning);
+
+        if (_memorizationMode) {
+          if (event.status == LiveWordStatus.matched) {
+            // Reveal the correctly spoken word (only this cell rebuilds) and
+            // advance the pointer. No page-level setState → the Wrap is intact.
+            _wordStates[idx].status.value = LiveWordStatus.matched;
+            _wordStates[idx].isActive.value = false;
+            _advanceCurrentIndex();
+            _scrollToCurrent();
           } else {
-            setState(() => _statuses[idx] = event.status);
-            if (isMistake) {
-              setState(() => _flashIndex = idx);
-              _scheduleFlash();
-            }
+            // Incorrect word: flash the current placeholder, don't reveal it.
+            _flashIndex = _currentWordIndex;
+            _wordStates[_flashIndex].isFlashing.value = true;
+            _scheduleFlash();
+          }
+        } else {
+          _wordStates[idx].status.value = event.status;
+          if (isMistake) {
+            _flashIndex = idx;
+            _wordStates[idx].isFlashing.value = true;
+            _scheduleFlash();
           }
         }
         break;
@@ -197,14 +248,6 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
     }
   }
 
-  void _onAmplitude(double level) {
-    if (!mounted) return;
-    setState(() {
-      _levels.add(level);
-      if (_levels.length > 240) _levels.removeAt(0);
-    });
-  }
-
   void _onConnectionState(LiveConnectionState state) {
     if (!mounted) return;
     if (state == LiveConnectionState.error &&
@@ -217,11 +260,15 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
     }
   }
 
-  /// Advances [_currentWordIndex] past any already-revealed leading words.
+  /// Advances [_currentWordIndex] past any already-revealed leading words and
+  /// marks the newly-active word so only it shows the "you are here" highlight.
   void _advanceCurrentIndex() {
-    while (_currentWordIndex < _words.length &&
-        _statuses[_currentWordIndex]?.isResolved == true) {
+    while (_currentWordIndex < _wordStates.length &&
+        _wordStates[_currentWordIndex].status.value.isResolved) {
       _currentWordIndex++;
+    }
+    if (_currentWordIndex < _wordStates.length) {
+      _wordStates[_currentWordIndex].isActive.value = true;
     }
   }
 
@@ -229,20 +276,41 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   void _scheduleFlash() {
     _flashTimer?.cancel();
     _flashTimer = Timer(const Duration(milliseconds: 900), () {
-      if (mounted) setState(() => _flashIndex = -1);
+      if (mounted && _flashIndex >= 0 && _flashIndex < _wordStates.length) {
+        _wordStates[_flashIndex].isFlashing.value = false;
+      }
+      _flashIndex = -1;
     });
   }
 
-  /// Smoothly scrolls the active word to the vertical center of the view as
-  /// words wrap onto new lines during continuous recitation.
+  /// Smoothly scrolls the active word to the upper third of the viewport, but
+  /// ONLY when it enters the bottom 30% — so we don't fight the user's own
+  /// scrolling on every word.
   void _scrollToCurrent() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _currentWordIndex >= _wordKeys.length) return;
+      if (!mounted) return;
+      if (_currentWordIndex < 0 || _currentWordIndex >= _wordKeys.length) return;
       final ctx = _wordKeys[_currentWordIndex].currentContext;
-      if (ctx != null) {
-        Scrollable.ensureVisible(
-          ctx,
-          alignment: 0.5,
+      if (ctx == null) return;
+      final box = ctx.findRenderObject() as RenderBox?;
+      if (box == null) return;
+
+      final position = Scrollable.of(ctx).position;
+      final viewportHeight = position.viewportDimension;
+      if (viewportHeight <= 0) return;
+
+      final wordTop = box.localToGlobal(Offset.zero).dy;
+      final containerBox =
+          position.context.storageContext.findRenderObject() as RenderBox?;
+      final containerTop = containerBox?.localToGlobal(Offset.zero).dy ?? 0.0;
+      final rel = wordTop - containerTop; // word offset within the viewport
+
+      // Blueprint: if the active word enters the bottom 30% of the viewport,
+      // animate it to ~33% from the top (upper third).
+      if (rel > viewportHeight * 0.70) {
+        final delta = rel - viewportHeight * 0.33;
+        position.animateTo(
+          position.pixels + delta,
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
         );
@@ -256,36 +324,27 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
     await Haptics.vibrate(HapticsType.medium);
     setState(() {
       _ui = LiveRecitationUiState.live;
-      _statuses.clear();
       _resetWordTracking();
-      _levels.clear();
-      _elapsedSeconds = 0;
       _errorMessage = null;
       _result = null;
-    });
-
-    _elapsedTimer?.cancel();
-    // Count-up only — NO auto-stop. The session stays active indefinitely for
-    // hands-free recitation until the user manually taps Stop.
-    _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() => _elapsedSeconds++);
     });
 
     try {
       await _service.start(
         surahNumber: _surah,
         ayahNumber: _ayah,
+        ayahFrom: _scope == RecitationScope.surah ? 1 : _ayah,
+        ayahTo: _scope == RecitationScope.surah ? _ayahCount : _ayah,
+        ayahRefs: _ayahRefs,
         memorizationMode: _memorizationMode,
       );
     } on MicPermissionDeniedException {
-      _elapsedTimer?.cancel();
       setState(() {
         _ui = LiveRecitationUiState.error;
         _errorMessage =
             'Microphone access denied. Enable it in Settings to use live recitation.';
       });
     } catch (e) {
-      _elapsedTimer?.cancel();
       setState(() {
         _ui = LiveRecitationUiState.error;
         _errorMessage = 'Could not start the live session: $e';
@@ -295,14 +354,12 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
 
   Future<void> _stop() async {
     await Haptics.vibrate(HapticsType.selection);
-    _elapsedTimer?.cancel();
     final ev = await _service.stop();
     if (_ui == LiveRecitationUiState.results) return; // already handled via stream
     _finishWith(ev?.result);
   }
 
   void _finishWith(RecitationResult? result) {
-    _elapsedTimer?.cancel();
     if (!mounted) return;
     setState(() {
       _result = result ?? _synthesizeResult();
@@ -316,7 +373,9 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
     final verdicts = <WordVerdict>[];
     var matched = 0;
     for (var i = 0; i < _words.length; i++) {
-      final st = _statuses[i] ?? LiveWordStatus.pending;
+      final st = i < _wordStates.length
+          ? _wordStates[i].status.value
+          : LiveWordStatus.pending;
       final correct = st == LiveWordStatus.matched;
       if (correct) matched++;
       verdicts.add(WordVerdict(
@@ -324,9 +383,7 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
         wordIndex: i,
         isCorrect: correct,
         expectedText: _words[i],
-        errorType: correct
-            ? null
-            : (st == LiveWordStatus.pending ? 'skipped' : st.name),
+        errorType: correct ? null : (st == LiveWordStatus.pending ? 'skipped' : st.name),
       ));
     }
     final acc = _words.isEmpty ? 0.0 : matched / _words.length;
@@ -346,12 +403,10 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   }
 
   Future<void> _cancel() async {
-    _elapsedTimer?.cancel();
     await _service.cancel();
     if (mounted) {
       setState(() {
         _ui = LiveRecitationUiState.setup;
-        _statuses.clear();
         _resetWordTracking();
       });
     }
@@ -361,35 +416,9 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
     setState(() {
       _ui = LiveRecitationUiState.setup;
       _result = null;
-      _statuses.clear();
-      _resetWordTracking();
-      _levels.clear();
       _errorMessage = null;
-      _elapsedSeconds = 0;
+      _resetWordTracking();
     });
-  }
-
-  Future<void> _playReference() async {
-    try {
-      String? url;
-      try {
-        final ayah = await CorpusRepository().getAyah(_surah, _ayah);
-        url = ayah.audioUrl;
-      } catch (_) {}
-      if (url != null && url.isNotEmpty) {
-        try {
-          await _audioService.playUrl(url);
-          return;
-        } catch (_) {}
-      }
-      await _audioService.playAyah(surahNumber: _surah, ayahNumber: _ayah);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not play reference audio: $e')),
-        );
-      }
-    }
   }
 
   void _onWordTapped(WordVerdict verdict) {
@@ -420,8 +449,8 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
             Expanded(child: _buildBody(theme)),
             if (_ui == LiveRecitationUiState.live)
               MicVisualizer(
-                levels: _levels,
-                active: _service.isActive,
+                amplitude: _service.amplitude,
+                active: true,
                 color: theme.colorScheme.primary,
               ),
           ],
@@ -431,6 +460,9 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   }
 
   Widget _buildHeader(ThemeData theme) {
+    final subtitle = _scope == RecitationScope.page
+        ? 'Live · Page $_page'
+        : 'Live · Surah $_surah (full)';
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
       child: Row(
@@ -444,11 +476,10 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
               children: [
                 Text(
                   'AI Recitation',
-                  style: theme.textTheme.titleLarge
-                      ?.copyWith(fontWeight: FontWeight.w700),
+                  style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 Text(
-                  'Live · Surah $_surah:$_ayah',
+                  subtitle,
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                   ),
@@ -491,14 +522,71 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Target selector
-          Align(
-            child: ActionChip(
-              avatar: const Icon(Icons.menu_book_rounded, size: 18),
-              label: Text('Surah $_surah · Ayah $_ayah'),
-              onPressed: _openTargetPicker,
+          // Scope selector (Page / Surah)
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: theme.colorScheme.outline.withValues(alpha: 0.2),
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _ScopeTab(
+                    label: 'Page (Mushaf)',
+                    icon: Icons.menu_book_rounded,
+                    selected: _scope == RecitationScope.page,
+                    onTap: () {
+                      if (_scope != RecitationScope.page) {
+                        setState(() {
+                          _scope = RecitationScope.page;
+                          _loadScope();
+                        });
+                      }
+                    },
+                    theme: theme,
+                  ),
+                ),
+                Expanded(
+                  child: _ScopeTab(
+                    label: 'Full Surah',
+                    icon: Icons.auto_stories_rounded,
+                    selected: _scope == RecitationScope.surah,
+                    onTap: () {
+                      if (_scope != RecitationScope.surah) {
+                        setState(() {
+                          _scope = RecitationScope.surah;
+                          _loadScope();
+                        });
+                      }
+                    },
+                    theme: theme,
+                  ),
+                ),
+              ],
             ),
           ),
+          const SizedBox(height: 16),
+
+          // Target selector for the chosen scope.
+          if (_scope == RecitationScope.page)
+            _PageStepper(theme: theme, page: _page, onChanged: (p) {
+              setState(() {
+                _page = p;
+                _loadScope();
+              });
+            })
+          else
+            Align(
+              child: ActionChip(
+                avatar: const Icon(Icons.auto_stories_rounded, size: 18),
+                label: Text('Surah $_surah'),
+                onPressed: _openTargetPicker,
+              ),
+            ),
           const SizedBox(height: 20),
 
           // Memorization Mode toggle
@@ -519,8 +607,7 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
                     children: [
                       Text(
                         'Memorization Mode',
-                        style: theme.textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w600),
+                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -546,38 +633,26 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest
-                  .withValues(alpha: 0.25),
+              color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
               borderRadius: BorderRadius.circular(20),
             ),
             child: _words.isEmpty
-                ? Text('Loading ayah…',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium)
+                ? Text('Loading…', textAlign: TextAlign.center, style: theme.textTheme.bodyMedium)
                 : MemorizationAyahView(
                     words: _words,
-                    statuses: _statuses,
+                    wordStates: _wordStates,
                     memorizationMode: _memorizationMode,
+                    ayahBoundaries: _ayahBoundaries,
+                    ayahLabels: _ayahLabels,
                   ),
           ),
           const SizedBox(height: 28),
 
-          FilledButton.tonalIcon(
-            onPressed: _playReference,
-            icon: const Icon(Icons.headphones_rounded),
-            label: const Text('Listen First'),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(52),
-            ),
-          ),
-          const SizedBox(height: 12),
           FilledButton.icon(
             onPressed: _start,
             icon: const Icon(Icons.mic_rounded, size: 26),
             label: const Text('Start Reciting', style: TextStyle(fontSize: 16)),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(56),
-            ),
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
           ),
         ],
       ),
@@ -586,56 +661,29 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
 
   // ─── Live ───────────────────────────────────────────────────────────────
   Widget _buildLive(ThemeData theme) {
-    final connecting = _service.state == LiveConnectionState.connecting;
     return Column(
       children: [
-        // Status bar
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (connecting) ...[
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                const SizedBox(width: 8),
-                Text('Connecting…', style: theme.textTheme.labelMedium),
-              ] else ...[
-                Icon(Icons.circle, size: 10, color: theme.colorScheme.error)
-                    .animate(onComplete: (c) => c.repeat(reverse: true))
-                    .fadeIn(duration: 700.ms)
-                    .fadeOut(duration: 700.ms),
-                const SizedBox(width: 8),
-                Text(
-                  'LIVE · ${_formatDuration(_elapsedSeconds)}',
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ],
-              const SizedBox(width: 12),
-              _ModePill(memorization: _memorizationMode, theme: theme),
-            ],
-          ),
+        // Status bar (self-managed LIVE timer + connecting indicator) so the
+        // page never setStates on a 1s tick (which would rebuild the Wrap).
+        _LiveStatusBadge(
+          memorization: _memorizationMode,
+          connectionState: _service.connectionState,
         ),
 
-        // Ayah with live word-by-word feedback
+        // Ayah with live word-by-word feedback (whole page/surah). Per-word
+        // notifiers mean a match reveal rebuilds only that one cell.
         Expanded(
           child: SingleChildScrollView(
             controller: _scrollController,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             child: MemorizationAyahView(
               words: _words,
-              statuses: _statuses,
+              wordStates: _wordStates,
               memorizationMode: _memorizationMode,
-              fontSize: 34,
-              activeIndex: _memorizationMode ? _currentWordIndex : -1,
-              flashIndex: _flashIndex,
+              fontSize: 30,
               wordKeys: _wordKeys,
+              ayahBoundaries: _ayahBoundaries,
+              ayahLabels: _ayahLabels,
             ),
           ),
         ),
@@ -661,11 +709,8 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
                 child: FilledButton.icon(
                   onPressed: _stop,
                   icon: const Icon(Icons.stop_rounded, size: 26),
-                  label: const Text('Stop & Review',
-                      style: TextStyle(fontSize: 16)),
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(56),
-                  ),
+                  label: const Text('Stop & Review', style: TextStyle(fontSize: 16)),
+                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
                 ),
               ),
             ],
@@ -684,13 +729,11 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.error_outline_rounded,
-                size: 64,
-                color: theme.colorScheme.error.withValues(alpha: 0.6)),
+                size: 64, color: theme.colorScheme.error.withValues(alpha: 0.6)),
             const SizedBox(height: 20),
             Text(
               'Something went wrong',
-              style: theme.textTheme.headlineSmall
-                  ?.copyWith(fontWeight: FontWeight.w700),
+              style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
@@ -705,9 +748,7 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
             const SizedBox(height: 28),
             FilledButton(
               onPressed: _reset,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(52),
-              ),
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
               child: const Text('Try Again'),
             ),
           ],
@@ -719,7 +760,6 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   // ─── Target picker ───────────────────────────────────────────────────────
   Future<void> _openTargetPicker() async {
     int tempSurah = _surah;
-    int tempAyah = _ayah;
     int tempCount = _ayahCount;
 
     Future<void> refreshCount(StateSetter setSheet, int surah) async {
@@ -728,7 +768,6 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
         if (ayahs.isNotEmpty) {
           setSheet(() {
             tempCount = ayahs.length;
-            if (tempAyah > tempCount) tempAyah = 1;
           });
         }
       } catch (_) {}
@@ -753,33 +792,17 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text('Choose what to recite',
-                      style: theme.textTheme.titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w700)),
+                  Text('Choose a surah',
+                      style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _NumberDropdown(
-                          label: 'Surah',
-                          value: tempSurah,
-                          count: 114,
-                          onChanged: (v) {
-                            setSheet(() => tempSurah = v);
-                            refreshCount(setSheet, v);
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _NumberDropdown(
-                          label: 'Ayah',
-                          value: tempAyah,
-                          count: tempCount,
-                          onChanged: (v) => setSheet(() => tempAyah = v),
-                        ),
-                      ),
-                    ],
+                  _NumberDropdown(
+                    label: 'Surah',
+                    value: tempSurah,
+                    count: AppConstants.totalSurahs,
+                    onChanged: (v) {
+                      setSheet(() => tempSurah = v);
+                      refreshCount(setSheet, v);
+                    },
                   ),
                   const SizedBox(height: 24),
                   FilledButton(
@@ -787,16 +810,12 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
                       Navigator.pop(context);
                       setState(() {
                         _surah = tempSurah;
-                        _ayah = tempAyah;
                         _ayahCount = tempCount;
-                        _words = const [];
-                        _statuses.clear();
+                        _resetWordTracking();
                       });
-                      _loadAyah();
+                      _loadScope();
                     },
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(52),
-                    ),
+                    style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
                     child: const Text('Set'),
                   ),
                 ],
@@ -818,8 +837,9 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
           'tap Stop (great while walking or driving).\n\n'
           '• Words are tracked in real time: green = correct, red = '
           'mispronounced, amber = skipped.\n\n'
-          '• Memorization Mode hides the ayah and reveals each word only after '
-          'you recite it correctly.',
+          '• Memorization Mode hides the text and reveals each word only after '
+          'you recite it correctly — across a full Mushaf page or surah.\n\n'
+          '• Circular numbers mark where each ayah ends.',
         ),
         actions: [
           TextButton(
@@ -830,11 +850,199 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
       ),
     );
   }
+}
+
+/// Live status bar: shows the LIVE timer (count-up, never auto-stops) and a
+/// connecting indicator. Owns its own 1s timer + connection subscription so the
+/// parent page doesn't need to [setState] every second (which would otherwise
+/// rebuild the word Wrap).
+class _LiveStatusBadge extends StatefulWidget {
+  final bool memorization;
+  final Stream<LiveConnectionState> connectionState;
+
+  const _LiveStatusBadge({
+    required this.memorization,
+    required this.connectionState,
+  });
+
+  @override
+  State<_LiveStatusBadge> createState() => _LiveStatusBadgeState();
+}
+
+class _LiveStatusBadgeState extends State<_LiveStatusBadge> {
+  int _elapsed = 0;
+  Timer? _timer;
+  bool _connecting = true;
+  StreamSubscription<LiveConnectionState>? _connSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _elapsed++);
+    });
+    _connSub = widget.connectionState.listen((s) {
+      if (!mounted) return;
+      final connecting =
+          s == LiveConnectionState.connecting || s == LiveConnectionState.idle;
+      if (connecting != _connecting) setState(() => _connecting = connecting);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _connSub?.cancel();
+    super.dispose();
+  }
 
   String _formatDuration(int seconds) {
     final m = (seconds ~/ 60).toString().padLeft(2, '0');
     final s = (seconds % 60).toString().padLeft(2, '0');
     return '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (_connecting) ...[
+            const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 8),
+            Text('Connecting…', style: theme.textTheme.labelMedium),
+          ] else ...[
+            Icon(Icons.circle, size: 10, color: theme.colorScheme.error)
+                .animate(onComplete: (c) => c.repeat(reverse: true))
+                .fadeIn(duration: 700.ms)
+                .fadeOut(duration: 700.ms),
+            const SizedBox(width: 8),
+            Text(
+              'LIVE · ${_formatDuration(_elapsed)}',
+              style: theme.textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
+          const SizedBox(width: 12),
+          _ModePill(memorization: widget.memorization, theme: theme),
+        ],
+      ),
+    );
+  }
+}
+
+class _ScopeTab extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+  final ThemeData theme;
+
+  const _ScopeTab({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = selected
+        ? theme.colorScheme.onPrimary
+        : theme.colorScheme.onSurface.withValues(alpha: 0.7);
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: selected ? theme.colorScheme.primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 18, color: fg),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: fg,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PageStepper extends StatelessWidget {
+  final ThemeData theme;
+  final int page;
+  final ValueChanged<int> onChanged;
+
+  const _PageStepper({
+    required this.theme,
+    required this.page,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.remove_circle_outline_rounded),
+            onPressed: page > 1 ? () => onChanged(page - 1) : null,
+          ),
+          Expanded(
+            child: Column(
+              children: [
+                Text(
+                  'Mushaf Page',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                  ),
+                ),
+                Text(
+                  '$page / ${AppConstants.totalQuranPages}',
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.add_circle_outline_rounded),
+            onPressed: page < AppConstants.totalQuranPages
+                ? () => onChanged(page + 1)
+                : null,
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -855,9 +1063,7 @@ class _ModePill extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            memorization
-                ? Icons.visibility_off_rounded
-                : Icons.track_changes_rounded,
+            memorization ? Icons.visibility_off_rounded : Icons.track_changes_rounded,
             size: 14,
             color: theme.colorScheme.primary,
           ),

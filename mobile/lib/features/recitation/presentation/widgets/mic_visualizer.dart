@@ -1,14 +1,17 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 /// An always-on audio visualizer shown at the bottom of the live recitation
 /// screen to indicate the microphone is continuously listening (hands-free).
 ///
-/// Feed it a rolling list of normalized (0–1) amplitude [levels]; the newest
-/// sample is drawn on the trailing edge and older samples scroll away. When
-/// [active] is false it renders a calm idle baseline.
-class MicVisualizer extends StatelessWidget {
-  final List<double> levels;
+/// It subscribes to the [amplitude] stream itself and maintains its own rolling
+/// buffer of normalized (0–1) samples, so the parent page never has to
+/// [setState] on every audio frame (keeping the word Wrap rebuilds isolated to
+/// actual word-status changes). When [active] is false it renders a calm idle
+/// baseline.
+class MicVisualizer extends StatefulWidget {
+  final Stream<double> amplitude;
   final bool active;
   final Color color;
   final double height;
@@ -16,7 +19,7 @@ class MicVisualizer extends StatelessWidget {
 
   const MicVisualizer({
     super.key,
-    required this.levels,
+    required this.amplitude,
     required this.active,
     required this.color,
     this.height = 72,
@@ -24,10 +27,36 @@ class MicVisualizer extends StatelessWidget {
   });
 
   @override
+  State<MicVisualizer> createState() => _MicVisualizerState();
+}
+
+class _MicVisualizerState extends State<MicVisualizer> {
+  final List<double> _levels = [];
+  StreamSubscription<double>? _sub;
+
+  @override
+  void initState() {
+    super.initState();
+    _sub = widget.amplitude.listen((level) {
+      if (!mounted) return;
+      setState(() {
+        _levels.add(level);
+        if (_levels.length > 240) _levels.removeAt(0);
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      height: height,
+      height: widget.height,
       width: double.infinity,
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
@@ -40,15 +69,15 @@ class MicVisualizer extends StatelessWidget {
       child: Row(
         children: [
           const SizedBox(width: 16),
-          _LiveDot(active: active, color: color),
+          _LiveDot(active: widget.active, color: widget.color),
           const SizedBox(width: 12),
           Expanded(
             child: CustomPaint(
               painter: _MicBarsPainter(
-                levels: levels,
-                color: color,
-                active: active,
-                barCount: barCount,
+                levels: _levels,
+                color: widget.color,
+                active: widget.active,
+                barCount: widget.barCount,
                 idleColor: theme.colorScheme.outline.withValues(alpha: 0.25),
               ),
               size: Size.infinite,
@@ -56,10 +85,10 @@ class MicVisualizer extends StatelessWidget {
           ),
           const SizedBox(width: 16),
           Text(
-            active ? 'Listening' : 'Paused',
+            widget.active ? 'Listening' : 'Paused',
             style: theme.textTheme.labelMedium?.copyWith(
-              color: active
-                  ? color
+              color: widget.active
+                  ? widget.color
                   : theme.colorScheme.onSurface.withValues(alpha: 0.4),
               fontWeight: FontWeight.w600,
             ),

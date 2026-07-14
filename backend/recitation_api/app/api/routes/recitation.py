@@ -325,3 +325,52 @@ async def get_recitation_result(session_id: str):
         result=result,
         error_message=session_data.get("error_message"),
     )
+
+
+@router.get("/ayahs/{surah_number}/{ayah_number}/words", tags=["recitation"])
+async def get_ayah_words(surah_number: int, ayah_number: int):
+    """Serve the Quranic text at the individual word level for Hifz / follow-along.
+
+    Returns the blueprint word-level data model::
+
+        {
+          "surah_number": 1, "ayah_number": 1,
+          "words": [
+            {"word_id": 1, "text_with_tashkeel": "بِسْمِ", "clean_text": "بسم",
+             "sequence_index": 1, "state": "hidden"}, ...
+          ]
+        }
+
+    ``text_with_tashkeel`` is for UI rendering, ``clean_text`` (diacritics
+    stripped) is the key used by the ASR / alignment engine. ``state`` starts
+    as ``hidden`` except the first word (``active``). Falls back to an empty
+    word list when no reference data is available for this ayah.
+    """
+    from app.services.streaming_session import resolve_reference_words
+
+    display, norm, audio_url, entries = resolve_reference_words(
+        surah_number, ayah_number
+    )
+    if not entries:
+        return {
+            "surah_number": surah_number,
+            "ayah_number": ayah_number,
+            "reference_audio_url": audio_url,
+            "words": [],
+        }
+
+    words = []
+    for i, entry in enumerate(entries):
+        words.append({
+            "word_id": i + 1,
+            "sequence_index": i + 1,
+            "text_with_tashkeel": entry.get("text_with_tashkeel", display[i]),
+            "clean_text": entry.get("clean_text", norm[i]),
+            "state": "active" if i == 0 else "hidden",
+        })
+    return {
+        "surah_number": surah_number,
+        "ayah_number": ayah_number,
+        "reference_audio_url": audio_url,
+        "words": words,
+    }

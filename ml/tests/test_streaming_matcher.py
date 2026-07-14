@@ -98,3 +98,29 @@ def test_empty_hypothesis():
     assert m.evaluate([]) == []
     fin = m.finalize([])
     assert all(s.status == WordStatus.SKIPPED for s in fin)
+
+
+def test_sliding_window_limits_single_pass():
+    """A single transcription pass only resolves the localized window of
+    [cursor, cursor + WINDOW_SIZE] reference words — not the whole ayah — so
+    the server does bounded work per pass (minimizes latency + load)."""
+    ref = [f"w{i}" for i in range(20)]
+    m = StreamingMatcher(ref, window_size=5)
+    # Feed the entire correct hypothesis in ONE pass.
+    s = m.evaluate(ref[:20])
+    st = _statuses(s)
+    # Only the first WINDOW_SIZE words are resolved in this single pass.
+    assert st == {i: WordStatus.MATCHED for i in range(5)}
+    assert m._cursor == 5
+    # The remaining words stay pending until later passes advance the window.
+    assert 5 not in st
+    assert 19 not in st
+
+    # Subsequent passes advance the window and resolve more; finalize does a
+    # full (unbounded) pass to resolve everything.
+    s2 = m.evaluate(ref[:20])
+    st2 = _statuses(s2)
+    assert 5 in st2 and 9 in st2  # next window resolved
+    fin = m.finalize(ref[:20])
+    stf = _statuses(fin)
+    assert all(stf[i] == WordStatus.MATCHED for i in range(20))

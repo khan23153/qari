@@ -27,6 +27,26 @@ router = APIRouter(tags=["websocket"])
 _redis: Optional[redis.Redis] = None
 
 
+def _parse_ayah_refs(payload: object) -> Optional[list[tuple[int, int]]]:
+    """Normalize a client-supplied ``ayahs`` field into a list of
+    ``(surah, ayah)`` tuples. Accepts ``[[s, a], ...]`` or
+    ``[{"surah": s, "ayah": a}, ...]``. Returns ``None`` when missing/invalid
+    so the caller falls back to a single-surah range.
+    """
+    if not isinstance(payload, list) or not payload:
+        return None
+    refs: list[tuple[int, int]] = []
+    for item in payload:
+        try:
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                refs.append((int(item[0]), int(item[1])))
+            elif isinstance(item, dict):
+                refs.append((int(item["surah"]), int(item["ayah"])))
+        except (ValueError, KeyError, TypeError):
+            continue
+    return refs or None
+
+
 def _get_redis() -> redis.Redis:
     global _redis
     if _redis is None:
@@ -94,10 +114,15 @@ async def recitation_stream(websocket: WebSocket):
     mode = start.get("mode", "tracking")
     sample_rate = int(start.get("sample_rate", settings.audio_sample_rate))
 
+    # Continuous (full-page / full-surah) mode sends an explicit ordered list
+    # of [surah, ayah] pairs. Fall back to a single-surah range when absent.
+    ayah_refs = _parse_ayah_refs(start.get("ayahs"))
+
     session = StreamingRecitationSession(
         surah=surah,
         ayah_from=ayah_from,
         ayah_to=ayah_to,
+        ayah_refs=ayah_refs,
         mode=mode,
         sample_rate=sample_rate,
     )

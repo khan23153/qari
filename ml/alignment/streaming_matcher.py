@@ -90,6 +90,12 @@ MATCH_SIMILARITY_THRESHOLD = 0.80
 # extra word (ASR hallucination / repeated word) before giving up.
 LOOKAHEAD = 3
 
+# Dynamic Time-Warping / Levenshtein "sliding window" size. The blueprint
+# requires the incoming audio to be aligned only against a *localized* window
+# of the reference — ``[current_index, current_index + WINDOW_SIZE]`` — so the
+# server does bounded work per transcription pass (minimizes latency + load).
+WINDOW_SIZE = 15
+
 
 class StreamingMatcher:
     """Incrementally match a growing ASR hypothesis to a reference word list.
@@ -110,10 +116,31 @@ class StreamingMatcher:
         *,
         match_threshold: float = MATCH_SIMILARITY_THRESHOLD,
         lookahead: int = LOOKAHEAD,
+        window_size: int = WINDOW_SIZE,
     ) -> None:
         self.reference = [w for w in reference_words]
         self.match_threshold = match_threshold
         self.lookahead = lookahead
+        self.window_size = window_size
+        # First reference index not yet resolved. The sliding window is always
+        # anchored here, so we never re-scan words the user has already passed.
+        self._cursor: int = 0
+        # Number of hypothesis words already consumed by the resolved reference
+        # prefix. The ASR hypothesis is *cumulative* (re-transcribed from the
+        # whole audio buffer on every pass), so each new pass must resume the
+        # hypothesis cursor here — NOT at 0 — otherwise the leading hypothesis
+        # words (already aligned to the resolved prefix) would be re-matched
+        # against the advanced reference cursor and everything would misalign.
+        self._hyp_cursor: int = 0
+        # Accumulated, stable status per reference word across all evaluations
+        # (robust to the ASR revising earlier words as more audio arrives). Once
+        # a word is resolved it is never re-judged.
+        self._resolved: dict[int, WordStatus] = {}
+        # Cumulative, index-ordered list of resolved WordStates returned by
+        # :meth:`evaluate`. The alignment *work* is bounded to the sliding
+        # window, but the return value is the full resolved set so callers
+        # (and the diff/event layer) always see every resolved word.
+        self._resolved_states: list[WordState] = []
 
     # ------------------------------------------------------------------
     def _is_match(self, hyp: str, ref: str) -> bool:
@@ -128,41 +155,63 @@ class StreamingMatcher:
         self,
         hypothesis_words: list[str],
         confidences: Optional[list[float]] = None,
+        *,
+        full: bool = False,
     ) -> list[WordState]:
-        """Return the resolved state of every reference word so far.
+        """Return the resolved state of every reference word resolved so far.
 
-        The returned list only contains reference words the matcher is
-        confident about (matched / error / skipped). Words still ahead of the
-        recitation are *not* included (they remain PENDING and stay masked).
+        The alignment *work* is bounded to the sliding window
+        ``[self._cursor, self._cursor + WINDOW_SIZE]`` unless ``full=True``
+        (used at end-of-session for a complete pass). Words still ahead of the
+        window remain PENDING and stay masked.
+
+        The returned list is the full cumulative resolved set (so callers and
+        the diff/event layer see every resolved word); the sliding window only
+        limits how far ahead we look on each transcription pass. Resolved
+        statuses are accumulated in :attr:`_resolved` so they are stable across
+        re-transcriptions.
         """
-        states: list[WordState] = []
-        i = 0  # reference cursor
-        j = 0  # hypothesis cursor
+        i = self._cursor  # reference cursor (first unresolved word)
+        # Resume the hypothesis cursor at the word consumed by the resolved
+        # reference prefix. The ASR hypothesis is cumulative (re-transcribed
+        # from the whole audio each pass), so restarting at 0 would re-match
+        # already-aligned leading words against the advanced reference cursor
+        # and corrupt every downstream status.
+        j = self._hyp_cursor
         n_ref = len(self.reference)
         n_hyp = len(hypothesis_words)
+
+        # Localized alignment window — only compare against the next
+        # WINDOW_SIZE reference words from the current position.
+        window_end = n_ref if full else min(n_ref, self._cursor + self.window_size)
 
         def conf(k: int) -> float:
             if confidences and 0 <= k < len(confidences):
                 return confidences[k]
             return 1.0
 
-        while i < n_ref and j < n_hyp:
+        while i < window_end and j < n_hyp:
             hw = hypothesis_words[j]
             rw = self.reference[i]
 
             if self._is_match(hw, rw):
-                states.append(WordState(i, rw, WordStatus.MATCHED, hw, conf(j)))
+                self._resolved_states.append(
+                    WordState(i, rw, WordStatus.MATCHED, hw, conf(j))
+                )
                 i += 1
                 j += 1
                 continue
 
             # Skip detection: did the user jump past one or more reference
-            # words? Look for the current hypothesis word further ahead.
-            skip_to = self._find_ref(hw, i + 1, self.lookahead)
+            # words? Look for the current hypothesis word further ahead (still
+            # within the sliding window).
+            skip_to = self._find_ref(hw, i + 1, window_end)
             if skip_to is not None:
                 for k in range(i, skip_to):
-                    states.append(WordState(k, self.reference[k], WordStatus.SKIPPED))
-                states.append(
+                    self._resolved_states.append(
+                        WordState(k, self.reference[k], WordStatus.SKIPPED)
+                    )
+                self._resolved_states.append(
                     WordState(skip_to, self.reference[skip_to], WordStatus.MATCHED, hw, conf(j))
                 )
                 i = skip_to + 1
@@ -178,24 +227,37 @@ class StreamingMatcher:
                 continue
 
             # Genuine substitution → mispronounced (real red mark).
-            states.append(WordState(i, rw, WordStatus.ERROR, hw, conf(j)))
+            self._resolved_states.append(
+                WordState(i, rw, WordStatus.ERROR, hw, conf(j))
+            )
             i += 1
             j += 1
 
-        return states
+        # Advance the window anchor past everything resolved this pass and
+        # record stable statuses (so a later re-transcription can't un-resolve
+        # a word the user has already passed).
+        self._cursor = i
+        # Carry the hypothesis cursor forward so the next cumulative-hypothesis
+        # pass resumes exactly where this one stopped (order-preserving greedy
+        # alignment guarantees the resolved reference prefix maps 1:1 to the
+        # consumed hypothesis prefix).
+        self._hyp_cursor = min(j, n_hyp)
+        for st in self._resolved_states:
+            self._resolved[st.index] = st.status
+        return list(self._resolved_states)
 
     # ------------------------------------------------------------------
-    def _find_ref(self, hyp_word: str, start: int, window: int) -> Optional[int]:
-        end = min(len(self.reference), start + window)
+    def _find_ref(self, hyp_word: str, start: int, end: int) -> Optional[int]:
+        end = min(len(self.reference), end)
         for k in range(start, end):
             if self._is_match(hyp_word, self.reference[k]):
                 return k
         return None
 
     def _find_hyp(
-        self, ref_word: str, hypothesis: list[str], start: int, window: int
+        self, ref_word: str, hypothesis: list[str], start: int, end: int
     ) -> Optional[int]:
-        end = min(len(hypothesis), start + window)
+        end = min(len(hypothesis), end)
         for k in range(start, end):
             if self._is_match(hypothesis[k], ref_word):
                 return k
@@ -205,14 +267,13 @@ class StreamingMatcher:
     def finalize(self, hypothesis_words: list[str]) -> list[WordState]:
         """Return the state of *all* reference words at end-of-session.
 
-        Any reference word that was never resolved is marked ``skipped`` (the
+        A full (unbounded) alignment pass resolves every word the user recited;
+        any reference word that was never resolved is marked ``skipped`` (the
         user finished without reciting it).
         """
-        resolved = {s.index: s for s in self.evaluate(hypothesis_words)}
+        self.evaluate(hypothesis_words, full=True)
         out: list[WordState] = []
         for idx, ref in enumerate(self.reference):
-            if idx in resolved:
-                out.append(resolved[idx])
-            else:
-                out.append(WordState(idx, ref, WordStatus.SKIPPED))
+            status = self._resolved.get(idx, WordStatus.SKIPPED)
+            out.append(WordState(idx, ref, status))
         return out
