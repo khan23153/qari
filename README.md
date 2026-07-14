@@ -4,7 +4,8 @@
 
 A cross-platform (Android + iOS) mobile app for absolute beginners to:
 1. **Learn** Arabic alphabet + foundational Quranic grammar (Module 1)
-2. **Read** the Quran with color-coded, word-by-word grammar and meaning (Module 2)
+2. **Read** the Quran with color-coded, word-by-word grammar, meaning, and
+   tajweed rules (Module 2)
 3. **Master** Tajweed via an AI recitation feedback engine — the core USP (Module 3)
 
 ## Architecture
@@ -43,8 +44,27 @@ qari/
 ├── mobile/                # Flutter app (Android + iOS)
 ├── infra/                 # Docker Compose, Dockerfiles, nginx, deploy configs
 ├── docs/                  # Architecture, API spec, ML roadmap
-└── scripts/               # Dev utilities
+└── scripts/               # Dev utilities (incl. build_local_corpus.py)
 ```
+
+### Local Quran corpus (offline reader)
+
+The mobile reader loads the full Quran from a bundled asset
+(`mobile/assets/quran_corpus.json.gz`) so it works offline and is never blank,
+even when `core-api`'s corpus DB is empty. Regenerate it with:
+
+```bash
+python3 scripts/build_local_corpus.py
+```
+
+This pulls all 114 surahs from the Quran.com API v4 (Uthmani text, EN/UR
+translations, word-by-word transliteration + meaning) and, importantly,
+fetches `text_uthmani_tajweed` to compute **per-word tajweed spans** (each
+letter range tagged with its rule: ghunnah, ikhfa, qalqalah, idgham, iqlab,
+madd, etc.). In the reader, toggle **Tajweed** in the settings bar to colour
+each letter by its rule (mutually exclusive with Grammar); tap a word to see
+its tajweed rule(s) in the detail sheet. The bundle is gzipped into the APK
+asset, so **rebuild the APK** after regenerating the corpus.
 
 ## Tech Stack
 
