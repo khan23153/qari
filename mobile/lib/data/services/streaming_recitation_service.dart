@@ -34,7 +34,10 @@ class StreamingRecitationService {
   /// (fixes the earlier "0s duration" payload bug and avoids chatty micro-frames).
   final BytesBuilder _audioBuffer = BytesBuilder();
   Timer? _flushTimer;
-  static const Duration _flushInterval = Duration(milliseconds: 300);
+  // Buffered PCM16 is flushed to the socket every 250ms so each WS frame
+  // carries a real, non-empty audio window (fixes the earlier "0s duration"
+  // payload bug and keeps the ASR fed continuously).
+  static const Duration _flushInterval = Duration(milliseconds: 250);
 
   final StreamController<RecitationStreamEvent> _events =
       StreamController<RecitationStreamEvent>.broadcast();

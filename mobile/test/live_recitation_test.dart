@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/data/models/recitation_stream_event.dart';
 import '../lib/features/recitation/presentation/pages/live_recitation_page.dart';
-import '../lib/features/recitation/presentation/widgets/memorization_ayah_view.dart';
+import '../lib/features/recitation/presentation/widgets/mushaf_reveal_view.dart';
 
 void main() {
   group('RecitationStreamEvent parsing', () {
@@ -64,7 +64,7 @@ void main() {
     });
   });
 
-  testWidgets('LiveRecitationPage setup shows Hifz toggle + Start button',
+  testWidgets('LiveRecitationPage setup has NO Memorization Mode toggle',
       (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
@@ -74,71 +74,75 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('AI Recitation'), findsOneWidget);
-    expect(find.text('Memorization Mode'), findsOneWidget);
+    // The Memorization Mode toggle + its Switch must be GONE.
+    expect(find.text('Memorization Mode'), findsNothing);
+    expect(find.byType(Switch), findsNothing);
+    // Reveal-as-you-speak is the only behaviour; Start is present.
     expect(find.text('Start Reciting'), findsOneWidget);
-    expect(find.text('Listen First'), findsOneWidget);
-    // The Hifz toggle is on by default.
-    expect(find.byType(Switch), findsOneWidget);
   });
 
-  testWidgets('MemorizationAyahView shows dots for pending, text for matched',
+  testWidgets('MushafRevealView starts blank (no words, no dots)',
       (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: MemorizationAyahView(
-            words: const ['بسم', 'الله', 'الرحمن'],
-            statuses: const {
-              0: LiveWordStatus.matched,
-              // index 1 & 2 pending → circular placeholder dots in Hifz mode
-            },
-            memorizationMode: true,
-          ),
+          body: MushafRevealView(words: const [], statuses: const []),
         ),
       ),
     );
     await tester.pumpAndSettle();
-
-    // Hidden (pending) words render as subtle circular placeholder dots.
-    final dots = find.byWidgetPredicate(
-      (w) =>
-          w is Container &&
-          w.decoration is BoxDecoration &&
-          (w.decoration as BoxDecoration).shape == BoxShape.circle,
-    );
-    expect(dots, findsWidgets);
-
-    // The matched word is revealed as visible Arabic text.
-    expect(find.text('بسم'), findsWidgets);
-    // Pending words are NOT yet rendered as text.
+    // No revealed words rendered.
+    expect(find.text('بسم'), findsNothing);
     expect(find.text('الله'), findsNothing);
-    expect(find.text('الرحمن'), findsNothing);
   });
 
-  testWidgets('MemorizationAyahView (tracking mode) shows all words unmasked',
+  testWidgets('MushafRevealView reveals words + inline ayah marker',
       (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: MemorizationAyahView(
-            words: const ['بسم', 'الله'],
-            statuses: const {},
-            memorizationMode: false,
+          body: MushafRevealView(
+            words: const ['بسم', 'الله', 'الرحمن'],
+            statuses: const [
+              LiveWordStatus.matched,
+              LiveWordStatus.matched,
+              LiveWordStatus.matched,
+            ],
+            // Ayah 1 ends after the 2nd word (index 1).
+            ayahBoundaries: const [1],
+            ayahLabels: const ['2'],
           ),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    // No dots in tracking mode — every word is shown as text.
-    final dots = find.byWidgetPredicate(
-      (w) =>
-          w is Container &&
-          w.decoration is BoxDecoration &&
-          (w.decoration as BoxDecoration).shape == BoxShape.circle,
-    );
-    expect(dots, findsNothing);
+    // All revealed words appear as continuous Arabic text.
     expect(find.text('بسم'), findsOneWidget);
     expect(find.text('الله'), findsOneWidget);
+    expect(find.text('الرحمن'), findsOneWidget);
+
+    // Inline end-of-ayah marker (۝ + verse number) appears between ayahs.
+    expect(find.text('۝2'), findsOneWidget);
+  });
+
+  testWidgets('MushafRevealView tints mispronounced words', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MushafRevealView(
+            words: const ['بسم', 'السلام'],
+            statuses: const [
+              LiveWordStatus.matched,
+              LiveWordStatus.error,
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('بسم'), findsOneWidget);
+    // The mispronounced word is still revealed (not hidden).
+    expect(find.text('السلام'), findsOneWidget);
   });
 }

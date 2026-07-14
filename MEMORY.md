@@ -822,8 +822,62 @@ APK with present Android SDK (`ANDROID_HOME=/home/Innocent/Android`) →
 `releases/app-release.apk`; `pubspec.yaml` + `releases/app_release.json` bumped
 to **v1.0.19+30**. Committed (amended into 48d9dc1). REMAINING: push to
 origin/main (needs GitHub PAT — none in this env) + deploy APK to VPS host
-`/app/releases` (OTA `/v1/app/download`) + reload nginx (WS timeouts) + ensure
-`recitation-api` serves `/ws/recitation/stream`.
+ `/app/releases` (OTA `/v1/app/download`) + reload nginx (WS timeouts) + ensure
+ `recitation-api` serves `/ws/recitation/stream`.
+
+## Session 2026-07-14 — Live Recitation rewritten to Mushaf (blank-canvas) layout
+User demanded the Hifz/dot UI be scrapped: remove the Memorization Mode toggle,
+start as a BLANK canvas (no dots/boxes), and reveal confirmed words one-by-one
+as a continuous RTL Mushaf (physical-book) flow with inline ۝ ayah markers.
+
+MOBILE CHANGES (mobile/lib):
+- NEW `features/recitation/presentation/widgets/mushaf_reveal_view.dart`
+  `MushafRevealView`: a single `Directionality(rtl)` + `Wrap(direction:
+  Axis.horizontal)` of revealed Arabic words. Starts EMPTY — no placeholder dots.
+  Inserts an inline circular `۝<verse>` ayah marker between ayahs (driven by
+  `ayahBoundaries` last-word indices). A `caretKey` zero-width anchor is placed
+  at the end so the page can auto-scroll the latest word. Correct words read in
+  plain `onSurface` book ink; error=red, skipped=amber.
+- REWROTE `features/recitation/presentation/pages/live_recitation_page.dart`:
+  deleted ALL Memorization Mode / Hifz / per-word `HifzWordState` machinery
+  (Switch, `_ModePill`, dots, flash). Added `_revealedWords` + `_revealedStatuses`
+  (both start `[]`) + `_revealedIndices` dedup set. On each `word` WS event the
+  confirmed Arabic word (`event.expected ?? event.spoken`) is appended (skips
+  empties/dupes). Live screen shows a blank canvas + a faint centered hint until
+  the first word; then the `MushafRevealView`. `_scrollToLatest()` measures the
+  caret via `Scrollable.of(ctx)` and, when it enters the bottom 30% of the
+  viewport, animates it to ~33% (upper third) — no fighting user scrolling.
+  Setup screen no longer has the toggle; it shows a plain RTL target preview.
+  `_LiveStatusBadge` simplified (no mode pill). `RecitationPage` legacy untouched.
+- `data/services/streaming_recitation_service.dart`: audio PCM flush cadence
+  300ms → **250ms** (explicit user requirement: send PCM every 250ms). Mic
+  permission is requested and the `record` stream stays open until Stop/Cancel
+  (already correct). `_start` now always sends `memorizationMode:false`.
+- DELETED `widgets/memorization_ayah_view.dart` (no longer referenced).
+- `test/live_recitation_test.dart`: rewritten — asserts NO "Memorization Mode"
+  text and NO `Switch` on setup; `MushafRevealView` starts blank, reveals words
+  + `۝2` marker, and tints error words. 8/8 pass.
+
+BACKEND (verified, mostly unchanged): `app/services/streaming_session.py`
+`duration_seconds = total_samples / sample_rate`. Confirmed via a direct
+`StreamingRecitationSession` harness: feeding a 3s PCM buffer yields
+`duration_seconds: 3.0` and a non-empty final result — so the "Duration: 0s"
+symptom is fixed as long as audio reaches the socket (it does: binary frames
+flushed every 250ms; `websocket.py` accumulates via `add_audio`). The prior
+"0%" was the stale/undeployed APK + empty backend reference data; with the
+reference bundle (`reference_data`, built from local corpus) the stub/Whisper
+transcriber reveals real words.
+
+VERIFY: `flutter analyze lib` → 0 errors (only pre-existing flashcard warning).
+`flutter test test/live_recitation_test.dart` → 8/8 pass. APK built with present
+Android SDK (`ANDROID_HOME=/home/Innocent/Android`) →
+`mobile/build/app/outputs/flutter-apk/app-release.apk` (75.5MB), copied to
+`releases/app-release.apk`; `pubspec.yaml` + `releases/app_release.json` bumped
+to **v1.0.20+31**. NOT committed/pushed (no git action requested; needs GitHub
+PAT). REMAINING: push to origin/main + deploy APK to VPS host `/app/releases`
+(OTA `/v1/app/download`) + reload nginx (WS timeouts) + ensure `recitation-api`
+serves `/ws/recitation/stream` with the reference bundle present.
+
 
 
 

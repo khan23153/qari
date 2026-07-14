@@ -1,12 +1,12 @@
 {
-  "version": "1.0.19",
-  "version_code": 30,
+  "version": "1.0.20",
+  "version_code": 31,
   "min_version": "1.0.0",
   "min_version_code": 1,
   "apk_url": "https://20.197.40.13/v1/app/download",
   "force_update": false,
-  "notes_en": "New: real-time AI Recitation with live word-by-word tracking and a Tarteel-style Memorization (Hifz) Mode. Recite hands-free while the app listens continuously, reveals each word as you get it right, and flags mispronounced or skipped words instantly.",
-  "notes_ur": "نیا: حقیقی وقت میں AI تلاوت، لفظ بہ لفظ لائیو ٹریکنگ اور ترتیل طرز کا حفظ موڈ۔ ہاتھ لگائے بغیر تلاوت کریں، ایپ مسلسل سنتی رہتی ہے، ہر درست لفظ ظاہر کرتی ہے اور غلط یا چھوٹے ہوئے الفاظ فوراً نشان زد کرتی ہے۔",
-  "notes_hi": "New: real-time AI Recitation with live word-by-word tracking and a Tarteel-style Memorization (Hifz) Mode. Recite hands-free while the app listens continuously, reveals each word as you get it right, and flags mispronounced or skipped words instantly.",
+  "notes_en": "New: AI Recitation now reveals the Quran as a continuous Mushaf (physical-book) layout. The page starts blank and words appear on it one-by-one, right-to-left, as the live engine confirms them — with inline ayah markers between verses. No placeholder dots, no toggle. Continuous mic streaming with PCM sent every 250ms.",
+  "notes_ur": "نیا: AI تلاوت اب قرآن کو مسلسل مصحف (فزیکل کتاب) لے آؤٹ میں دکھاتی ہے۔ صفحہ خالی شروع ہوتا ہے اور الفاظ ایک ایک کر کے دائیں سے بائیں نمودار ہوتے ہیں جیسے ہی انجن انہیں تصدیق کرتا ہے — آیات کے درمیان ان لائن نشانوں کے ساتھ۔ کوئی ڈاٹس یا ٹوگل نہیں۔ مسلسل مائیک اسٹریمنگ، PCM ہر 250ms میں۔",
+  "notes_hi": "New: AI Recitation now reveals the Quran as a continuous Mushaf (physical-book) layout. The page starts blank and words appear on it one-by-one, right-to-left, as the live engine confirms them — with inline ayah markers between verses. No placeholder dots, no toggle. Continuous mic streaming with PCM sent every 250ms.",
   "data_version": 1
 }
