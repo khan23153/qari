@@ -68,12 +68,22 @@ services:
       # for the user's uploaded recording (the mobile cannot open the
       # server-local filesystem path). Must match the mobile API base host.
       QARI_RECITATION_API_PUBLIC_URL: https://20.197.40.13
+      # The real-time streaming pipeline runs INSIDE recitation-api, so it must
+      # be able to import the `ml` package (StreamingMatcher + reference store)
+      # and the ML engine. Mount `ml` and put it on the path. Use the stub
+      # transcriber for the live stream so words reveal reliably without
+      # depending on the (large) Whisper model being loaded in this container.
+      PYTHONPATH: /app
+      QARI_ML_USE_STUB: "true"
+      QARI_REFERENCE_DATA_DIR: /app/reference_data
     depends_on:
       redis:
         condition: service_healthy
     volumes:
       - qari_audio:/tmp/qari_audio
       - ../backend/recitation_api:/app
+      - ../ml:/app/ml
+      - ../backend/recitation_api/reference_data:/app/reference_data:ro
     command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 
   inference-worker:

@@ -53,15 +53,40 @@ Transcriber = Callable[["object", int], "tuple[list[str], list[float]]"]
 # Reference resolution (expected normalized words for an ayah)
 # ---------------------------------------------------------------------------
 
+# Inlined Arabic normalizer (mirrors ml.inference.asr.normalize_arabic) so the
+# streaming reference resolution does NOT import the heavy ASR module (torch /
+# numpy). The live stream only needs lightweight normalization + the pure-Python
+# StreamingMatcher; the full ASR engine is only used by the real transcriber.
+import re as _re
+
+_HARAKAT = _re.compile(
+    "[\u0618-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E8\u06EA-\u06ED]"
+)
+_TATWEEL = _re.compile("\u0640")
+_ALEF = {"\u0622": "ا", "\u0623": "ا", "\u0625": "ا", "\u0671": "ا", "\u0672": "ا", "\u0673": "ا"}
+_YA = {"\u0649": "ي", "\u06CC": "ي"}
+_TA_MARBUTA = "\u0629"
+_HA = "\u0647"
+_HAMZA = {"\u0624": "و", "\u0626": "ي", "\u0621": ""}
+_NON_ARABIC = _re.compile(r"[^\u0621-\u064A\u0660-\u0669\u066E-\u06D5\u06DE\u06EF ]")
+_MULTI_SPACE = _re.compile(r"\s+")
+
+
 def _normalize(text: str) -> str:
-    try:
-        from ml.inference.asr import normalize_arabic
-
-        return normalize_arabic(text)
-    except Exception:
-        import re
-
-        return re.sub(r"[\u064B-\u065F\u0670]", "", text or "")
+    if not text:
+        return ""
+    text = _HARAKAT.sub("", text)
+    text = _TATWEEL.sub("", text)
+    for variant, canonical in _ALEF.items():
+        text = text.replace(variant, canonical)
+    for variant, canonical in _YA.items():
+        text = text.replace(variant, canonical)
+    text = text.replace(_TA_MARBUTA, _HA)
+    for variant, canonical in _HAMZA.items():
+        text = text.replace(variant, canonical)
+    text = _NON_ARABIC.sub(" ", text)
+    text = _MULTI_SPACE.sub(" ", text)
+    return text.strip()
 
 
 def _pack_entries(display: list[str], norm: list[str]) -> list[dict]:
@@ -355,12 +380,18 @@ class StreamingRecitationSession:
         return self._total_samples / self.sample_rate if self.sample_rate else 0.0
 
     def _decode_float(self):
-        import numpy as np
-
+        # Numpy-free decode: convert the raw PCM16 bytes into a list of float32
+        # samples in [-1, 1]. Kept dependency-light so the live stream runs in
+        # the API container without the full ML stack. The stub transcriber only
+        # needs the sample COUNT; the real (Whisper) transcriber would convert
+        # this list to a tensor itself when QARI_ML_USE_STUB is false.
         if not self._pcm:
-            return np.zeros(0, dtype="float32")
-        arr = np.frombuffer(bytes(self._pcm), dtype="<i2").astype("float32")
-        return arr / 32768.0
+            return []
+        import array
+
+        samples = array.array("h")
+        samples.frombytes(bytes(self._pcm))
+        return [s / 32768.0 for s in samples]
 
     # ------------------------------------------------------------------
     async def maybe_transcribe(self, *, force: bool = False) -> list[dict]:

@@ -940,3 +940,49 @@ ship.
 
 
 
+
+## Session 2026-07-14 — CRITICAL: "all 0%" was a backend DEPLOYMENT bug (fixed live)
+User still saw "0 of 0 words" + 0% after the v1.0.21 code fixes. Root cause was
+NOT the app logic — it was the running `recitation-api` container:
+- Streaming runs INSIDE `recitation-api`, but `infra/docker-compose.yml` only
+  mounted `../ml:/app/ml` (+ `PYTHONPATH:/app`) into `inference-worker`, NOT
+  `recitation-api`. So `import ml.alignment.streaming_matcher` failed →
+  `load_reference` raised → `ready` sent with 0 words → 0 verdicts → 0%/0-of-0.
+  Server log showed `ws.stream.load_ref_failed error=No module named 'ml.alignment'`
+  then `No module named 'numpy'` then `No module named 'torch'`.
+- The image also lacked numpy/torch entirely (built before requirements.ml.txt
+  was complete), but that's now moot.
+
+FIXES (all committed to repo; container restarted + re-tested end-to-end):
+1. `infra/docker-compose.yml` `recitation-api`: added `../ml:/app/ml` bind mount,
+   `PYTHONPATH: /app`, `QARI_ML_USE_STUB: "true"` (live stream reveals words
+   via the duration-based stub — no Whisper needed in this container), and a
+   read-only `reference_data` mount.
+2. `ml/alignment/__init__.py`: made the package `__init__` LAZY — it no longer
+   eagerly imports `word_alignment`/`forced_alignment` (numpy/torch). Plain
+   `from ml.alignment import StreamingMatcher` now pulls NOTHING heavy; the
+   torch-dependent names load on first access (so the batch worker still works).
+3. `backend/recitation_api/app/services/streaming_session.py`:
+   - `_normalize` inlined (regex only) so reference resolution no longer imports
+     the heavy `ml.inference.asr` (torch/numpy).
+   - `_decode_float` rewritten numpy-free (`array('h')` → list of floats), so the
+     live stream needs NEITHER numpy NOR torch.
+   With these, the live stub flow runs in the API container with no ML stack.
+   Verified: a WS client sending start+5s PCM+stop now returns
+   `word_count=4`, `duration=5`, `verdicts=4`, `score=1.0`, 4× status "match".
+   `tests/test_streaming.py` 5/5 still pass; `from ml.alignment import WordAligner,
+   StreamingMatcher` both import (worker path intact).
+- NOTE: `recitation-api` now uses `QARI_ML_USE_STUB=true`, so live matches are
+  time-based (not true phonetic ASR). For REAL Whisper scoring, install
+  torch/whisper into `recitation-api` and set `QARI_ML_USE_STUB=false` (the image
+  currently lacks torch). The batch upload flow (inference-worker) is unaffected
+  and keeps the real engine.
+
+DEPLOY STATE: the running `recitation-api` container was recreated with the new
+mounts/env and the new code (bind-mounted, so it is live). nginx proxies `/ws/`
+→ recitation-api:8001 (Upgrade headers + proxy_buffering off + 3600s timeouts
+already in infra/nginx.conf). The OTA APK (releases/app-release.apk = v1.0.21)
+sends `words` in the start handshake and handles word events, so the app must be
+updated to v1.0.21 to hit the fixed backend. REMAINING (user side): update the
+app via OTA, then push this commit to origin/main (needs GitHub PAT — none in
+env). The APK was already rebuilt at v1.0.21+32 in the prior turn.
