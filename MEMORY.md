@@ -503,7 +503,13 @@ Added an optional Urdu translation feature to the Quran reader.
   constructs it from the constant).
 - Verified: `flutter analyze` clean on changed files; `ayah_widget_visibility_test`
   passes. `reader_render_test` FAILS but is pre-existing (fires a real 90s Dio
-  timer in initState; fails before this change too). APK not rebuilt here
-  (no Android SDK); user must build + deploy + run `alembic upgrade head`.
+  timer in initState; fails before this change too).
+- BUILT + COMMITTED + PUSHED (commit ce2ea78): APK rebuilt (74.4MB),
+  copied to `releases/app-release.apk`, bumped to **v1.0.14+25**
+  (`pubspec.yaml` + `releases/app_release.json` with Urdu tarjuma notes),
+  pushed to origin/main. Large-APK (>50MB) warning as before — Git LFS later.
+- DEPLOY: VPS needs `alembic upgrade head` (new `ayahs.audio_url_ur` column)
+  and the new APK deployed to 20.197.40.13 (`/v1/app/download`) for OTA users
+  to get the Urdu tarjuma feature.
 
 
