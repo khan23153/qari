@@ -6,6 +6,7 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/serene_decorations.dart';
 import '../../../../core/providers.dart';
+import '../../../../core/navigation/app_navigator.dart';
 import '../../../../data/services/local_storage_service.dart';
 import '../../../../data/services/audio_service.dart';
 import '../widgets/streak_calendar.dart';
@@ -39,7 +40,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   // Stats — start at zero (fresh-user defaults) and are filled from the
   // server. We NEVER hardcode fake progress; mismatched numbers between the
   // Home and Profile screens came from hardcoded values here.
-  String _displayName = 'Learner';
+  String _displayName = '';
   bool _isLoadingStats = true;
   int _totalXp = 0;
   int _currentStreak = 0;
@@ -66,7 +67,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         setState(() {
           _displayName = user.displayName?.isNotEmpty == true
               ? user.displayName!
-              : 'Learner';
+              : (user.email?.split('@').first ?? '');
           _totalXp = stats.totalXp;
           _currentStreak = stats.currentStreak;
           _lessonsCompleted = stats.lessonsCompleted;
@@ -223,8 +224,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       MaterialPageRoute(
         builder: (_) => LoginPage(
           onAuthenticated: (result) {
-            if (!mounted) return;
-            Navigator.of(context).pushAndRemoveUntil(
+            // Use the app-wide root navigator (not this screen's `context`,
+            // which is disposed once we navigate away) so the post-signup
+            // landing page is reached reliably.
+            rootNavigatorKey.currentState?.pushAndRemoveUntil(
               MaterialPageRoute(
                 builder: (_) => result.isOnboarded
                     ? const HomePage()

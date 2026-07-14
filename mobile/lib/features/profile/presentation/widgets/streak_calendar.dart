@@ -18,14 +18,13 @@ class StreakCalendar extends StatelessWidget {
     final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
     final firstWeekday = DateTime(now.year, now.month, 1).weekday;
 
-    // Sample active days (every day this week + some previous)
+    // Active days are derived strictly from the user's current streak
+    // (no mock/historical data), so a brand-new account shows an empty calendar.
     final activeDays = <int>{};
     for (var i = 0; i < currentStreak; i++) {
       final day = now.day - i;
       if (day > 0) activeDays.add(day);
     }
-    // Add some historical active days
-    activeDays.addAll([3, 7, 10, 14, 18, 22, 25]);
 
     return Container(
       padding: const EdgeInsets.all(20),

@@ -8,6 +8,7 @@ import 'package:firebase_core/firebase_core.dart';
 
 import 'core/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
+import 'core/navigation/app_navigator.dart';
 import 'core/providers.dart';
 import 'data/services/local_storage_service.dart';
 import 'data/services/api_client.dart';
@@ -112,7 +113,7 @@ class _QariAppState extends ConsumerState<QariApp> {
   Widget? _initialPage;
   bool _updateShown = false;
   final AppUpdateService _updateService = AppUpdateService(ApiClient());
-  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  final GlobalKey<NavigatorState> _navigatorKey = rootNavigatorKey;
 
   @override
   void initState() {

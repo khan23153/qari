@@ -25,7 +25,13 @@ OUT = Path(__file__).resolve().parent.parent / "mobile" / "assets" / "quran_corp
 
 # Verified Quran.com translation resource IDs.
 EN_RES = 84   # English (Saheeh International-style)
-UR_RES = 97   # Urdu
+# Urdu: Fateh Muhammad Jalandhari (resource 234 / slug ur-fatah-muhammad-jalandhari).
+# This MUST match the Urdu tarjuma AUDIO the app plays (everyayah.com
+# urdu_shamshad_ali_khan_46kbps), which is a recitation of Jalandhari's
+# translation — alquran.cloud edition "ur.jalandhry.text". Using any other
+# Urdu translator (e.g. Maududi, resource 97) makes the read text disagree
+# with the heard audio. Do not change without re-checking the audio source.
+UR_RES = 234  # Urdu — Fateh Muhammad Jalandhari
 PER_PAGE = 300
 RATE_DELAY = 0.25
 

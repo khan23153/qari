@@ -512,4 +512,76 @@ Added an optional Urdu translation feature to the Quran reader.
   and the new APK deployed to 20.197.40.13 (`/v1/app/download`) for OTA users
   to get the Urdu tarjuma feature.
 
+## Session 2026-07-14 — auth/state/UI bug fixes (5 items)
+Mobile-only fixes (no backend change needed; signup already returns JWT):
+1. **Login validation** — `_AuthForm` password validator now enforces min 8
+   chars (email regex already present) so empty/short passwords can't submit.
+2. **'Learner' fallback removed** — `profile_page` `_displayName` defaults to
+   `''` and falls back to the email local-part (not hardcoded 'Learner'); it
+   binds to `UserModel.displayName` from `/me`.
+3. **Hardcoded mock data removed**:
+   - `streak_calendar.dart`: dropped `activeDays.addAll([3,7,10,14,18,22,25])`;
+     calendar now derives only from `currentStreak` (empty for new users).
+   - `learning_path_map.dart`: sample path reset so only node 1 is `current`,
+     nodes 2–10 `locked` (was 1–4 completed + 5 stuck).
+   - `badges_grid.dart`: rewritten to be data-driven via `earnedIds` (default
+     empty) — no badges pre-unlocked. Backend `UserBadge` is empty on signup.
+4. **Audio Play/Pause toggle** — `quran_reader_page` now tracks real playback
+   via `_isAudioPlaying` (from `playerStateStream`); per-ayah button shows
+   "Play" when paused / "Pause" when playing (was stuck on "Pause").
+5. **Reset & signup flow** — root cause was `_resetLocalData`'s `onAuthenticated`
+   capturing the disposed ProfilePage `context`, crashing post-signup nav.
+   Added `core/navigation/app_navigator.dart` (`rootNavigatorKey`) used by
+   `main.dart` and the reset flow. `clearAll()` already flushes the auth token;
+   backend signup already returns a JWT for immediate login.
+- Verified: `flutter analyze` clean (no errors); `ayah_widget_visibility_test`
+   passes. `reader_render_test` still pre-fails (pre-existing 90s Dio timer).
+
+## Session 2026-07-14 — Urdu Tarjuma AUDIO not playing (root cause + fix)
+User: "tarjuma showing now but audio not coming". Text shows (local corpus) but
+NO audio at all (Arabic included). ROOT CAUSES:
+1. **Wrong CDN path (the real bug)**: `AppConstants.urduTranslationCdnUrl` was
+   `https://everyayah.com/data/urdu_shamshad_ali_khan_46kbps` → **404**. The
+   Urdu tarjuma folder actually lives under everyayah's `/data/translations/`
+   path: `https://everyayah.com/data/translations/urdu_shamshad_ali_khan_46kbps`
+   (verified: 001001/001007/002001/114001/002286 all HTTP 200 `audio/mpeg`).
+   FIXED in app_constants.dart (added `/translations/` segment).
+2. **Dead URL killed the whole queue**: the Urdu URL was concatenated into the
+   SAME `ConcatenatingAudioSource` as Arabic. A dead/404 URL made just_audio
+   throw on `setAudioSource`, so the entire sequence failed → zero audio.
+   HARDENED in audio_service.dart: added `isUrduTranslationAvailable()` which
+   probes the CDN (Range GET on 1:1, cached) and returns false on 404/timeout;
+   `quran_reader_page._playAyahAudio` now only enqueues Urdu URLs when the probe
+   passes, falling back to Arabic-only otherwise. So Arabic always plays.
+- Rebuilt? NOT yet — this env has no Android SDK/NDK (cmdline-tools download
+   blocked). User must rebuild + deploy: `cd mobile && flutter pub get &&
+   flutter build apk --release` → copy to `releases/` → deploy APK to VPS
+   20.197.40.13 (`/v1/app/download`). No backend/VPS change needed (pure
+   frontend; source is public everyayah.com, no auth, CORS-open for media).
+- `scripts/build_local_corpus.py` `URDU_AUDIO_BASE_URL` env (if used to bake
+   `audio_url_ur` into the corpus) should also use the `/translations/` path;
+   runtime already derives from the corrected constant.
+
+## Session 2026-07-14 — Urdu TEXT must match the AUDIO (Jalandhari fix)
+The Shamshad Ali Khan Urdu tarjuma AUDIO is a recitation of **Fateh Muhammad
+Jalandhari's** translation (alquran.cloud edition `ur.jalandhry.text`). The
+bundled Urdu text was the WRONG translator — Quran.com v4 resource **97 =
+"Tafheem e Qur'an - Syed Abu Ali Maududi"** (`ur-al-maududi`) — so users read
+Maududi but heard Jalandhari. ROOT CAUSE: `scripts/build_local_corpus.py`
+`UR_RES = 97`. FIX:
+- `UR_RES` → **234** (`ur-fatah-muhammad-jalandhari` = Jalandhari) in
+  build_local_corpus.py, with a comment pinning it to the audio source. This is
+  the Quran.com v4 equivalent of alquran.cloud `ur.jalandhry.text`.
+- Regenerated `mobile/assets/quran_corpus.json` (41.6 MB) and gzipped over
+  `quran_corpus.json.gz` (4.37 MB). Verified 1:1 = "شروع الله کا نام لے کر جو بڑا
+  مہربان نہایت رحم والا ہے" (Jalandhari, matches audio).
+- Also updated the 5 hardcoded fallback sample ayahs (surah 1) `translationUr`
+  in quran_reader_page.dart from Maududi-style to Jalandhari for consistency
+  (these only show if the corpus fails to load).
+- Backend `translation_ur` comes from its (empty) corpus DB; no override of the
+  local Jalandhari text. If backend is ever seeded, seed it with Jalandhari too.
+- NOTE: `quran_corpus.json.gz` is a bundled APK asset — must REBUILD the APK
+  (`flutter build apk --release`) to ship the corrected text. No backend change.
+
+
 

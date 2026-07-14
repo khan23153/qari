@@ -57,6 +57,10 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
   // Used to map the player's sequence index back to the highlighted ayah.
   int _audioItemsPerAyah = 1;
 
+  // Tracks the audio player's actual playing state so the per-ayah Play/Pause
+  // button reflects reality (shows "Play" when paused, "Pause" when playing).
+  bool _isAudioPlaying = false;
+
   // Whole-surah (sequential) playback state
   bool _isSurahSession = false;
   int _surahStartIndex = 0;
@@ -103,14 +107,19 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
       });
     });
 
-    // Reset the session once playback reaches the end of the surah.
+    // Reset the session once playback reaches the end of the surah, and keep
+    // the Play/Pause button in sync with the player's real playing state.
     _stateSub = _audioService.playerStateStream.listen((state) {
       if (!mounted) return;
+      _isAudioPlaying = state.playing;
       if (state.processingState == ProcessingState.completed) {
         setState(() {
           _playingAyahIndex = null;
           _isSurahSession = false;
+          _isAudioPlaying = false;
         });
+      } else {
+        setState(() {});
       }
     });
   }
@@ -254,6 +263,14 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
     // is followed by its Urdu tarjuma audio so the Arabic recitation and the
     // Urdu translation play back-to-back for every ayah in the surah.
     _audioItemsPerAyah = _playTranslationAudio ? 2 : 1;
+    // Only enqueue Urdu audio if its CDN actually serves files. A dead Urdu URL
+    // concatenated into the queue makes just_audio throw and kills ALL audio
+    // (Arabic included), so we probe first and fall back to Arabic-only.
+    bool urduAvailable = false;
+    if (_playTranslationAudio) {
+      urduAvailable = await _audioService.isUrduTranslationAvailable();
+      if (!urduAvailable) _audioItemsPerAyah = 1;
+    }
     final urls = <String>[];
     for (final a in _ayahs.sublist(index)) {
       urls.add(_audioService.buildAyahUrl(
@@ -261,7 +278,7 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
         ayahNumber: a.ayahNumber,
         reciter: _selectedQari,
       ));
-      if (_playTranslationAudio) {
+      if (urduAvailable) {
         final urduUrl = a.audioUrlUr ??
             _audioService.buildUrduTranslationUrl(
               surahNumber: a.surahNumber,
@@ -370,7 +387,8 @@ class _QuranReaderPageState extends ConsumerState<QuranReaderPage> {
                             itemCount: _ayahs.length,
                             itemBuilder: (context, index) {
                               final ayah = _ayahs[index];
-                              final isPlaying = _playingAyahIndex == index;
+                              final isPlaying =
+                                  (_playingAyahIndex == index) && _isAudioPlaying;
 
                               return AyahWidget(
                                 ayah: ayah,
@@ -829,7 +847,7 @@ List<AyahModel> _generateSampleAyahs(int surahNumber) {
         ayahNumber: 1,
         ayahText: 'بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ',
         translationEn: 'In the name of Allah, the Entirely Merciful, the Especially Merciful.',
-        translationUr: 'اللہ کے نام سے جو نہایت مہربان رحم والا ہے',
+        translationUr: 'شروع الله کا نام لے کر جو بڑا مہربان نہایت رحم والا ہے',
         transliteration: 'bismi llāhi r-raḥmāni r-raḥīmi',
         isBismillah: true,
         words: [
@@ -845,7 +863,7 @@ List<AyahModel> _generateSampleAyahs(int surahNumber) {
         ayahNumber: 2,
         ayahText: 'ٱلْحَمْدُ لِلَّهِ رَبِّ ٱلْعَٰلَمِينَ',
         translationEn: 'All praise is due to Allah, Lord of the worlds.',
-        translationUr: 'تمام تعریفیں اللہ ہی کے لیے ہیں جو تمام جہانوں کا پروردگار ہے',
+        translationUr: 'سب طرح کی تعریف خدا ہی کو (سزاوار) ہے جو تمام مخلوقات کا پروردگار ہے',
         transliteration: 'al-ḥamdu lillāhi rabbi l-ʿālamīna',
         words: [
           WordModel(wordId: 5, surahNumber: 1, ayahNumber: 2, wordNumber: 1, text: 'ٱلْحَمْدُ', transliteration: 'al-ḥamdu', translationEn: 'All praise', posGroup: 'ism', rootArabic: 'حمد'),
@@ -860,7 +878,7 @@ List<AyahModel> _generateSampleAyahs(int surahNumber) {
         ayahNumber: 3,
         ayahText: 'ٱلرَّحْمَٰنِ ٱلرَّحِيمِ',
         translationEn: 'The Entirely Merciful, the Especially Merciful.',
-        translationUr: 'بہت مہربان نہایت رحم والا',
+        translationUr: 'بڑا مہربان نہایت رحم والا',
         transliteration: 'ar-raḥmāni r-raḥīmi',
         words: [
           WordModel(wordId: 9, surahNumber: 1, ayahNumber: 3, wordNumber: 1, text: 'ٱلرَّحْمَٰنِ', transliteration: 'ar-raḥmāni', translationEn: 'the Most Gracious', posGroup: 'ism', rootArabic: 'رحم'),
@@ -873,7 +891,7 @@ List<AyahModel> _generateSampleAyahs(int surahNumber) {
         ayahNumber: 4,
         ayahText: 'مَٰلِكِ يَوْمِ ٱلدِّينِ',
         translationEn: 'Sovereign of the Day of Recompense.',
-        translationUr: 'روز جزا کا مالک',
+        translationUr: 'انصاف کے دن کا حاکم',
         transliteration: 'māliki yawmi d-dīni',
         words: [
           WordModel(wordId: 11, surahNumber: 1, ayahNumber: 4, wordNumber: 1, text: 'مَٰلِكِ', transliteration: 'māliki', translationEn: 'Master/King', posGroup: 'ism', rootArabic: 'ملك'),
@@ -887,7 +905,7 @@ List<AyahModel> _generateSampleAyahs(int surahNumber) {
         ayahNumber: 5,
         ayahText: 'إِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ',
         translationEn: 'It is You we worship and You we ask for help.',
-        translationUr: 'ہم تیری ہی عبادت کرتے ہیں اور تیری ہی مدد چاہتے ہیں',
+        translationUr: '(اے پروردگار) ہم تیری ہی عبادت کرتے ہیں اور تجھ ہی سے مدد مانگتے ہیں',
         transliteration: 'iyyāka naʿbudu wa-iyyāka nastaʿīnu',
         words: [
           WordModel(wordId: 14, surahNumber: 1, ayahNumber: 5, wordNumber: 1, text: 'إِيَّاكَ', transliteration: 'iyyāka', translationEn: 'You (alone)', posGroup: 'ism', rootArabic: 'اي'),

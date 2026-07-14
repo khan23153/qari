@@ -1,5 +1,7 @@
+import 'dart:typed_data';
 import 'package:just_audio/just_audio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:dio/dio.dart';
 import '../../core/constants/app_constants.dart';
 import 'local_storage_service.dart';
 
@@ -27,6 +29,14 @@ class AudioService {
   double _currentSpeed = AppConstants.defaultPlaybackSpeed;
   String? _currentUrl;
   bool _isSequential = false;
+
+  /// Cached probe result for the Urdu translation audio CDN. Null = not yet
+  /// probed. We never assume the CDN is up: a dead Urdu URL concatenated into
+  /// the playback queue makes just_audio throw and kills the WHOLE sequence
+  /// (including Arabic), so we only enqueue Urdu audio once we've verified the
+  /// source actually serves files.
+  bool? _urduCdnAvailable;
+  final Dio _probeDio = Dio();
 
   AudioService() {
     _init();
@@ -70,6 +80,51 @@ class AudioService {
     final paddedAyah = ayahNumber.toString().padLeft(3, '0');
     return '${AppConstants.urduTranslationCdnUrl}/$paddedSurah$paddedAyah.mp3';
   }
+
+  /// Probes the Urdu translation audio CDN once and caches the result.
+  ///
+  /// Returns true only if the source actually serves audio for a sample ayah
+  /// (1:1). When false, callers must NOT enqueue Urdu URLs — a dead URL in the
+  /// concatenated playback queue makes just_audio throw and silently breaks all
+  /// audio (Arabic included). A 404 here means the configured CDN is dead
+  /// (e.g. the bundled `urdu_shamshad_ali_khan_46kbps` path is not hosted on
+  /// everyayah.com) and the operator needs to point [AppConstants.urduTranslationCdnUrl]
+  /// at a real, per-ayah Urdu audio source.
+  Future<bool> isUrduTranslationAvailable() async {
+    if (_urduCdnAvailable != null) return _urduCdnAvailable!;
+    if (AppConstants.urduTranslationCdnUrl.isEmpty) {
+      _urduCdnAvailable = false;
+      return false;
+    }
+    final url = buildUrduTranslationUrl(surahNumber: 1, ayahNumber: 1);
+    if (url == null) {
+      _urduCdnAvailable = false;
+      return false;
+    }
+    try {
+      final resp = await _probeDio
+          .get<Uint8List>(
+            url,
+            options: Options(
+              headers: {'Range': 'bytes=0-1'},
+              responseType: ResponseType.bytes,
+              sendTimeout: const Duration(seconds: 8),
+              receiveTimeout: const Duration(seconds: 8),
+              // Accept any status so we can inspect the code ourselves.
+              validateStatus: (_) => true,
+            ),
+          )
+          .timeout(const Duration(seconds: 8));
+      _urduCdnAvailable = resp.statusCode == 200 || resp.statusCode == 206;
+    } catch (_) {
+      _urduCdnAvailable = false;
+    }
+    return _urduCdnAvailable!;
+  }
+
+  /// Forces the next [isUrduTranslationAvailable] call to re-probe (e.g. after
+  /// the operator updates [AppConstants.urduTranslationCdnUrl]).
+  void resetUrduTranslationAvailability() => _urduCdnAvailable = null;
 
   /// Builds the audio URL for a full surah.
   String buildSurahUrl({

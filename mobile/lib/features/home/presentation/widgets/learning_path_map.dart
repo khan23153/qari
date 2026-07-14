@@ -17,12 +17,14 @@ class LearningPathMap extends StatelessWidget {
   const LearningPathMap({super.key, this.nodes, this.onNodeTap});
 
   // Sample path nodes for demonstration when no server data is available.
+  // A brand-new account starts fresh: only the first foundational lesson is
+  // unlocked (current); every other module is locked until earned.
   static const _sampleNodes = [
-    _PathNodeData(id: '1', label: 'Arabic Letters', type: 'lesson', state: 'completed', xp: 10),
-    _PathNodeData(id: '2', label: 'Harakat', type: 'lesson', state: 'completed', xp: 10),
-    _PathNodeData(id: '3', label: 'Quiz 1', type: 'quiz', state: 'completed', xp: 15),
-    _PathNodeData(id: '4', label: 'Ism (Nouns)', type: 'lesson', state: 'completed', xp: 10),
-    _PathNodeData(id: '5', label: "Fi'l (Verbs)", type: 'lesson', state: 'current', xp: 10),
+    _PathNodeData(id: '1', label: 'Arabic Letters', type: 'lesson', state: 'current', xp: 10),
+    _PathNodeData(id: '2', label: 'Harakat', type: 'lesson', state: 'locked', xp: 10),
+    _PathNodeData(id: '3', label: 'Quiz 1', type: 'quiz', state: 'locked', xp: 15),
+    _PathNodeData(id: '4', label: 'Ism (Nouns)', type: 'lesson', state: 'locked', xp: 10),
+    _PathNodeData(id: '5', label: "Fi'l (Verbs)", type: 'lesson', state: 'locked', xp: 10),
     _PathNodeData(id: '6', label: 'Harf (Particles)', type: 'lesson', state: 'locked', xp: 10),
     _PathNodeData(id: '7', label: 'Quiz 2', type: 'quiz', state: 'locked', xp: 15),
     _PathNodeData(id: '8', label: 'Checkpoint', type: 'checkpoint', state: 'locked', xp: 25),

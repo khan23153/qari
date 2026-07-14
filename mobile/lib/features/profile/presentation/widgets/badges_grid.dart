@@ -2,25 +2,35 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 /// Badges grid — shows achievement badges with earned/locked states.
+///
+/// The earned set is driven by data: [earnedIds] holds the badge ids the
+/// backend reports as unlocked for this user. A brand-new account passes an
+/// empty set, so every badge starts locked (no mock "earned" state).
 class BadgesGrid extends StatelessWidget {
   final ThemeData theme;
+  final Set<String> earnedIds;
 
-  const BadgesGrid({super.key, required this.theme});
+  const BadgesGrid({
+    super.key,
+    required this.theme,
+    this.earnedIds = const {},
+  });
 
   static const _badges = [
-    _Badge(icon: 'school', title: 'First Lesson', desc: 'Complete your first lesson', earned: true),
-    _Badge(icon: 'fire', title: '7-Day Streak', desc: '7 day learning streak', earned: true),
-    _Badge(icon: 'book', title: 'Quran Reader', desc: 'Read 50 ayahs', earned: true),
-    _Badge(icon: 'mic', title: 'First Recitation', desc: 'Complete a recitation session', earned: true),
-    _Badge(icon: 'style', title: 'Flashcard Pro', desc: 'Review 100 flashcards', earned: true),
-    _Badge(icon: 'star', title: 'Perfect Score', desc: 'Get 100% on a recitation', earned: false),
-    _Badge(icon: 'root', title: 'Root Explorer', desc: 'Explore 10 roots', earned: false),
-    _Badge(icon: 'tajweed', title: 'Tajweed Master', desc: 'Learn all tajweed rules', earned: false),
-    _Badge(icon: 'streak30', title: '30-Day Streak', desc: '30 day learning streak', earned: false),
+    _Badge(id: 'first_lesson', icon: 'school', title: 'First Lesson', desc: 'Complete your first lesson'),
+    _Badge(id: '7_day_streak', icon: 'fire', title: '7-Day Streak', desc: '7 day learning streak'),
+    _Badge(id: 'quran_reader', icon: 'book', title: 'Quran Reader', desc: 'Read 50 ayahs'),
+    _Badge(id: 'first_recitation', icon: 'mic', title: 'First Recitation', desc: 'Complete a recitation session'),
+    _Badge(id: 'flashcard_pro', icon: 'style', title: 'Flashcard Pro', desc: 'Review 100 flashcards'),
+    _Badge(id: 'perfect_score', icon: 'star', title: 'Perfect Score', desc: 'Get 100% on a recitation'),
+    _Badge(id: 'root_explorer', icon: 'root', title: 'Root Explorer', desc: 'Explore 10 roots'),
+    _Badge(id: 'tajweed_master', icon: 'tajweed', title: 'Tajweed Master', desc: 'Learn all tajweed rules'),
+    _Badge(id: '30_day_streak', icon: 'streak30', title: '30-Day Streak', desc: '30 day learning streak'),
   ];
 
   @override
   Widget build(BuildContext context) {
+    final earnedCount = _badges.where((b) => earnedIds.contains(b.id)).length;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -45,7 +55,7 @@ class BadgesGrid extends StatelessWidget {
               ),
               const Spacer(),
               Text(
-                '${_badges.where((b) => b.earned).length}/${_badges.length}',
+                '$earnedCount/${_badges.length}',
                 style: theme.textTheme.labelMedium?.copyWith(
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                 ),
@@ -61,7 +71,8 @@ class BadgesGrid extends StatelessWidget {
             crossAxisSpacing: 12,
             childAspectRatio: 0.85,
             children: _badges.map((badge) {
-              return _BadgeTile(badge: badge, theme: theme)
+              final earned = earnedIds.contains(badge.id);
+              return _BadgeTile(badge: badge, earned: earned, theme: theme)
                   .animate()
                   .fadeIn(
                     delay: Duration(milliseconds: _badges.indexOf(badge) * 50),
@@ -76,38 +87,43 @@ class BadgesGrid extends StatelessWidget {
 }
 
 class _Badge {
+  final String id;
   final String icon;
   final String title;
   final String desc;
-  final bool earned;
 
   const _Badge({
+    required this.id,
     required this.icon,
     required this.title,
     required this.desc,
-    required this.earned,
   });
 }
 
 class _BadgeTile extends StatelessWidget {
   final _Badge badge;
+  final bool earned;
   final ThemeData theme;
 
-  const _BadgeTile({required this.badge, required this.theme});
+  const _BadgeTile({
+    required this.badge,
+    required this.earned,
+    required this.theme,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final color = badge.earned ? Colors.amber.shade700 : theme.colorScheme.outline.withValues(alpha: 0.3);
+    final color = earned ? Colors.amber.shade700 : theme.colorScheme.outline.withValues(alpha: 0.3);
 
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: badge.earned
+        color: earned
             ? Colors.amber.withValues(alpha: 0.08)
             : theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: badge.earned
+          color: earned
               ? Colors.amber.withValues(alpha: 0.3)
               : theme.colorScheme.outline.withValues(alpha: 0.1),
         ),
@@ -125,7 +141,7 @@ class _BadgeTile extends StatelessWidget {
             badge.title,
             style: theme.textTheme.labelSmall?.copyWith(
               fontWeight: FontWeight.w600,
-              color: badge.earned
+              color: earned
                   ? theme.colorScheme.onSurface
                   : theme.colorScheme.onSurface.withValues(alpha: 0.4),
             ),
@@ -133,7 +149,7 @@ class _BadgeTile extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
-          if (!badge.earned)
+          if (!earned)
             Icon(Icons.lock_outline_rounded, size: 12, color: color.withValues(alpha: 0.5)),
         ],
       ),

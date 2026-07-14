@@ -26,6 +26,8 @@ mobile/.dart_tool/
 mobile/.packages
 mobile/.pub-cache/
 mobile/.flutter-plugins
+# Generated (uncompressed) corpus; only the .gz asset is committed
+mobile/assets/quran_corpus.json
 mobile/.flutter-plugins-dependencies
 mobile/build/
 mobile/ios/Pods/

@@ -31,8 +31,10 @@ class AppConstants {
   /// everyayah.com per-ayah MP3 layout used for Arabic recitation; the app
   /// constructs `{base}/{surah}{ayah}.mp3` (3-digit zero-padded) just like
   /// [audioCdnUrl] so Urdu tarjuma audio can be queued after the Arabic.
+  /// NOTE: the Urdu tarjuma folder lives under everyayah's `/data/translations/`
+  /// path — not directly under `/data/` (that returns 404).
   static const String urduTranslationCdnUrl =
-      'https://everyayah.com/data/urdu_shamshad_ali_khan_46kbps';
+      'https://everyayah.com/data/translations/urdu_shamshad_ali_khan_46kbps';
   static const int apiTimeoutSeconds = 90;
   /// Longer timeout specifically for the (potentially large) recitation audio
   /// upload + long-running AI analysis poll.
