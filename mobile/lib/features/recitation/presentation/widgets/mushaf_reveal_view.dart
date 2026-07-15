@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../data/models/recitation_stream_event.dart';
+import '../../../../data/models/word_model.dart';
 
 /// A continuous, book-like (Mushaf) render of the recitation as it is revealed
 /// in real time.
@@ -27,6 +28,15 @@ class MushafRevealView extends StatelessWidget {
   /// mispronounced / skipped words; correct words read as plain book ink.
   final List<LiveWordStatus> statuses;
 
+  /// Per-word tajweed spans, aligned 1:1 with [words]. When [tajweedEnabled] is
+  /// true and a word has spans, its letters are coloured by their tajweed rule
+  /// (exactly like the Surah reader). Offsets are word-relative and match the
+  /// (plain) [words] text, not the diacritic-laden `expected` payload.
+  final List<List<TajweedSpan>?> tajweedSpans;
+
+  /// Whether to colour tajweed rules on revealed (correct) words.
+  final bool tajweedEnabled;
+
   /// 0-based indices (into [words]) of the LAST word of each ayah. When a word
   /// at position `i` is revealed and `i - 1` is in this list, an inline ayah
   /// marker is rendered right before word `i`.
@@ -46,6 +56,8 @@ class MushafRevealView extends StatelessWidget {
     required this.statuses,
     this.ayahBoundaries = const [],
     this.ayahLabels = const [],
+    this.tajweedSpans = const [],
+    this.tajweedEnabled = false,
     this.fontSize = 32,
     this.caretKey,
   });
@@ -76,6 +88,9 @@ class MushafRevealView extends StatelessWidget {
         _RevealedWord(
           text: words[i],
           status: i < statuses.length ? statuses[i] : LiveWordStatus.matched,
+          tajweedSpans: (tajweedEnabled && i < tajweedSpans.length)
+              ? tajweedSpans[i]
+              : null,
           fontSize: fontSize,
           theme: theme,
         ),
@@ -104,17 +119,24 @@ class MushafRevealView extends StatelessWidget {
 class _RevealedWord extends StatelessWidget {
   final String text;
   final LiveWordStatus status;
+  final List<TajweedSpan>? tajweedSpans;
   final double fontSize;
   final ThemeData theme;
 
   const _RevealedWord({
     required this.text,
     required this.status,
+    this.tajweedSpans,
     required this.fontSize,
     required this.theme,
   });
 
   static const _amber = Color(0xFFEF6C00);
+
+  /// A word is "mistaken" when the live engine flagged it (red / amber).
+  /// Mistakes always override tajweed colouring so the user sees the error.
+  bool get _isMistake =>
+      status == LiveWordStatus.error || status == LiveWordStatus.skipped;
 
   Color get _ink {
     if (status == LiveWordStatus.error) return theme.colorScheme.error;
@@ -125,14 +147,61 @@ class _RevealedWord extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final brightness = theme.brightness;
+    final canColorTajweed =
+        !_isMistake && tajweedSpans != null && tajweedSpans!.isNotEmpty;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: Text(
-        text,
-        style: AppTheme.arabicTextStyle(fontSize: fontSize, color: _ink),
-        textAlign: TextAlign.right,
-      ),
+      child: canColorTajweed
+          ? Text.rich(
+              _buildTajweedSpan(brightness),
+              textAlign: TextAlign.right,
+            )
+          : Text(
+              text,
+              style: AppTheme.arabicTextStyle(fontSize: fontSize, color: _ink),
+              textAlign: TextAlign.right,
+            ),
     );
+  }
+
+  /// Paints the word with each tajweed rule's colour on exactly the letters it
+  /// covers (offsets are word-relative, matching [text]). Mirrors the Surah
+  /// reader's per-letter tajweed rendering so the live canvas and the reader
+  /// look identical.
+  TextSpan _buildTajweedSpan(Brightness brightness) {
+    final spans = tajweedSpans!;
+    final ruleAt = List<String?>.filled(text.length, null);
+    for (final span in spans) {
+      debugPrint('TAJ span start=${span.start} end=${span.end} rule=${span.rule} textLen=${text.length}');
+      final start = span.start.clamp(0, text.length);
+      final end = span.end.clamp(0, text.length);
+      for (var i = start; i < end && i < text.length; i++) {
+        ruleAt[i] = span.rule;
+      }
+    }
+
+    final children = <TextSpan>[];
+    var i = 0;
+    while (i < text.length) {
+      final rule = ruleAt[i];
+      var j = i + 1;
+      while (j < text.length && ruleAt[j] == rule) j++;
+      final color = rule == null
+          ? null
+          : AppTheme.ensureContrast(
+              AppTheme.getTajweedColor(rule), brightness);
+      debugPrint('TAJ COLOR=$color rule=$rule');
+      children.add(
+        TextSpan(
+          text: text.substring(i, j),
+          style: AppTheme.arabicTextStyle(fontSize: fontSize, color: color),
+        ),
+      );
+      i = j;
+    }
+    return TextSpan(children: children);
   }
 }
 

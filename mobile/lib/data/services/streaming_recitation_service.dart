@@ -68,6 +68,14 @@ class StreamingRecitationService {
       _state == LiveConnectionState.listening ||
       _state == LiveConnectionState.connecting;
 
+  /// Total PCM bytes sent to the server so far (0 ⇒ no mic audio captured /
+  /// no binary frames delivered → "Duration: 0s"). Exposed for live diagnostics.
+  int get sentBytes => _totalSentBytes;
+
+  /// Number of microphone chunks received from the recorder (0 ⇒ the recorder
+  /// is producing no data → OS blocked capture despite the permission).
+  int get micChunks => _chunkCount;
+
   void _setState(LiveConnectionState s) {
     _state = s;
     if (!_connection.isClosed) _connection.add(s);

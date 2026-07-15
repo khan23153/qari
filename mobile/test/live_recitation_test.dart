@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/data/models/recitation_stream_event.dart';
+import '../lib/data/models/word_model.dart';
 import '../lib/features/recitation/presentation/pages/live_recitation_page.dart';
 import '../lib/features/recitation/presentation/widgets/mushaf_reveal_view.dart';
 
@@ -64,7 +65,7 @@ void main() {
     });
   });
 
-  testWidgets('LiveRecitationPage setup has NO Memorization Mode toggle',
+  testWidgets('LiveRecitationPage setup shows Tajweed toggle (no Mem Mode)',
       (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
@@ -74,11 +75,55 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('AI Recitation'), findsOneWidget);
-    // The Memorization Mode toggle + its Switch must be GONE.
+    // The old Memorization Mode toggle must be GONE.
     expect(find.text('Memorization Mode'), findsNothing);
-    expect(find.byType(Switch), findsNothing);
+    // The new (Tarteel-style) Tajweed colours toggle is present.
+    expect(find.text('Tajweed colours'), findsOneWidget);
     // Reveal-as-you-speak is the only behaviour; Start is present.
     expect(find.text('Start Reciting'), findsOneWidget);
+  });
+
+  testWidgets('MushafRevealView colours tajweed letters when enabled',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MushafRevealView(
+            words: const ['بسم', 'الله'],
+            statuses: const [
+              LiveWordStatus.matched,
+              LiveWordStatus.matched,
+            ],
+            // Ghunnah covering the whole word "الله" (word index 1).
+            tajweedSpans: const [
+              null,
+              [
+                TajweedSpan(start: 0, end: 4, rule: 'ghunnah'),
+              ],
+            ],
+            tajweedEnabled: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('بسم'), findsOneWidget);
+    expect(find.text('الله'), findsOneWidget);
+    // Ghunnah colouring applied → at least one per-letter TextSpan carries a
+    // non-null (rule) colour, proving the word is painted per-letter by rule.
+    final richTexts = tester.widgetList<RichText>(find.byType(RichText));
+    var hasColouredSpan = false;
+    for (final rt in richTexts) {
+      final span = rt.text;
+      if (span is TextSpan && span.children != null) {
+        for (final c in span.children!) {
+          debugPrint('TESTSPAN color=${c.style?.color}');
+          if (c is TextSpan && c.style?.color != null) hasColouredSpan = true;
+        }
+      }
+    }
+    expect(hasColouredSpan, isTrue);
   });
 
   testWidgets('MushafRevealView starts blank (no words, no dots)',

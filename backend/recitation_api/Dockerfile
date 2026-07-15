@@ -15,6 +15,13 @@ RUN pip install --no-cache-dir -r requirements.ml.txt
 
 COPY . .
 
+# ctranslate2 (used by faster-whisper) ships a shared lib flagged with an
+# executable-stack (RWE GNU_STACK). Some container kernels refuse to enable an
+# exec stack and abort loading the lib ("cannot enable executable stack as
+# shared object requires: Invalid argument"). Clear the execute bit on the
+# GNU_STACK program header so the live ASR engine can load on the VPS.
+RUN python3 fix_execstack.py
+
 EXPOSE 8001
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \

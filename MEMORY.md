@@ -986,3 +986,156 @@ sends `words` in the start handshake and handles word events, so the app must be
 updated to v1.0.21 to hit the fixed backend. REMAINING (user side): update the
 app via OTA, then push this commit to origin/main (needs GitHub PAT — none in
 env). The APK was already rebuilt at v1.0.21+32 in the prior turn.
+
+## Session 2026-07-15 — Live ASR swapped to Faster-Whisper (CTranslate2, INT8, CPU)
+Tarteel runs a custom Quranic ASR; their public `tarteel-ai/whisper-tiny-ar-quran`
+is a Whisper-tiny fine-tuned on Quranic Arabic. The live recitation stream
+previously used the heavy PyTorch `ml.inference.asr.QuranASR`
+(`tarteel-ai/whisper-base-ar-quran`) — too slow for real-time on a CPU VPS.
+Swapped ONLY the live transcriber to **Faster-Whisper + CTranslate2 (INT8)**
+(CPU-friendly, ~2–4x faster than PyTorch). Server-side `StreamingMatcher`
+forced-alignment + all features (history, tajweed, Mushaf reveal) unchanged.
+The legacy Quran-section `RecitationPage` was NOT touched.
+
+CHANGES:
+- NEW `ml/inference/faster_whisper_transcriber.py`: `FasterWhisperTranscriber`
+  (lazy, thread-safe singleton `get_transcriber()`). Loads CT2 model via
+  `WhisperModel(model_dir, device="cpu", compute_type="int8", word_timestamps)`.
+  `transcribe()` returns RAW Arabic word tokens + per-word `probability`
+  (normalization left to the caller). Model dir via env `QARI_FASTERWHISPER_MODEL_DIR`
+  (default `/app/models/tarteel-ct2-tiny`).
+- `backend/recitation_api/app/services/streaming_session.py`:
+  `_real_transcriber` now calls `get_transcriber().transcribe(...)` and
+  normalizes the returned words with the SAME inlined `_normalize` used for the
+  reference words (so hypothesis↔reference match consistently). Returns `([],[])`
+  on any failure (graceful, no crash).
+- `backend/recitation_api/requirements.ml.txt`: added `faster-whisper==1.0.3`,
+  `ctranslate2==4.4.0`, `av==12.2.0`, `requests==2.32.3` (faster-whisper imports
+  `requests` at load). `inference-worker` still uses the PyTorch `QuranASR` for
+  the batch upload flow — unaffected.
+- `infra/docker-compose.yml` `recitation-api`: `QARI_ML_USE_STUB` → `"false"`
+  (real Faster-Whisper runs in this container, no GPU needed) + new
+  `QARI_FASTERWHISPER_MODEL_DIR: /app/models/tarteel-ct2-tiny`. The CT2 model is
+  bind-mounted via the existing `../backend/recitation_api:/app` volume, so it
+  appears at `/app/models/tarteel-ct2-tiny`.
+- NEW `scripts/convert_tarteel_model.py`: one-command conversion of
+  `tarteel-ai/whisper-tiny-ar-quran` → CT2 INT8 via `ct2-transformers-converter`,
+  then generates `tokenizer.json` (the source ships the classic GPT2 Whisper
+  tokenizer, not a fast tokenizer that faster-whisper needs).
+
+MODEL CONVERSION (done in this dev env, ~42MB INT8):
+`python scripts/convert_tarteel_model.py` → writes
+`backend/recitation_api/models/tarteel-ct2-tiny/` (model.bin + tokenizer.json +
+preprocessor_config.json). That dir is gitignored (large weights, like
+`reference_data/`). On the VPS, run the same script so the model exists on disk
+at `<repo>/backend/recitation_api/models/tarteel-ct2-tiny` (the bind mount makes
+it available at `/app/models/tarteel-ct2-tiny` inside the container). Conversion
+needs `transformers` + `torch` + `ctranslate2` (NOT needed at inference).
+
+VALIDATION (real end-to-end, this env):
+- `pytest ml/tests` + `backend/recitation_api/tests/test_streaming.py` → 120 passed
+  (includes new `test_faster_whisper_transcriber.py`, mocked).
+- Real model: synthesized a 16k Arabic clip (espeak-ng `بسم الله الرحمن الرحيم`)
+  and ran it through `StreamingRecitationSession` with the real Faster-Whisper
+  transcriber: model loaded, `transcribe()` returned real Arabic word tokens +
+  confidences, `StreamingMatcher` emitted live `word` events and `finalize()`
+  produced a scored result (score 0.5 on the ROBOTIC espeak TTS — expected;
+  real human recitation transcribes far better, per prior session notes).
+  NOTE: the default model dir is `/app/models/tarteel-ct2-tiny`; when testing
+  locally set `QARI_FASTERWHISPER_MODEL_DIR=backend/recitation_api/models/tarteel-ct2-tiny`.
+
+DEPLOY NOTE: after this change the running `recitation-api` container must be
+recreated (compose now sets `QARI_ML_USE_STUB=false` + model dir) and the CT2
+model present on the VPS host at `backend/recitation_api/models/tarteel-ct2-tiny`.
+No Flutter/mobile change needed — the app unchanged. APK not rebuilt.
+
+### Deployed on the VPS (this session, live container `infra-recitation-api-1`)
+- Rebuilt `recitation-api` image (added faster-whisper/ctranslate2 to
+  requirements.ml.txt) and recreated the container → `QARI_ML_USE_STUB=false`,
+  model mounted at `/app/models/tarteel-ct2-tiny` (bind mount). Health OK.
+- BLOCKER + FIX 1 (ctranslate2 exec-stack): the CT2 shared lib is compiled with
+  an executable-stack (RWE GNU_STACK). The container kernel refused to enable it
+  → `libctranslate2...so: cannot enable executable stack as shared object
+  requires: Invalid argument` and live transcription silently fell back to 0
+  verdicts. `execstack` is NOT installable here, so added
+  `backend/recitation_api/fix_execstack.py` (clears the exec bit on the
+  GNU_STACK phdr via raw ELF editing) and a `RUN python3 fix_execstack.py` step
+  in `backend/recitation_api/Dockerfile` (runs AFTER `pip install`, before
+  `COPY . .`). Verified: GNU_STACK now `RW`. This is durable across recreates.
+- FIX 2 (final verdict `actual_text` was always null): `StreamingMatcher.
+  finalize()` rebuilt `WordState` without carrying `spoken`, so the final
+  result's word_verdicts had `actual_text: null` (broke the "compare your
+  recitation" results sheet). Now `finalize()` looks up the spoken word +
+  confidence from `_resolved_states`. Live `word` events already had it; the
+  final payload now matches.
+- VALIDATION (live WS, espeak-ng Arabic clip → `ws://localhost:8001/ws/
+  recitation/stream`): model loaded, `Processing audio` logged, real Arabic
+  `word` events streamed, `final` returned with populated `expected_text` +
+  `actual_text` and a scored result. Accuracy on the ROBOTIC espeak TTS is low
+  (expected — Whisper-Quran is trained on natural recitation); a real human
+  recitation transcribes far better. `pytest ml/tests` +
+  `backend/recitation_api/tests/test_streaming.py` → 120 passed.
+- NOT committed/pushed (no git action requested). Changes to commit later:
+  `ml/inference/faster_whisper_transcriber.py`, `ml/alignment/
+  streaming_matcher.py` (finalize fix), `backend/recitation_api/app/services/
+  streaming_session.py`, `backend/recitation_api/Dockerfile` +
+  `fix_execstack.py`, `backend/recitation_api/requirements.ml.txt`,
+  `infra/docker-compose.yml`, `scripts/convert_tarteel_model.py`,
+  `ml/tests/test_faster_whisper_transcriber.py`, `.gitignore`
+  (backend/recitation_api/models/ ignored). The converted model is gitignored.
+
+## Session 2026-07-15 (later) — Device "0 of N / Duration 0s" = missing RECORD_AUDIO
+User tested the live AI Recitation on device: results showed "0 of 29 words
+correct / Duration: 0s / all 0%", no words appeared while reciting, and "qari
+voice has no sound". ROOT CAUSE: `mobile/android/app/src/main/AndroidManifest.xml`
+was **missing `android.permission.RECORD_AUDIO`** entirely. The WebSocket
+connected fine (29 reference words arrived), but with no manifest permission the
+OS silently blocked ALL mic capture → zero PCM frames sent → server finalizes
+with 0 samples → "Duration 0s" + 0/N. The `record` package + permission_handler
+runtime request can't grant capture without the manifest declaration.
+FIX: added `<uses-permission android:name="android.permission.RECORD_AUDIO"/>`
+to the manifest. Bumped app to **v1.0.22+33** (pubspec.yaml + releases/
+app_release.json with fix notes), rebuilt APK (76.0MB) and copied to
+`releases/app-release.apk` — which is bind-mounted into core-api at `/app/
+releases` (read-only), so the OTA (`/v1/app/download` + `/v1/app/version`)
+immediately serves v1.0.22 with no container restart. Verified the VPS now
+returns the 76.0MB APK + version_code 33. User must UPDATE via OTA and ALLOW
+microphone when prompted; then live word tracking should work.
+NOTE: "qari voice no sound" was NOT fully root-caused — the live Mushaf page
+does not play reference audio during recitation (no "Listen First" in this
+build); the reference track only appears on the results screen via
+`reference_audio_url` (may be empty if the reference bundle lacks audio URLs).
+Likely a device-volume/Bluetooth issue or missing reference URL, not the mic
+bug. Ask the user where they expect qari audio (during recitation vs results)
+before adding a feature.
+APK build uses ANDROID_HOME=/home/Innocent/Android (SDK present; set it before
+`flutter build apk --release`). `flutter pub get` then build ~152s.
+
+## Session 2026-07-15 (still) — RECORD_AUDIO alone didn't fix "0 of N"
+Deployed v1.0.22+33 (RECORD_AUDIO added) but user STILL got "0 of 29 /
+Duration 0s / no words / tajweed not showing". Server logs prove the device
+connects and sends the 29-word `start` handshake (`ws.stream.started words=29`)
+and the WS works — but there is NO "Processing audio" for the user's sessions,
+i.e. **zero audio bytes reached the server**. The 29 "Word by Word" words are
+the LOCAL target list, NOT proof of server connection. So even after the
+permission fix, mic capture or binary-send is still failing silently on the
+device (tajweed "not working" is just a consequence of no revealed words).
+ADDED DIAGNOSTICS (built v1.0.23+34, deployed to OTA):
+- `StreamingRecitationService`: public getters `sentBytes` (_totalSentBytes) and
+  `micChunks` (_chunkCount).
+- `live_recitation_page.dart`: a live "diag · mic chunks: N · bytes sent: N" text
+  (via ValueNotifier so only that Text rebuilds, not the reveal view; 500ms
+  `_diagTimer`). On finish, if `sentBytes == 0` show a clear error
+  "No microphone audio was captured (0 bytes sent)…" instead of a silent 0/N.
+  Timer stopped in `_stop`/`_cancel`/`_reset`/`dispose`.
+NEXT: user must update to v1.0.23 and report the diag line:
+  - "mic chunks: 0 · bytes sent: 0" ⇒ recorder produces no data (OS still
+    blocking capture despite permission — check OS mic privacy / another app
+    holding the mic / Android version quirk).
+  - "mic chunks: N · bytes sent: 0" ⇒ capture OK but binary WS send fails.
+  - "bytes sent: >0" ⇒ transport OK, server-side issue (unlikely; server shows
+    no audio for these sessions).
+NOT YET committed (user will request). Changes: AndroidManifest RECORD_AUDIO,
+streaming_recitation_service getters, live_recitation_page diagnostics,
+pubspec + app_release.json bumps (→1.0.23+34), plus the earlier uncommitted
+Faster-Whisper backend work.

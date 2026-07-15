@@ -6,15 +6,20 @@ import 'package:haptic_feedback/haptic_feedback.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../data/models/recitation_model.dart';
+import '../../../../data/models/recitation_session_record.dart';
 import '../../../../data/models/recitation_stream_event.dart';
 import '../../../../data/models/word_model.dart';
 import '../../../../data/repositories/local_corpus_repository.dart';
 import '../../../../data/services/audio_service.dart';
+import '../../../../data/services/local_storage_service.dart';
+import '../../../../data/services/recitation_history_service.dart';
 import '../../../../data/services/streaming_recitation_service.dart';
 import '../widgets/mic_visualizer.dart';
 import '../widgets/mushaf_reveal_view.dart';
 import '../widgets/recitation_results.dart';
 import '../widgets/word_comparison_sheet.dart';
+import 'recitation_history_page.dart';
+import 'verse_identifier_page.dart';
 
 /// UI phases for the live (real-time) recitation experience.
 enum LiveRecitationUiState { setup, live, results, error }
@@ -53,9 +58,22 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   int _page = 1;
   int _ayahCount = 7;
 
+  /// For the Surah scope: the exact ayah range the user wants to recite.
+  /// Defaults to the whole surah (1 .. _ayahCount).
+  int _ayahFrom = 1;
+  int _ayahTo = 7;
+
+  /// Whether to colour tajweed rules on the revealed (correct) words, like the
+  /// Surah reader. Persisted across sessions.
+  bool _tajweedOn = false;
+
   /// Flat target word array across all ayahs being recited (the whole
   /// page/surah). Used to drive the backend reference + the results grid.
   List<String> _words = const [];
+
+  /// Tajweed spans, aligned 1:1 with [_words], so each revealed word can be
+  /// coloured per-letter by its tajweed rule.
+  List<List<TajweedSpan>?> _wordTajweedSpans = const [];
 
   /// Ordered (surah, ayah) references for the loaded block — sent to the
   /// backend so it can resolve the concatenated reference list.
@@ -76,6 +94,10 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   /// Per-revealed-word live status (matched / error / skipped) for tinting.
   List<LiveWordStatus> _revealedStatuses = const [];
 
+  /// Per-revealed-word tajweed spans (aligned 1:1 with [_revealedWords]) so the
+  /// live canvas can colour each letter by its rule as it appears.
+  List<List<TajweedSpan>?> _revealedTajweedSpans = const [];
+
   /// Dedup guard: reference word indices already revealed (the backend may
   /// re-emit a status change for a word we already showed).
   final Set<int> _revealedIndices = {};
@@ -90,6 +112,12 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   RecitationResult? _result;
   String? _errorMessage;
 
+  /// Live diagnostics notifiers (updated by [_diagTimer] so only the small
+  /// diagnostic Text rebuilds, not the whole reveal view).
+  final ValueNotifier<int> _micChunksNotifier = ValueNotifier(0);
+  final ValueNotifier<int> _sentBytesNotifier = ValueNotifier(0);
+  Timer? _diagTimer;
+
   StreamSubscription<RecitationStreamEvent>? _eventSub;
   StreamSubscription<LiveConnectionState>? _connSub;
 
@@ -101,6 +129,7 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
       _surah = widget.surahNumber!;
       _ayah = widget.ayahNumber ?? 1;
     }
+    _tajweedOn = LocalStorageService().getTajweedColorsEnabledSync();
     _loadScope();
 
     _eventSub = _service.events.listen(_onEvent);
@@ -109,9 +138,12 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
 
   @override
   void dispose() {
+    _stopDiagTimer();
     _eventSub?.cancel();
     _connSub?.cancel();
     _scrollController.dispose();
+    _micChunksNotifier.dispose();
+    _sentBytesNotifier.dispose();
     _service.dispose();
     _audioService.dispose();
     super.dispose();
@@ -121,34 +153,50 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   void _clearReveal() {
     _revealedWords = const [];
     _revealedStatuses = const [];
+    _revealedTajweedSpans = const [];
     _revealedIndices.clear();
   }
 
   // ─── Data loading ─────────────────────────────────────────────────────────
 
-  /// Loads the target block (a full Mushaf page or a full surah) from the
-  /// bundled corpus and records where each ayah ends (for inline markers).
-  /// The live canvas itself stays blank until recitation begins.
+  /// Loads the target block from the bundled corpus and records where each ayah
+  /// ends (for inline markers). For the Surah scope this honours the selected
+  /// [_ayahFrom] .. [_ayahTo] range. The live canvas stays blank until reciting.
   Future<void> _loadScope() async {
     try {
-      List<AyahModel> ayahs;
+      List<AyahModel> allAyahs;
       if (_scope == RecitationScope.page) {
-        ayahs = await LocalCorpusRepository().getAyahsByPage(_page);
+        allAyahs = await LocalCorpusRepository().getAyahsByPage(_page);
       } else {
-        ayahs = await LocalCorpusRepository().getAyahs(_surah);
+        allAyahs = await LocalCorpusRepository().getAyahs(_surah);
       }
-      if (ayahs.isEmpty) return;
+      if (allAyahs.isEmpty) return;
+
+      // For the surah scope, restrict to the chosen ayah range.
+      final ayahs = _scope == RecitationScope.surah
+          ? allAyahs
+              .where((a) =>
+                  a.ayahNumber >= _ayahFrom && a.ayahNumber <= _ayahTo)
+              .toList()
+          : allAyahs;
 
       final words = <String>[];
+      final tajweed = <List<TajweedSpan>?>[];
       final refs = <(int, int)>[];
       final boundaries = <int>[];
       final labels = <String>[];
 
       for (final a in ayahs) {
-        final ayahWords = a.words.map((w) => w.text).toList();
-        words.addAll(ayahWords);
+        for (final w in a.words) {
+          words.add(w.text);
+          tajweed.add(
+            (w.tajweedSpans != null && w.tajweedSpans!.isNotEmpty)
+                ? w.tajweedSpans
+                : null,
+          );
+        }
         refs.add((a.surahNumber, a.ayahNumber));
-        if (ayahWords.isNotEmpty) {
+        if (a.words.isNotEmpty) {
           boundaries.add(words.length - 1);
           labels.add(a.ayahNumber.toString());
         }
@@ -157,10 +205,11 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
       if (mounted) {
         setState(() {
           _words = words;
+          _wordTajweedSpans = tajweed;
           _ayahRefs = refs;
           _ayahBoundaries = boundaries;
           _ayahLabels = labels;
-          _ayahCount = ayahs.length;
+          _ayahCount = allAyahs.length;
         });
       }
     } catch (e) {
@@ -191,9 +240,16 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
         if (text.isEmpty) return;
         if (idx != null && _revealedIndices.contains(idx)) return;
 
+        // Capture the word's tajweed spans (aligned by reference index) so the
+        // live canvas can colour each letter by its rule as it appears.
+        final spans = (idx != null && idx >= 0 && idx < _wordTajweedSpans.length)
+            ? _wordTajweedSpans[idx]
+            : null;
+
         setState(() {
           _revealedWords = [..._revealedWords, text];
           _revealedStatuses = [..._revealedStatuses, event.status];
+          _revealedTajweedSpans = [..._revealedTajweedSpans, spans];
           if (idx != null) _revealedIndices.add(idx);
         });
         _scrollToLatest();
@@ -274,8 +330,8 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
       await _service.start(
         surahNumber: _surah,
         ayahNumber: _ayah,
-        ayahFrom: _scope == RecitationScope.surah ? 1 : _ayah,
-        ayahTo: _scope == RecitationScope.surah ? _ayahCount : _ayah,
+        ayahFrom: _scope == RecitationScope.surah ? _ayahFrom : _ayah,
+        ayahTo: _scope == RecitationScope.surah ? _ayahTo : _ayah,
         ayahRefs: _ayahRefs,
         // Full target word list sent so the backend can score even if its own
         // reference store is empty (prevents "0 of 0 words correct").
@@ -295,9 +351,25 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
         _errorMessage = 'Could not start the live session: $e';
       });
     }
+    _startDiagTimer();
+  }
+
+  void _startDiagTimer() {
+    _stopDiagTimer();
+    _diagTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (!mounted) return;
+      _micChunksNotifier.value = _service.micChunks;
+      _sentBytesNotifier.value = _service.sentBytes;
+    });
+  }
+
+  void _stopDiagTimer() {
+    _diagTimer?.cancel();
+    _diagTimer = null;
   }
 
   Future<void> _stop() async {
+    _stopDiagTimer();
     await Haptics.vibrate(HapticsType.selection);
     final ev = await _service.stop();
     if (_ui == LiveRecitationUiState.results) return; // already handled via stream
@@ -306,6 +378,21 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
 
   void _finishWith(RecitationResult? result) {
     if (!mounted) return;
+
+    // If the app never sent any microphone audio to the server, there is
+    // nothing to score — surfacing a silent "0 of N / Duration: 0s" is
+    // confusing. Show a clear, actionable error instead so the user knows to
+    // grant mic access / free the microphone.
+    if (_service.sentBytes == 0) {
+      setState(() {
+        _ui = LiveRecitationUiState.error;
+        _errorMessage = 'No microphone audio was captured (0 bytes sent). '
+            'Please allow microphone access when prompted, ensure no other app '
+            'is using the mic, and try again.';
+      });
+      return;
+    }
+
     // Prefer the backend's result, but if it came back with ZERO word verdicts
     // (e.g. server reference was empty, or audio never reached it) fall back to
     // the words we revealed live so the results screen is never "0 of 0". The
@@ -318,10 +405,53 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
         '${result?.wordVerdicts.length ?? -1}, '
         'revealedWords=${_revealedWords.length}, '
         'targetWords=${_words.length}');
+
+    // Persist the session locally for history / mistake-review / streak.
+    _persistSession(useResult);
+
     setState(() {
       _result = useResult;
       _ui = LiveRecitationUiState.results;
     });
+  }
+
+  /// Saves the completed session to the local history store (Tarteel-style
+  /// "Mistake Review" + streak tracking). Captures every mispronounced /
+  /// skipped word as a [RecitationMistake] for later review.
+  void _persistSession(RecitationResult result) {
+    try {
+      final mistakes = <RecitationMistake>[];
+      for (final v in result.wordVerdicts) {
+        if (v.isCorrect) continue;
+        final expected = v.expectedText ?? v.displayWord(_words);
+        mistakes.add(RecitationMistake(
+          word: v.displayWord(_words),
+          expectedText: expected,
+          errorType: v.errorType ?? 'error',
+          surahNumber: _surah,
+          ayahNumber: _ayah,
+        ));
+      }
+      final from = _scope == RecitationScope.surah ? _ayahFrom : _ayah;
+      final to = _scope == RecitationScope.surah ? _ayahTo : _ayah;
+      // Fire-and-forget: the session is already shown; persistence must never
+      // block the results UI.
+      LocalStorageService.getInstance().then((ls) {
+        RecitationHistoryService(ls.prefs).saveSession(
+          scope: _scope == RecitationScope.page ? 'page' : 'surah',
+          surahNumber: _surah,
+          ayahFrom: from,
+          ayahTo: to,
+          overallScore: result.overallScore,
+          correctCount: result.correctCount,
+          totalCount: result.wordVerdicts.length,
+          durationSeconds: result.durationSeconds,
+          mistakes: mistakes,
+        );
+      });
+    } catch (e) {
+      debugPrint('LiveRecitation: could not persist session: $e');
+    }
   }
 
   /// Builds a result from the revealed words when the backend final payload
@@ -361,6 +491,7 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   }
 
   Future<void> _cancel() async {
+    _stopDiagTimer();
     await _service.cancel();
     if (mounted) {
       setState(() {
@@ -371,6 +502,7 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   }
 
   void _reset() {
+    _stopDiagTimer();
     setState(() {
       _ui = LiveRecitationUiState.setup;
       _result = null;
@@ -420,7 +552,9 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   Widget _buildHeader(ThemeData theme) {
     final subtitle = _scope == RecitationScope.page
         ? 'Live · Page $_page'
-        : 'Live · Surah $_surah (full)';
+        : (_ayahFrom == _ayahTo
+            ? 'Live · Surah $_surah:$_ayahFrom'
+            : 'Live · Surah $_surah:$_ayahFrom-$_ayahTo');
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
       child: Row(
@@ -448,6 +582,24 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
           IconButton(
             icon: const Icon(Icons.info_outline_rounded),
             onPressed: () => _showInfoDialog(theme),
+          ),
+          IconButton(
+            icon: const Icon(Icons.history_rounded),
+            tooltip: 'Recitation history',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const RecitationHistoryPage(),
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.search_rounded),
+            tooltip: 'Find a verse by reciting',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const VerseIdentifierPage(),
+              ),
+            ),
           ),
         ],
       ),
@@ -538,12 +690,69 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
               });
             })
           else
-            Align(
-              child: ActionChip(
-                avatar: const Icon(Icons.auto_stories_rounded, size: 18),
-                label: Text('Surah $_surah'),
-                onPressed: _openTargetPicker,
-              ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Align(
+                  child: ActionChip(
+                    avatar: const Icon(Icons.auto_stories_rounded, size: 18),
+                    label: Text('Surah $_surah'),
+                    onPressed: _openTargetPicker,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Exact ayah range within the surah (Tarteel-style "recite a
+                // specific range" — not just the whole surah).
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: theme.colorScheme.outline.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _NumberDropdown(
+                          label: 'From ayah',
+                          value: _ayahFrom,
+                          count: _ayahCount,
+                          onChanged: (v) {
+                            if (v <= _ayahTo) {
+                              setState(() {
+                                _ayahFrom = v;
+                                _loadScope();
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Text('→',
+                            style: theme.textTheme.titleMedium),
+                      ),
+                      Expanded(
+                        child: _NumberDropdown(
+                          label: 'To ayah',
+                          value: _ayahTo,
+                          count: _ayahCount,
+                          onChanged: (v) {
+                            if (v >= _ayahFrom) {
+                              setState(() {
+                                _ayahTo = v;
+                                _loadScope();
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           const SizedBox(height: 20),
 
@@ -583,6 +792,19 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
                 ? Text('Loading…', textAlign: TextAlign.center, style: theme.textTheme.bodyMedium)
                 : _TargetPreview(words: _words, fontSize: 24),
           ),
+          const SizedBox(height: 16),
+
+          // Tajweed toggle (live per-letter tajweed colouring).
+          _TajweedToggle(
+            value: _tajweedOn,
+            onChanged: (v) {
+              setState(() => _tajweedOn = v);
+              LocalStorageService.getInstance().then(
+                (ls) => ls.setTajweedColorsEnabled(v),
+              );
+            },
+            theme: theme,
+          ),
           const SizedBox(height: 28),
 
           FilledButton.icon(
@@ -615,11 +837,32 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
                 : MushafRevealView(
                     words: _revealedWords,
                     statuses: _revealedStatuses,
+                    tajweedSpans: _revealedTajweedSpans,
+                    tajweedEnabled: _tajweedOn,
                     ayahBoundaries: _ayahBoundaries,
                     ayahLabels: _ayahLabels,
                     fontSize: 32,
                     caretKey: _caretKey,
                   ),
+          ),
+        ),
+
+        // Live diagnostics (so "0 of N / Duration 0s" is never a black box):
+        // shows mic chunks captured vs bytes actually sent to the server.
+        // Only this small Text rebuilds (via ValueNotifier), not the reveal view.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+          child: ValueListenableBuilder<int>(
+            valueListenable: _micChunksNotifier,
+            builder: (context, chunks, _) => ValueListenableBuilder<int>(
+              valueListenable: _sentBytesNotifier,
+              builder: (context, sent, _) => Text(
+                'diag · mic chunks: $chunks · bytes sent: $sent',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                ),
+              ),
+            ),
           ),
         ),
 
@@ -746,6 +989,8 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
                       setState(() {
                         _surah = tempSurah;
                         _ayahCount = tempCount;
+                        _ayahFrom = 1;
+                        _ayahTo = tempCount;
                       });
                       _loadScope();
                     },
@@ -1061,6 +1306,64 @@ class _NumberDropdown extends StatelessWidget {
           onChanged: (v) {
             if (v != null) onChanged(v);
           },
+        ),
+      ),
+    );
+  }
+}
+
+/// Inline toggle for live per-letter tajweed colouring, mirroring the Surah
+/// reader's tajweed switch so the live canvas and the reader look identical.
+class _TajweedToggle extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final ThemeData theme;
+
+  const _TajweedToggle({
+    required this.value,
+    required this.onChanged,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = theme.colorScheme.primary;
+    return GestureDetector(
+      onTap: () => onChanged(!value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: value ? color.withValues(alpha: 0.08) : theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: value ? color.withValues(alpha: 0.4) : theme.colorScheme.outline.withValues(alpha: 0.2),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.palette_rounded, size: 20, color: value ? color : null),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Tajweed colours',
+                      style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600)),
+                  Text(
+                    'Colour each letter by its tajweed rule as it appears',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Switch(
+              value: value,
+              onChanged: onChanged,
+              activeColor: color,
+            ),
+          ],
         ),
       ),
     );

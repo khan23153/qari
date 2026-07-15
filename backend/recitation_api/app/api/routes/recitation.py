@@ -374,3 +374,142 @@ async def get_ayah_words(surah_number: int, ayah_number: int):
         "reference_audio_url": audio_url,
         "words": words,
     }
+
+
+# ─── Verse identification (Shazam-style) ──────────────────────────────────────
+# Accepts a short recitation clip, transcribes it with the Quran-fine-tuned
+# Whisper model (tarteel-ai/whisper-base-ar-quran), then finds the ayah(s) whose
+# expected word sequence best matches the transcript as an ordered subsequence.
+
+_IDENTIFY_MAX_SECONDS = 25
+
+
+@router.post("/identify", tags=["recitation"])
+async def identify_verse(
+    audio: UploadFile = File(...),
+    top_k: int = Form(5),
+):
+    """Identify which Quranic verse (surah:ayah) a recited clip corresponds to.
+
+    The clip can be a few words or a full ayah. Returns the top ``top_k``
+    matching verses with a 0..1 confidence score and the matched Arabic text.
+
+    Requires the Whisper ASR model to be available; if it cannot be loaded the
+    endpoint returns 503 so the client can show a clear "model unavailable"
+    message rather than a silent failure.
+    """
+    content = await audio.read()
+    if not content or len(content) < 44:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"type": "about:blank", "title": "Invalid Audio", "status": 422,
+                     "detail": "Empty or too-small audio clip."},
+        )
+
+    # Decode PCM16 WAV → float32 numpy for the ASR (numpy-free header parse).
+    try:
+        import struct
+        import numpy as np
+        import array
+
+        if content[:4] != b"RIFF" or content[8:12] != b"WAVE":
+            raise ValueError("not a WAV")
+        sample_rate = struct.unpack_from("<I", content, 24)[0]
+        samples = array.array("h")
+        # data chunk starts at 44 for a canonical WAV
+        samples.frombytes(content[44:])
+        audio_np = np.array(samples, dtype=np.float32) / 32768.0
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"type": "about:blank", "title": "Invalid Audio", "status": 422,
+                     "detail": f"Could not decode WAV: {exc}"},
+        )
+
+    if len(audio_np) / max(sample_rate, 1) > _IDENTIFY_MAX_SECONDS:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail={"type": "about:blank", "title": "Clip Too Long", "status": 413,
+                     "detail": f"Keep the clip under {_IDENTIFY_MAX_SECONDS}s."},
+        )
+
+    # --- Transcribe with the Quran ASR (lazy import; heavy torch stack) ---
+    try:
+        from ml.inference.asr import QuranASR, normalize_arabic, tokenize_words
+
+        asr = QuranASR()
+        asr.load()
+        result = asr.transcribe(audio_np, sample_rate, return_timestamps=False)
+        transcript_words = result.normalized_words
+    except Exception as exc:  # torch/whisper missing → graceful degradation
+        logger.error("identify.asr_failed", error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"type": "about:blank", "title": "ASR Unavailable",
+                     "status": 503,
+                     "detail": "Verse identification needs the Quran ASR model, "
+                               "which is not loaded on this server."},
+        )
+
+    if not transcript_words:
+        return {
+            "transcript": result.raw_text,
+            "candidates": [],
+            "message": "No speech detected in the clip.",
+        }
+
+    # --- Score every reference ayah as an ordered subsequence match ---
+    try:
+        from ml.tajweed.reference_store import ReferenceStore
+
+        store = ReferenceStore(settings.reference_data_dir or None)
+    except Exception as exc:
+        logger.warning("identify.refstore_unavailable", error=str(exc))
+        return {
+            "transcript": result.raw_text,
+            "candidates": [],
+            "message": "Reference corpus is not available on this server.",
+        }
+
+    candidates = []
+    for (surah, ayah) in store.list_ayahs():
+        ref = store.get(surah, ayah)
+        if ref is None:
+            continue
+        ref_words = [normalize_arabic(w.word) for w in ref.words]
+        ref_words = [w for w in ref_words if w]
+        score = _ordered_subsequence_score(transcript_words, ref_words)
+        if score <= 0:
+            continue
+        candidates.append({
+            "surah_number": surah,
+            "ayah_number": ayah,
+            "score": round(score, 4),
+            "text": ref.text or "",
+        })
+
+    candidates.sort(key=lambda c: c["score"], reverse=True)
+    candidates = candidates[: max(1, top_k)]
+
+    return {
+        "transcript": result.raw_text,
+        "candidates": candidates,
+        "message": None if candidates else "No matching verse found.",
+    }
+
+
+def _ordered_subsequence_score(transcript: list[str], ref: list[str]) -> float:
+    """Fraction of the recited ``transcript`` that appears, in order, inside the
+    reference ayah's word sequence (allowing gaps). 0 if nothing matches."""
+    if not transcript or not ref:
+        return 0.0
+    i = 0
+    for w in ref:
+        if i < len(transcript) and w == transcript[i]:
+            i += 1
+    if i == 0:
+        return 0.0
+    # Coverage of the recited clip + a small bonus for a tight (exact) match.
+    coverage = i / len(transcript)
+    exact_bonus = 0.1 if (i == len(ref) and len(ref) == len(transcript)) else 0.0
+    return min(1.0, coverage + exact_bonus)

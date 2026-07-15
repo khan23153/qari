@@ -27,6 +27,10 @@ class LocalStorageService {
     _prefs = await SharedPreferences.getInstance();
   }
 
+  /// Synchronous access to the underlying [SharedPreferences] store. Use with
+  /// care before [ensureInitialized] has resolved (reads may return defaults).
+  SharedPreferences get prefs => _prefs;
+
   // Ensure prefs are loaded
   Future<void> ensureInitialized() async {
     try {
@@ -179,6 +183,17 @@ class LocalStorageService {
   Future<void> setTajweedColorsEnabled(bool value) async {
     await ensureInitialized();
     await _prefs.setBool(_kTajweedColorsEnabled, value);
+  }
+
+  /// Synchronous read of the tajweed toggle — safe to call from [initState]
+  /// before [ensureInitialized] resolves (reads the in-memory prefs if ready,
+  /// else falls back to the default).
+  bool getTajweedColorsEnabledSync() {
+    try {
+      return _prefs.getBool(_kTajweedColorsEnabled) ?? false;
+    } catch (_) {
+      return false;
+    }
   }
 
   // ─── Density Level ───────────────────────────────────────────────────────

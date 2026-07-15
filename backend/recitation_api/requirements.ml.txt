@@ -12,3 +12,14 @@ soundfile==0.12.1
 python-Levenshtein==0.25.1
 huggingface-hub==0.23.0
 onnxruntime==1.17.1
+
+# ── Live streaming ASR (Faster-Whisper / CTranslate2, CPU + INT8) ──
+# Replaces the heavy PyTorch Whisper on the real-time recitation path so the
+# live engine tracks the user's voice with low latency on a CPU-only VPS.
+# ctranslate2 + av are runtime deps of faster-whisper (pinned for reproducibility).
+faster-whisper==1.0.3
+ctranslate2==4.4.0
+av==12.2.0
+# faster-whisper imports `requests` at module load (declared transitively but
+# pinned here for reproducible deployments).
+requests==2.32.3

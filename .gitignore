@@ -39,6 +39,9 @@ mobile/.fvm/
 
 # ML model weights (large, stored separately)
 ml/models/
+# Converted Faster-Whisper (CTranslate2) live-ASR model — build via
+# scripts/convert_tarteel_model.py; never commit (gitignored like reference_data).
+backend/recitation_api/models/
 *.onnx
 *.pt
 *.bin

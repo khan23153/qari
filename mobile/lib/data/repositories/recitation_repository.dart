@@ -133,6 +133,35 @@ class RecitationRepository {
     }
   }
 
+  /// Identifies which Quranic verse (surah:ayah) a recited clip corresponds to
+  /// (Tarteel-style "verse lookup"). Uploads a short WAV clip; the backend
+  /// transcribes it with the Quran ASR and matches it against the corpus.
+  /// Returns the parsed response (transcript + ranked candidates).
+  Future<Map<String, dynamic>> identifyVerse({
+    required String filePath,
+    int topK = 5,
+  }) async {
+    final file = File(filePath);
+    if (!file.existsSync() || await file.length() == 0) {
+      throw const ApiException(
+        message: 'Audio recording failed',
+        errorCode: 'EMPTY_AUDIO',
+      );
+    }
+    try {
+      final response = await _client.uploadFile(
+        '/recitations/identify',
+        filePath: filePath,
+        fieldName: 'audio',
+        extraFields: {'top_k': topK.toString()},
+        timeout: Duration(seconds: AppConstants.recitationApiTimeoutSeconds),
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
   /// Gets the reference audio URL for a specific ayah.
   Future<String> getReferenceAudio({
     required int surahNumber,

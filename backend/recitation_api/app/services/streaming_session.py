@@ -207,17 +207,31 @@ _real_asr = None
 
 
 def _real_transcriber(audio, sr: int) -> tuple[list[str], list[float]]:
-    """Transcribe with the Whisper-Quran model (lazy-loaded, thread-safe caller)."""
-    global _real_asr
-    if _real_asr is None:
-        from ml.inference.asr import QuranASR
+    """Transcribe with Faster-Whisper (CT2, INT8) — CPU-efficient real-time ASR.
 
-        _real_asr = QuranASR()
-        _real_asr.load()
-    result = _real_asr.transcribe(audio, sr, return_timestamps=False)
-    words = result.normalized_words
-    confs = [t.confidence for t in result.tokens] if result.tokens else [1.0] * len(words)
-    return words, confs
+    Uses ``tarteel-ai/whisper-tiny-ar-quran`` (converted to CTranslate2 INT8) so
+    the live stream runs with low latency on a standard CPU VPS. The raw Arabic
+    tokens are normalized with the *same* ``_normalize`` used for the reference
+    words, so the :class:`StreamingMatcher` compares hypothesis ↔ reference on a
+    consistent basis. Returns ``([], [])`` on any failure so the session falls
+    back to the stub-style behaviour instead of crashing.
+    """
+    try:
+        from ml.inference.faster_whisper_transcriber import get_transcriber
+
+        raw_words, confs = get_transcriber().transcribe(audio, sr)
+    except Exception as exc:  # pragma: no cover - model/load failures
+        logger.error("stream.faster_whisper_failed", error=str(exc))
+        return [], []
+
+    norm: list[str] = []
+    out_confs: list[float] = []
+    for w, c in zip(raw_words, confs):
+        n = _normalize(w)
+        if n:
+            norm.append(n)
+            out_confs.append(c)
+    return norm, out_confs
 
 
 def _make_stub_transcriber(reference_words: list[str]) -> Transcriber:

@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Network access for the backend API and OTA updates -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Microphone capture for the live AI Recitation (real-time tracking).
+         REQUIRED or the OS silently blocks all audio capture (Duration: 0s). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Allow installing updated APKs downloaded over-the-air -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Qibla direction: GPS location is required to compute the bearing -->

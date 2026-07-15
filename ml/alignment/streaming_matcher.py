@@ -272,8 +272,16 @@ class StreamingMatcher:
         user finished without reciting it).
         """
         self.evaluate(hypothesis_words, full=True)
+        # Carry the spoken word + confidence from the resolved states so the
+        # final verdicts expose what the user actually recited (powers the
+        # "compare your recitation" results sheet). Skipped words legitimately
+        # have no spoken word.
+        spoken_by_idx = {st.index: st for st in self._resolved_states}
         out: list[WordState] = []
         for idx, ref in enumerate(self.reference):
             status = self._resolved.get(idx, WordStatus.SKIPPED)
-            out.append(WordState(idx, ref, status))
+            st = spoken_by_idx.get(idx)
+            spoken = st.spoken if st is not None else None
+            conf = st.confidence if st is not None else 1.0
+            out.append(WordState(idx, ref, status, spoken, conf))
         return out
