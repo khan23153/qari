@@ -1297,3 +1297,70 @@ pitfalls, each fixed:
 5. There is a latent bug in the 44.1kHz fallback config that was in the OLD
    code: it sent 44.1 kHz PCM to a backend expecting 16 kHz. The new native
    code resamples to 16k, so that bug is gone — but keep an eye on sample rate.
+
+---
+
+## Session 2026-07-16 (morning) — CRASH FIXED, but capture still 0 frames (HAL block suspected)
+
+User tested v1.0.30+41. **Crash is FIXED** — app no longer dies on "Start
+Reciting". Native capture now initializes and reports (diag line):
+
+  `diag mic chunks: 0 bytes sent: 0 capture started: rate=16000 resample=false focus: yes`
+
+So: foreground service starts, `AudioRecord` initializes at 16 kHz, audio
+focus is granted (`focus: yes`), `resample=false` (device supports 16 kHz
+natively). BUT `mic chunks: 0` — the native read loop still gets **0 frames**
+(after the 5s listen the final screen shows the old "Something went wrong /
+No microphone audio was captured (0 bytes sent, mic chunks: 0)").
+
+### What this proves
+- The foreground-service + native-capture architecture is correct and no longer
+  crashes. Focus is granted.
+- The remaining failure is that the device's **HAL does not deliver mic data
+  to this AudioRecord even though it initializes and focus is granted**. This
+  is the deepest tier: the OS/HAL is silently starving the mic (NOT a config
+  issue — 16 kHz native is used; NOT focus — granted; NOT another app — user
+  confirmed recorder was only for screen capture and mic permission granted).
+- Reader path: `MicForegroundService` read thread calls `ar.read(shortBuf)`
+  and only posts when `n > 0`. `n == 0` loops silently; `n < 0` posts
+  `read error: <code>`. User saw ZERO chunks and NO `read error:` text → the
+  read() is returning 0 (or blocking) forever, so the HAL is not feeding data.
+
+### NEXT SESSION TODO (continue tomorrow morning)
+Remind the new session: **"read MEMORY.md first"** — it picks up the full
+history and continues from here. Specifically:
+1. We are at the final tier: native AudioRecord in a mic foreground service,
+   focus yes, 16 kHz native, but 0 frames. Levers left to try (one at a time,
+   rebuild+deploy+ask user to retest each):
+   a. **Change `AudioSource`**: currently `MediaRecorder.AudioSource
+      .VOICE_RECOGNITION`. Try `MediaRecorder.AudioSource.MIC` (most
+      compatible) and `UNPROCESSED`. Some Android 16 / OEM builds reserve or
+      starve VOICE_RECOGNITION for the system assistant → 0 frames. This is the
+      single most likely remaining fix.
+   b. **`adb logcat`** from the user's machine during a recitation, filter
+      `AudioRecord` / `Qari` / `MicForegroundService` — confirms whether
+      read() blocks or returns 0, and any native warning. User must run
+      `adb logcat` with phone USB-connected (phone is NOT on the VPS).
+   c. **Explicit routing / AudioManager**: force the mic input device, or set
+      `AudioManager.setMicrophoneMute(false)` defensively (a stray mute state
+      could cause 0 frames — though usually mute returns zero-filled buffers,
+      not 0 length; still worth a defensive unset).
+   d. **Sample-rate / buffer**: try 44100 with the resampler path
+      (`resample=true`) even though 16 kHz is "supported", in case the HAL
+      only serves the native 44100/48000 rate. (The resample fallback already
+      exists; just force it or add 44100 as the first try.)
+2. Once frames flow (`mic chunks` climbs), verify the WS → backend ASR path
+   end-to-end (word reveal + final results). Backend expects 16 kHz PCM16 mono
+   (`AppConstants.liveRecitationSampleRate = 16000`); our native stream sends
+   16 kHz PCM16, so it should line up.
+3. Still-open items from prior session remain: per-ayah `RecordingService`
+   still uses `record` plugin (may also be 0-frame on this device); consider
+   removing `record` from pubspec once both paths are native.
+
+### Build/run reminders (VPS)
+- Flutter at `/home/Innocent/flutter` (export PATH + ANDROID_HOME as before).
+- After editing Kotlin/Dart: `flutter pub get`, `flutter analyze`,
+  `flutter build apk --release`, copy `mobile/build/app/outputs/flutter-apk/
+  app-release.apk` → `releases/app-release.apk` (OTA serves it live).
+- Bump `mobile/pubspec.yaml` version AND `releases/app_release.json`
+  (version_name + version_code) together each build.
