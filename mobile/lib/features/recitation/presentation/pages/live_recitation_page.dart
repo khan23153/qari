@@ -116,6 +116,13 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   /// diagnostic Text rebuilds, not the whole reveal view).
   final ValueNotifier<int> _micChunksNotifier = ValueNotifier(0);
   final ValueNotifier<int> _sentBytesNotifier = ValueNotifier(0);
+  /// Native recorder error captured from the recorder's state channel (e.g.
+  /// "PCM reader failed to initialize"). Surfaced live so a swallowed setup
+  /// failure is visible immediately, not just on the error screen.
+  final ValueNotifier<String?> _micErrorNotifier = ValueNotifier(null);
+  /// Android audio-focus grant result (from `audio_session`). `false` ⇒ the OS
+  /// denied focus ⇒ the recorder is silently dead ⇒ "mic chunks: 0".
+  final ValueNotifier<bool?> _focusNotifier = ValueNotifier(null);
   /// True once we've been "listening" for a couple seconds but the recorder has
   /// produced zero chunks — i.e. the OS is blocking mic capture. Surfaces a
   /// live warning so the user doesn't have to wait until "Stop" to find out.
@@ -149,6 +156,8 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
     _scrollController.dispose();
     _micChunksNotifier.dispose();
     _sentBytesNotifier.dispose();
+    _micErrorNotifier.dispose();
+    _focusNotifier.dispose();
     _noAudioNotifier.dispose();
     _service.dispose();
     _audioService.dispose();
@@ -369,6 +378,11 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
       final chunks = _service.micChunks;
       _micChunksNotifier.value = chunks;
       _sentBytesNotifier.value = _service.sentBytes;
+      // Capture any native recorder error (state channel) so it shows live.
+      _micErrorNotifier.value = _service.micError;
+      // Capture whether Android granted audio focus — a `false` here is the
+      // smoking gun for a silently-dead recorder (OS/contending app blocking).
+      _focusNotifier.value = _service.audioFocusGranted;
       // After ~2s of listening with zero recorder output, the OS is almost
       // certainly blocking mic capture — flag it live instead of waiting for
       // "Stop" (by which point the live UI is replaced by the error screen).
@@ -405,16 +419,27 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
     // grant mic access / free the microphone.
     if (_service.sentBytes == 0) {
       final chunks = _service.micChunks;
+      // The native recorder often reports the *real* cause asynchronously
+      // (unsupported sample rate, "PCM reader failed to initialize", another
+      // app holding the mic). Surface it verbatim so the user isn't left
+      // guessing between "permission" and "network".
+      final nativeErr = _service.micError;
+      final nativeDetail = nativeErr != null
+          ? ' Recorder error: $nativeErr'
+          : '';
       // Distinguish "the recorder produced no audio" (capture blocked by the
       // OS despite the app permission being granted) from "audio was captured
       // but never reached the server" (a transport / dropped-connection issue)
       // — the fix is very different for each.
       final captureHint = chunks == 0
-          ? 'The microphone produced no audio at all. The OS is blocking '
-              'capture even though the app permission was granted — open your '
-              'device Settings › Apps › Qari › Permissions › Microphone and set '
-              'it to "Allow", close any other app using the mic (voice '
-              'assistant, recorder, phone call), then restart Qari and retry.'
+          ? 'The microphone produced no audio at all.$nativeDetail '
+              '${_service.audioFocusGranted == false ? 'Android denied audio '
+                  'focus — another app (voice assistant, recorder, call) is '
+                  'likely holding the mic. ' : ''}'
+              'Open your device Settings › Apps › Qari › Permissions › '
+              'Microphone and set it to "Allow", close any other app using the '
+              'mic (voice assistant, recorder, phone call), then restart Qari '
+              'and retry.'
           : 'Audio was captured ($chunks mic chunks) but none reached the '
               'server. The connection dropped mid-stream — check your network '
               'and retry.';
@@ -885,9 +910,14 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'No microphone audio. Check Settings › Apps › Qari › '
-                          'Microphone = Allow, and close any other app using the '
-                          'mic, then restart and retry.',
+                          _service.micError != null
+                              ? 'No microphone audio. Recorder error: '
+                                  '${_service.micError}'
+                              : 'No microphone audio is reaching the app. If '
+                                  'microphone permission is already Allowed, '
+                                  'fully close Qari and reopen it, then try '
+                                  'again. Also close any other app using the '
+                                  'mic (voice assistant, recorder, call).',
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: theme.colorScheme.error,
                             height: 1.4,
@@ -930,11 +960,32 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
             valueListenable: _micChunksNotifier,
             builder: (context, chunks, _) => ValueListenableBuilder<int>(
               valueListenable: _sentBytesNotifier,
-              builder: (context, sent, _) => Text(
-                'diag · mic chunks: $chunks · bytes sent: $sent',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
-                ),
+              builder: (context, sent, _) => ValueListenableBuilder<String?>(
+                valueListenable: _micErrorNotifier,
+                builder: (context, err, _) => ValueListenableBuilder<bool?>(
+                valueListenable: _focusNotifier,
+                builder: (context, focus, _) {
+                  final focusStr = focus == null
+                      ? ''
+                      : focus
+                          ? ' · focus: yes'
+                          : ' · focus: NO';
+                  final statusStr = _service.nativeStatus ?? 'init';
+                  return Text(
+                    err != null
+                        ? 'diag · mic chunks: $chunks · bytes sent: $sent · '
+                            '$statusStr$focusStr\n'
+                            'recorder error: $err'
+                        : 'diag · mic chunks: $chunks · bytes sent: $sent · '
+                            '$statusStr$focusStr',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: (err != null || focus == false)
+                          ? theme.colorScheme.error
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                    ),
+                  );
+                },
+              ),
               ),
             ),
           ),

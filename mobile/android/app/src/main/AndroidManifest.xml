@@ -4,6 +4,11 @@
     <!-- Microphone capture for the live AI Recitation (real-time tracking).
          REQUIRED or the OS silently blocks all audio capture (Duration: 0s). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Foreground service so the OS grants ongoing mic-capture focus on
+         Android 14+ (API 34+). Without it the recorder gets 0 frames / the OS
+         denies audio focus even though the runtime permission is granted. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <!-- Allow installing updated APKs downloaded over-the-air -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Qibla direction: GPS location is required to compute the bearing -->
@@ -42,6 +47,13 @@
             <meta-data
               android:name="flutterEmbedding"
               android:value="2" />
+        <!-- Microphone foreground service: marks Qari as an active mic-capturing
+             app on Android 14+ so the OS grants capture focus (fixes the
+             "mic chunks: 0 / focus: NO" silent-capture failure). -->
+        <service
+            android:name=".MicForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

@@ -4,12 +4,26 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:record/record.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../models/recitation_stream_event.dart';
+
+/// Native side-channel to the `MicForegroundService` (microphone-typed Android
+/// foreground service). Starting it is what makes the OS grant capture focus on
+/// Android 14+; it is non-fatal if it fails (capture is still attempted).
+const MethodChannel _micForegroundChannel =
+    MethodChannel('com.qari.app/mic_foreground');
+
+/// PCM16 audio frames captured natively inside the foreground service.
+const EventChannel _micStreamChannel = EventChannel('com.qari.app/mic_stream');
+
+/// Status / error text from the native capture (e.g. "capture started:
+/// rate=16000", "capture error: ..."), surfaced live in the diag line.
+const EventChannel _micStatusChannel = EventChannel('com.qari.app/mic_status');
 
 /// Connection state of a live recitation streaming session.
 enum LiveConnectionState { idle, connecting, listening, finishing, closed, error }
@@ -22,12 +36,30 @@ enum LiveConnectionState { idle, connecting, listening, finishing, closed, error
 /// (single-file record → upload), so the Quran reader's per-ayah "Recite" flow
 /// is unaffected.
 class StreamingRecitationService {
-  final AudioRecorder _recorder = AudioRecorder();
-
   WebSocket? _socket;
-  StreamSubscription<Uint8List>? _audioSub;
+  StreamSubscription<dynamic>? _audioSub;
   StreamSubscription? _socketSub;
+  /// Subscription to the native mic *status* channel (capture started / errors),
+  /// surfaced live in the diag line so a swallowed native failure is visible.
+  StreamSubscription? _statusSub;
   Timer? _pingTimer;
+
+  /// Android audio session (via `audio_session`) activated before capture to
+  /// request focus + speech attributes — helps the OS route the mic on devices
+  /// that otherwise deliver silence despite the app permission being granted.
+  AudioSession? _audioSession;
+
+  /// Whether Android granted audio focus when we activated the session.
+  /// `null` until activation finishes; `false` means the OS denied focus — a
+  /// strong signal that another app holds the mic (or the OS is suppressing
+  /// capture), which produces exactly the silent 0-frame stream behind
+  /// "mic chunks: 0 · bytes sent: 0". Surfaced live in the diag line so a
+  /// focus denial is visible immediately instead of being guessed at.
+  bool? _audioFocusGranted;
+
+  /// Latest native capture status string (e.g. "capture started: rate=16000",
+  /// "capture error: ..."). Surfaced live in the diag line.
+  String? _nativeStatus;
 
   /// Buffered PCM16 audio that is flushed to the socket on a fixed cadence
   /// (see [_flushInterval]) so each WS message carries a real, non-empty chunk
@@ -76,6 +108,20 @@ class StreamingRecitationService {
   /// is producing no data → OS blocked capture despite the permission).
   int get micChunks => _chunkCount;
 
+  /// Last native recorder error (if any). Surfaced live in the diag line.
+  String? _micError;
+  String? get micError => _micError;
+
+  /// Result of the Android audio-focus request (via `audio_session`). `null`
+  /// until the session is activated; `false` means the OS denied focus, which
+  /// on many ROMs yields a silently-dead recorder (0 chunks, 0 errors) — the
+  /// exact symptom behind "mic chunks: 0 · bytes sent: 0".
+  bool? get audioFocusGranted => _audioFocusGranted;
+
+  /// Latest native capture status (e.g. "capture started: rate=16000",
+  /// "capture error: ..."). Surfaced live in the diag line.
+  String? get nativeStatus => _nativeStatus;
+
   void _setState(LiveConnectionState s) {
     _state = s;
     if (!_connection.isClosed) _connection.add(s);
@@ -110,6 +156,8 @@ class StreamingRecitationService {
     _setState(LiveConnectionState.connecting);
     _totalSentBytes = 0;
     _chunkCount = 0;
+    _micError = null;
+    _audioFocusGranted = null;
     _firstChunkAt = null;
 
     if (!await hasPermission()) {
@@ -119,6 +167,8 @@ class StreamingRecitationService {
         throw const MicPermissionDeniedException();
       }
     }
+    _audioSession?.setActive(false).catchError((_) => false);
+    _audioSession = null;
 
     // --- Connect the WebSocket (trust the VPS self-signed cert) ---
     final httpClient = HttpClient()
@@ -178,42 +228,23 @@ class StreamingRecitationService {
         '(surah=$surahNumber, ayah=$ayahNumber, refs=${refs.length}, '
         'clientWords=${(words?.length) ?? 0})');
 
-    // --- Start the continuous PCM audio stream ---
+    // --- Start the continuous PCM audio stream (native, inside the mic
+    // foreground service). The `record` plugin opens AudioRecord on the Flutter
+    // engine thread, outside the foreground-service capture context, so on
+    // Android 14+ it can be granted focus yet receive 0 frames. Capturing
+    // natively inside the service is the sanctioned fix.
+    await _activateAudioSession();
+    // Start the microphone foreground service so the OS grants capture focus on
+    // Android 14+ (fixes the "mic chunks: 0 / focus: NO" silent-capture case).
+    await _startForegroundMicService();
     try {
-      final audioStream = await _recorder.startStream(
-        const RecordConfig(
-          encoder: AudioEncoder.pcm16bits,
-          sampleRate: AppConstants.liveRecitationSampleRate,
-          numChannels: 1,
-        ),
-      );
-      debugPrint('[Streaming] mic recorder STARTED (stream open).');
-
-      _audioSub = audioStream.listen(
-        (chunk) {
-          _emitAmplitude(chunk);
-          // ACHTUNG: if this logs 0-length chunks continuously, the local
-          // recorder is broken (no mic data).
-          _chunkCount++;
-          _firstChunkAt ??= DateTime.now();
-          if (chunk.isNotEmpty) {
-            _audioBuffer.add(chunk);
-          }
-          if (_chunkCount <= 5 || _chunkCount % 50 == 0) {
-            debugPrint('[Streaming] mic chunk #$_chunkCount '
-                'len=${chunk.length} bytes (buffered=${_audioBuffer.length})');
-          }
-        },
-        onError: (Object e, StackTrace? st) {
-          // The mic/recorder errored — the stream would otherwise die silently
-          // and the backend would receive no audio (=> Duration 0s).
-          debugPrint('[Streaming] MIC STREAM ERROR: $e');
-          if (st != null) debugPrint('$st');
-        },
-        cancelOnError: false,
-      );
+      _subscribeNativeMic();
+      debugPrint('[Streaming] native mic stream SUBSCRIBED.');
+    } on MicPermissionDeniedException {
+      rethrow;
     } catch (e, st) {
-      debugPrint('[Streaming] mic startStream FAILED: $e\n$st');
+      _micError = e.toString();
+      debugPrint('[Streaming] native mic subscribe FAILED: $e\n$st');
       _setState(LiveConnectionState.error);
       throw StreamingConnectionException('Mic could not start: $e');
     }
@@ -236,6 +267,106 @@ class StreamingRecitationService {
 
     _setState(LiveConnectionState.listening);
     debugPrint('StreamingRecitation: streaming started (sentBytes tracked)');
+  }
+
+  /// Starts the native microphone foreground service (Android 14+). Non-fatal:
+  /// if it fails we still try to record — but without it the OS denies capture
+  /// focus (the "mic chunks: 0 / focus: NO" failure).
+  Future<void> _startForegroundMicService() async {
+    try {
+      await _micForegroundChannel.invokeMethod<void>('start');
+      debugPrint('[Streaming] mic foreground service started.');
+    } catch (e) {
+      debugPrint('[Streaming] mic foreground service start failed (non-fatal): $e');
+    }
+  }
+
+  /// Stops the native microphone foreground service.
+  Future<void> _stopForegroundMicService() async {
+    try {
+      await _micForegroundChannel.invokeMethod<void>('stop');
+      debugPrint('[Streaming] mic foreground service stopped.');
+    } catch (e) {
+      debugPrint('[Streaming] mic foreground service stop failed (non-fatal): $e');
+    }
+  }
+
+  /// Requests Android audio focus + configures a speech/record audio session so
+  /// the OS routes the mic to this app. Non-fatal: if it fails we still try to
+  /// record (some devices don't need it; a failure here is not the capture bug).
+  Future<void> _activateAudioSession() async {
+    try {
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration(
+        androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+        androidAudioAttributes: AndroidAudioAttributes(
+          contentType: AndroidAudioContentType.speech,
+          usage: AndroidAudioUsage.voiceCommunication,
+        ),
+        androidWillPauseWhenDucked: false,
+      ));
+      // `setActive` returns whether the OS actually granted focus. A `false`
+      // here (or a throw) means the mic is contended/blocked — capture it so
+      // the UI can show "focus: NO" instead of a bare 0-chunk stream.
+      final granted = await session.setActive(true);
+      _audioFocusGranted = granted;
+      _audioSession = session;
+      debugPrint('[Streaming] audio session activated '
+          '(focus granted: $granted).');
+    } catch (e) {
+      _audioFocusGranted = false;
+      debugPrint('[Streaming] audio session activate failed (non-fatal): $e');
+    }
+  }
+
+  /// Subscribes to the native mic PCM stream + status channel. The status
+  /// channel fires first ("capture started: rate=…" / "capture error: …") so a
+  /// silently-dead capture is visible immediately instead of a bare "0 bytes".
+  void _subscribeNativeMic() {
+    _statusSub?.cancel();
+    _statusSub = _micStatusChannel.receiveBroadcastStream().listen(
+      (dynamic msg) {
+        final s = msg is String ? msg : msg?.toString();
+        if (s != null) {
+          _nativeStatus = s;
+          debugPrint('[Streaming] native mic status: $s');
+          if (s.toLowerCase().contains('error')) _micError = s;
+        }
+      },
+      onError: (Object e, StackTrace? st) {
+        _micError = e.toString();
+        debugPrint('[Streaming] native mic STATUS ERROR: $e');
+        if (st != null) debugPrint('$st');
+      },
+      cancelOnError: false,
+    );
+
+    _audioSub = _micStreamChannel.receiveBroadcastStream().listen(
+      (dynamic chunk) {
+        if (chunk is! Uint8List) return;
+        _onNativeAudio(chunk);
+      },
+      onError: (Object e, StackTrace? st) {
+        _micError = e.toString();
+        debugPrint('[Streaming] native mic STREAM ERROR: $e');
+        if (st != null) debugPrint('$st');
+      },
+      cancelOnError: false,
+    );
+  }
+
+  /// Forwards a native PCM16 frame to the live visualizer + upload buffer.
+  void _onNativeAudio(Uint8List chunk) {
+    _emitAmplitude(chunk);
+    _chunkCount++;
+    _firstChunkAt ??= DateTime.now();
+    if (chunk.isNotEmpty) {
+      _audioBuffer.add(chunk);
+    }
+    if (_chunkCount <= 5 || _chunkCount % 50 == 0) {
+      debugPrint('[Streaming] mic chunk #$_chunkCount '
+          'len=${chunk.length} bytes (buffered=${_audioBuffer.length})');
+    }
   }
 
   /// Sends any buffered PCM16 audio to the server as a single binary frame.
@@ -324,14 +455,11 @@ class StreamingRecitationService {
     // Stop capturing audio first.
     await _audioSub?.cancel();
     _audioSub = null;
+    await _statusSub?.cancel();
+    _statusSub = null;
     _pingTimer?.cancel();
     _flushTimer?.cancel();
     _flushAudio(); // send any trailing audio before finalizing
-    try {
-      await _recorder.stop();
-    } catch (e) {
-      debugPrint('[Streaming] recorder stop error: $e');
-    }
 
     debugPrint('[Streaming] requesting finalize from server '
         '(totalSentBytes=$_totalSentBytes, micChunks=$_chunkCount)');
@@ -373,16 +501,32 @@ class StreamingRecitationService {
     _audioBuffer.clear();
     await _audioSub?.cancel();
     _audioSub = null;
-    try {
-      await _recorder.cancel();
-    } catch (_) {}
+    await _statusSub?.cancel();
+    _statusSub = null;
     await _closeSocket();
     _setState(LiveConnectionState.closed);
+  }
+
+  /// Releases the Android audio focus / speech session acquired in
+  /// [_activateAudioSession]. Best-effort and non-fatal.
+  void _deactivateAudioSession() {
+    final session = _audioSession;
+    _audioSession = null;
+    _audioFocusGranted = null;
+    if (session != null) {
+      session.setActive(false).catchError((_) => false);
+    }
   }
 
   Future<void> _closeSocket() async {
     _flushTimer?.cancel();
     _pingTimer?.cancel();
+    _deactivateAudioSession();
+    await _stopForegroundMicService();
+    await _audioSub?.cancel();
+    _audioSub = null;
+    await _statusSub?.cancel();
+    _statusSub = null;
     await _socketSub?.cancel();
     _socketSub = null;
     try {
@@ -393,7 +537,6 @@ class StreamingRecitationService {
 
   Future<void> dispose() async {
     await cancel();
-    await _recorder.dispose();
     await _events.close();
     await _amplitude.close();
     await _connection.close();

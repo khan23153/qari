@@ -1,12 +1,12 @@
 {
-  "version": "1.0.24",
-  "version_code": 35,
+  "version": "1.0.30",
+  "version_code": 41,
   "min_version": "1.0.0",
   "min_version_code": 1,
   "apk_url": "https://20.197.40.13/v1/app/download",
   "force_update": false,
-  "notes_en": "Live AI Recitation now shows mic capture status live. If the OS blocks the microphone you get an instant 'No microphone audio' warning on screen (with mic chunks: N) instead of a silent 0/29. mic chunks: 0 means the OS is blocking capture (check Settings > Apps > Qari > Microphone = Allow, close other mic apps, restart). Update and allow mic access.",
-  "notes_ur": "لائیو AI تلاوت: مائیک کیپچر کی لائیو حیثیت۔",
-  "notes_hi": "Live AI Recitation: instant on-screen 'No microphone audio' warning with mic chunk count.",
+  "notes_en": "Crash fix (Android 14): all EventChannel sink calls now run on the main thread via Handler(Looper.getMainLooper()) (background-thread sink calls cause an uncatchable JNI crash). startForeground() now passes FOREGROUND_SERVICE_TYPE_MICROPHONE explicitly (manifest alone is insufficient on API 34+).",
+  "notes_ur": "لائیو تلاوت ڈایگناسٹک: مائیک کیپچر ناکامی کی اصل وجہ اب آن اسکرین دکھائی دیتی ہے۔",
+  "notes_hi": "Live Recitation diagnostic: the real mic-capture failure cause now shows on screen.",
   "data_version": 1
 }

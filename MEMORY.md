@@ -1137,5 +1137,57 @@ NEXT: user must update to v1.0.23 and report the diag line:
     no audio for these sessions).
 NOT YET committed (user will request). Changes: AndroidManifest RECORD_AUDIO,
 streaming_recitation_service getters, live_recitation_page diagnostics,
-pubspec + app_release.json bumps (→1.0.23+34), plus the earlier uncommitted
-Faster-Whisper backend work.
+ pubspec + app_release.json bumps (→1.0.23+34), plus the earlier uncommitted
+ Faster-Whisper backend work.
+
+## Session 2026-07-15 — DIAGNOSING "mic chunks: 0 · bytes sent: 0" (no error)
+User updated to v1.0.23+34; live diag still shows `mic chunks: 0 · bytes sent: 0`
+and the final screen says "No microphone audio was captured … OS is blocking
+capture". There is NO native error captured (`_micError == null`). The single
+watchdog restart (same config) fails identically → 0 chunks every time.
+
+INVESTIGATION (read the `record` plugin source in pub cache, v7.1.1 /
+record_android 2.1.2):
+- `AudioRecorder.start` (record_android) runs the `RecordThread`, which builds
+  `PCMReader` (the `AudioRecord`). If `AudioRecord.state != INITIALIZED` or
+  `getMinBufferSize` reports bad config, it throws "PCM reader failed to
+  initialize." / "Recording config is not supported by the hardware". That
+  exception is caught by the thread and routed to `onFailure` → BOTH
+  `sendStateErrorEvent` (state EventChannel) AND `sendErrorEvent` (record
+  EventChannel), posted via `uiThreadHandler.post` AFTER the start method
+  already returned `success`.
+- The record-data stream error is ALMOST ALWAYS LOST: `record` v7's
+  `_startRecordStream` only forwards `ctrl.addError` when `ctrl.hasListener`
+  is true, but the app attaches its `audioStream.listen` (via `_attachMic`)
+  only AFTER `startStream`/`await` resolves — by then the native error Event
+  has already fired on the channel and is dropped. So the recorder fails
+  silently → exactly `micChunks: 0, micError: null`.
+- ROOT-CAUSE HYPOTHESIS (to be confirmed on device): the requested
+  `RecordConfig` (PCM16, **16kHz**, `voiceRecognition` source) is rejected by
+  the user's device/ROM — either 16kHz isn't supported for that source on some
+  OEMs (Xiaomi/OPPO/Huawei) → init failure, or `VOICE_RECOGNITION` source
+  returns 0 frames on that ROM → silent 0-chunk stream. (record never requests
+  AudioFocus unless `audioInterruption != NONE`, but missing focus alone would
+  not cause 0 chunks.)
+
+FIX APPLIED = DIAGNOSTICS ONLY (user chose "investigate first", not fix yet):
+- `StreamingRecitationService`: subscribe to `_recorder.onStateChanged()`
+  BEFORE `startStream` (`_subscribeRecorderState`) and capture its `onError`
+  into `_micError`. The state channel is attached earliest, so its setup-error
+  event survives (unlike the audio-data channel) → the real cause becomes
+  visible. Re-subscribed after each recorder recreate (`_restartMic`) and
+  cancelled in `cancel`/`dispose`.
+- `live_recitation_page.dart`: new `_micErrorNotifier` surfaced live in the
+  `diag · mic chunks: N · bytes sent: N` line (turns red + prints the recorder
+  error) so a swallowed failure shows immediately, not only on the error screen.
+- `flutter analyze` passes (only pre-existing info/warning items).
+
+NEXT (confirm on device, then fix): rebuild + OTA the diagnostic build, have
+user retry. Two outcomes:
+  - diag shows `recorder error: PCM reader failed to initialize / config not
+    supported` → it's a CONFIG issue → add `startStream` fallback across
+    `(voiceRecognition|mic, 16k|44.1k)` and/or `audioInterruption`/audio focus.
+  - diag still `mic chunks: 0 · micError: null` → recorder INITIALIZED but
+    emits silence (OEM voiceRecognition quirk / OS truly blocking) → switch to
+    `AndroidAudioSource.mic` (or `unprocessed`) + `audio_session` focus.
+NOT committed/pushed; version NOT bumped yet (waiting on device confirmation).
