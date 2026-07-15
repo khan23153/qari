@@ -116,6 +116,11 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   /// diagnostic Text rebuilds, not the whole reveal view).
   final ValueNotifier<int> _micChunksNotifier = ValueNotifier(0);
   final ValueNotifier<int> _sentBytesNotifier = ValueNotifier(0);
+  /// True once we've been "listening" for a couple seconds but the recorder has
+  /// produced zero chunks — i.e. the OS is blocking mic capture. Surfaces a
+  /// live warning so the user doesn't have to wait until "Stop" to find out.
+  final ValueNotifier<bool> _noAudioNotifier = ValueNotifier(false);
+  DateTime? _listenStartedAt;
   Timer? _diagTimer;
 
   StreamSubscription<RecitationStreamEvent>? _eventSub;
@@ -144,6 +149,7 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
     _scrollController.dispose();
     _micChunksNotifier.dispose();
     _sentBytesNotifier.dispose();
+    _noAudioNotifier.dispose();
     _service.dispose();
     _audioService.dispose();
     super.dispose();
@@ -319,6 +325,8 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
 
   Future<void> _start() async {
     await Haptics.vibrate(HapticsType.medium);
+    _listenStartedAt = DateTime.now();
+    _noAudioNotifier.value = false;
     setState(() {
       _ui = LiveRecitationUiState.live;
       _clearReveal();
@@ -358,14 +366,26 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
     _stopDiagTimer();
     _diagTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
       if (!mounted) return;
-      _micChunksNotifier.value = _service.micChunks;
+      final chunks = _service.micChunks;
+      _micChunksNotifier.value = chunks;
       _sentBytesNotifier.value = _service.sentBytes;
+      // After ~2s of listening with zero recorder output, the OS is almost
+      // certainly blocking mic capture — flag it live instead of waiting for
+      // "Stop" (by which point the live UI is replaced by the error screen).
+      if (_listenStartedAt != null &&
+          DateTime.now().difference(_listenStartedAt!).inMilliseconds > 2000 &&
+          chunks == 0 &&
+          !_noAudioNotifier.value) {
+        _noAudioNotifier.value = true;
+      }
     });
   }
 
   void _stopDiagTimer() {
     _diagTimer?.cancel();
     _diagTimer = null;
+    _noAudioNotifier.value = false;
+    _listenStartedAt = null;
   }
 
   Future<void> _stop() async {
@@ -384,12 +404,27 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
     // confusing. Show a clear, actionable error instead so the user knows to
     // grant mic access / free the microphone.
     if (_service.sentBytes == 0) {
+      final chunks = _service.micChunks;
+      // Distinguish "the recorder produced no audio" (capture blocked by the
+      // OS despite the app permission being granted) from "audio was captured
+      // but never reached the server" (a transport / dropped-connection issue)
+      // — the fix is very different for each.
+      final captureHint = chunks == 0
+          ? 'The microphone produced no audio at all. The OS is blocking '
+              'capture even though the app permission was granted — open your '
+              'device Settings › Apps › Qari › Permissions › Microphone and set '
+              'it to "Allow", close any other app using the mic (voice '
+              'assistant, recorder, phone call), then restart Qari and retry.'
+          : 'Audio was captured ($chunks mic chunks) but none reached the '
+              'server. The connection dropped mid-stream — check your network '
+              'and retry.';
       setState(() {
         _ui = LiveRecitationUiState.error;
-        _errorMessage = 'No microphone audio was captured (0 bytes sent). '
-            'Please allow microphone access when prompted, ensure no other app '
-            'is using the mic, and try again.';
+        _errorMessage = 'No microphone audio was captured (0 bytes sent, '
+            'mic chunks: $chunks). $captureHint';
       });
+      debugPrint('[LiveRecitation] 0 bytes sent → micChunks=$chunks '
+          '(capture blocked: ${chunks == 0})');
       return;
     }
 
@@ -825,6 +860,45 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
         // Status bar (self-managed LIVE timer) so the page never setStates on a
         // 1s tick (which would rebuild the reveal view).
         _LiveStatusBadge(connectionState: _service.connectionState),
+
+        // Live "no audio" warning: if the recorder produced nothing after a
+        // couple seconds, tell the user immediately (the error screen would
+        // otherwise hide this until they tap Stop).
+        ValueListenableBuilder<bool>(
+          valueListenable: _noAudioNotifier,
+          builder: (context, stalled, _) => stalled
+              ? Container(
+                  margin: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.error.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: theme.colorScheme.error.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.mic_off_rounded,
+                          size: 18, color: theme.colorScheme.error),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'No microphone audio. Check Settings › Apps › Qari › '
+                          'Microphone = Allow, and close any other app using the '
+                          'mic, then restart and retry.',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.error,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
 
         // The blank canvas → continuous Mushaf reveal. Starts empty; words are
         // appended live as the engine confirms them.

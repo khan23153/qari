@@ -1,12 +1,12 @@
 {
-  "version": "1.0.23",
-  "version_code": 34,
+  "version": "1.0.24",
+  "version_code": 35,
   "min_version": "1.0.0",
   "min_version_code": 1,
   "apk_url": "https://20.197.40.13/v1/app/download",
   "force_update": false,
-  "notes_en": "Live AI Recitation: added an on-screen diagnostic (mic chunks captured vs bytes sent) and a clear 'No microphone audio was captured' message instead of a silent 0/29. Update and allow microphone access to enable real-time word tracking.",
-  "notes_ur": "لائیو AI تلاوت: مائیک ڈایگناسٹک شامل کیا گیا۔",
-  "notes_hi": "Live AI Recitation: on-screen diagnostic + clear 'no audio captured' message added.",
+  "notes_en": "Live AI Recitation now shows mic capture status live. If the OS blocks the microphone you get an instant 'No microphone audio' warning on screen (with mic chunks: N) instead of a silent 0/29. mic chunks: 0 means the OS is blocking capture (check Settings > Apps > Qari > Microphone = Allow, close other mic apps, restart). Update and allow mic access.",
+  "notes_ur": "لائیو AI تلاوت: مائیک کیپچر کی لائیو حیثیت۔",
+  "notes_hi": "Live AI Recitation: instant on-screen 'No microphone audio' warning with mic chunk count.",
   "data_version": 1
 }
