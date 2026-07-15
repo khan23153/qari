@@ -1191,3 +1191,109 @@ user retry. Two outcomes:
     emits silence (OEM voiceRecognition quirk / OS truly blocking) → switch to
     `AndroidAudioSource.mic` (or `unprocessed`) + `audio_session` focus.
 NOT committed/pushed; version NOT bumped yet (waiting on device confirmation).
+
+---
+
+## Session 2026-07-15 (night) — Root cause FOUND + native mic-capture rework (Android 16)
+
+DEVICE: user's phone is **Android 16 (API 36)**. Flutter 3.44.6 is installed
+on the VPS at `/home/Innocent/flutter` (not on PATH by default — export
+`PATH="/home/Innocent/flutter/bin:$PATH" ANDROID_HOME="/home/Innocent/Android"`).
+Backend recitation-api also runs on this VPS and serves the OTA APK from
+`releases/app-release.apk` (bind-mounted read-only into core-api; no container
+restart needed — the version endpoint reflects the new file immediately).
+
+### Symptom progression (all on the live AI Recitation screen)
+1. `mic chunks: 0 · bytes sent: 0 · voiceRecognition@16000Hz` (no focus info yet).
+2. Added audio-focus diagnostics → user retested: `focus: NO`. Verified in
+   `audio_session` source (`AndroidAudioManager.requestAudioFocus` returns
+   `status == AUDIOFOCUS_REQUEST_GRANTED`) so `focus: NO` is a REAL OS denial.
+   This ruled out: another app holding the mic, and the Quick Settings mute
+   toggle (muting denies data but NOT audio focus).
+3. Implemented microphone **foreground service** (option b). User retested:
+   **`focus: yes`** — so focus denial was real and the foreground service fixed
+   it. BUT still `mic chunks: 0` for ALL 4 fallback configs (user watched the
+   diag cycle voiceRecognition@16k → mic@16k → unprocessed@16k → mic@44.1k,
+   all 0 frames).
+4. Conclusion: the `record` Flutter plugin opens `AudioRecord` on the Flutter
+   engine thread, **outside** the foreground-service capture context, so on
+   Android 14+ the OS grants focus yet delivers 0 frames (from
+   `record_android` `PCMReader.read()` = blocking; only non-empty buffers are
+   posted → 0 chunks, no error). Source confirmed in
+   `record_android-2.1.2/.../recorder/PCMReader.kt` and `RecordThread.kt`.
+
+### Fix: native capture INSIDE the foreground service (committed, v1.0.30+41)
+Replaced the `record`-based live stream with native capture:
+- `mobile/android/app/src/main/kotlin/com/qari/app/MicForegroundService.kt`
+  (NEW): opens `AudioRecord` (VOICE_RECOGNITION, PCM16 mono) at 16 kHz,
+  falls back to 44.1 kHz + linear resample to 16 kHz (`LinearResampler`),
+  reads in a background thread, posts PCM16 frames over an `EventChannel`.
+- `MicStreamBridge.kt` (NEW): process-wide bridge holding the Flutter
+  `EventSink`s (audio + status).
+- `MainActivity.kt`: registers `MethodChannel com.qari.app/mic_foreground`
+  (start/stop) + `EventChannel com.qari.app/mic_stream` (PCM frames) +
+  `com.qari.app/mic_status` (status strings).
+- `streaming_recitation_service.dart`: removed all `record` usage for the live
+  stream; subscribes to the native `EventChannel`s; keeps WS/flush/amplitude/
+  audio-focus logic. Diag line now shows native `nativeStatus` instead of the
+  old config label.
+- `live_recitation_page.dart`: diag line shows `nativeStatus` + `focus: yes/no`.
+- Manifest: `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_MICROPHONE` permissions
+  and `<service android:name=".MicForegroundService"
+  android:exported="false" android:foregroundServiceType="microphone" />`
+  (these were present BEFORE the crashes).
+
+### CRITICAL: the app HARD-CRASHED on "Start Reciting" (3 rounds) — root causes
+The crash was NOT a missing manifest entry. Three distinct Android-14 native
+pitfalls, each fixed:
+1. **Call-site throw**: `startForegroundService()` throws
+   `ForegroundServiceStartNotAllowedException`/`SecurityException` at the call
+   site (inside `MainActivity`'s MethodChannel), BEFORE the service's own
+   try/catch. Fixed by wrapping `MicForegroundService.start(this)` in try/catch
+   in `MainActivity` and piping to the diag status channel + `result.error`.
+2. **BadNotificationException**: notification channel must be created BEFORE
+   `startForeground()`, and the small icon MUST be a valid monochrome drawable
+   (NOT `R.mipmap.ic_launcher` — caused instant kill on Android 12+). Added
+   `res/drawable/ic_mic_notification.xml` (monochrome mic vector) and use it.
+3. **Uncatchable JNI crash**: calling `EventChannel` `eventSink.success()`
+   from the background `AudioRecord` read thread crashes the app with no
+   catchable exception. Fixed by routing ALL sink calls through
+   `Handler(Looper.getMainLooper()).post { ... }`.
+   ALSO: Android 14 requires the mic type passed in the `startForeground()`
+   CALL, not just the manifest: `startForeground(id, notif,
+   ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)` on API 29+.
+   (Note: `ServiceInfo` with `FOREGROUND_SERVICE_TYPE_*` is
+   `android.content.pm.ServiceInfo`, NOT `android.app.ServiceInfo`.)
+
+### CURRENT STATE (end of night, UNVERIFIED on device)
+- Committed as `0a51d54` "fix(recitation): native mic capture in foreground
+  service (Android 14+)". Version bumped to **1.0.30+41**, APK rebuilt and
+  copied to `releases/app-release.apk`, OTA version endpoint returns 41.
+- **NOT yet confirmed on the user's device** — the user went to sleep right
+  after the v1.0.30 build. The user explicitly asked to commit + update
+  MEMORY.md so a new session can continue in the morning.
+
+### NEXT SESSION TODO (when user wakes up)
+1. User must update Qari via OTA to v1.0.30 and tap "Start Reciting".
+   - EXPECTED GOOD: diag shows `capture started: rate=16000` and `mic chunks`
+     climbs → bug fixed. Then verify live word reveal + final results work
+     over the WS (backend expects 16 kHz PCM16 mono).
+   - IF it STILL crashes: it's now a safe (non-crash) path — the diag will show
+     `foreground start error: …` / `capture error: …` / `read error: …`. Paste
+     that exact text. Most likely remaining culprits: (a) device/HAL still
+     blocks even in-service AudioRecord (then we need `adb logcat` from the
+     user's machine, or try a different `AudioSource` like `MIC` instead of
+     `VOICE_RECOGNITION`); (b) a different OEM strict-mode kill.
+2. If capture works but ASR is wrong/bad: the 44.1k→16k `LinearResampler` is
+   basic linear interpolation — acceptable for Whisper but may need a better
+   resampler if quality is poor. Also confirm the backend's
+   `liveRecitationSampleRate` (16000) matches what we send.
+3. REMINDER: the per-ayah `RecordingService` (single-file WAV record→upload)
+   STILL uses the `record` plugin and may have the same 0-frame issue on this
+   device. If the user reports the reader's "Recite" flow is silent, port it
+   to the same native capture or at least verify it.
+4. The `record` package can likely be removed from `pubspec.yaml` once both
+   paths use native capture (currently still imported by RecordingService).
+5. There is a latent bug in the 44.1kHz fallback config that was in the OLD
+   code: it sent 44.1 kHz PCM to a backend expecting 16 kHz. The new native
+   code resamples to 16k, so that bug is gone — but keep an eye on sample rate.
