@@ -8,7 +8,7 @@
 - **Qari**: AI-powered Quran learning app (Flutter mobile + Python/FastAPI backend).
 - Repo: https://github.com/khan23153/qari
 - Mobile app lives in `mobile/`, backend in repo root (core_api, infra, etl, etc).
-- Current app version: **1.0.13+19** (versionCode 19).
+- Current app version: **1.0.38+49** (versionCode 49).
 - Flutter SDK location (not in PATH by default): `/home/Innocent/flutter/bin/flutter`
   - Build APK: `cd mobile && flutter pub get && flutter build apk --release`
   - Output: `mobile/build/app/outputs/flutter-apk/app-release.apk` → copy to `releases/app-release.apk`
@@ -1508,3 +1508,42 @@ on odd offset, or `_audioBuffer` not flushing) — then wrap `_onNativeAudio` bo
 in try/catch + log.
 If `dropped` > 0, the Dart audio EventChannel subscription isn't attached
 (audioSink null) — then check `_subscribeNativeMic` ordering.
+
+## Session 2026-07-16 — Live Recitation "mic chunks: 0 · bytes sent: 0" ROOT FIXED
+User reported (diag screenshot) the Live Recitation screen showing:
+`diag · mic chunks: 0 · bytes sent: 0 · capture started: rate=44100
+resample=true source=UNPROCESSED · focus: yes` — capture started healthy
+(focus granted, 44.1k + resample) but ZERO frames reached Dart/backend.
+ROOT CAUSE: a start/sink RACE. The native `MicForegroundService.startCapture()`
+began capturing + flushing frames on its own thread, but the Flutter
+`mic_stream` EventChannel listener was subscribed (via `_subscribeNativeMic`)
+AFTER `_startForegroundMicService()` returned. The old `flushRunnable`
+discarded the ENTIRE outgoing buffer (`outBuf.clear(); audioDropped++`) whenever
+`MicStreamBridge.audioSink` was still null — which it was during the race — so
+every frame produced before Dart attached was thrown away permanently →
+`micChunks=0`, `sentBytes=0`, silent session.
+FIX (committed 0634b41, v1.0.38+49 — NOT pushed, APK NOT rebuilt here):
+- `MicForegroundService.kt`: frames are now KEPT buffered (capped ~10s /
+  `maxBufferedBytes=1_600_000`) when the sink isn't attached, and flushed
+  immediately once it attaches via `MicStreamBridge.onAudioSinkAttached` →
+  `flushNow(outBuf, maxBufferedBytes, bufferedBytes)`. `bufferedBytes` is an
+  `AtomicInteger` (read loop increments under cap; flushNow decrements). No
+  more dropping on null sink.
+- `MicStreamBridge.kt`: added `onAudioSinkAttached: (() -> Unit)?` callback +
+  `attachAudioSink(sink)` that sets `audioSink` and fires the callback.
+- `MainActivity.kt`: `MIC_STREAM` StreamHandler now calls
+  `MicStreamBridge.attachAudioSink(sink)` (was `audioSink = sink`).
+- `streaming_recitation_service.dart`: `_subscribeNativeMic()` is now called
+  BEFORE `_startForegroundMicService()` in `start()` so the listener is
+  attached before the service produces frames (race eliminated).
+VERIFY: `flutter analyze` clean (only a pre-existing info lint). Kotlin not
+compiled here (no Android SDK); logic reviewed. After rebuild+deploy, diag
+should show rising `mic chunks` + `bytes sent` within ~1s of Start.
+DEPLOY: rebuild APK on a machine with Android SDK (`flutter build apk
+--release` → `releases/app-release.apk`) + push to VPS 20.197.40.13
+(`/v1/app/download`). Bump version_code on VPS only after the APK is live.
+NOTE for next session: the prior diag instrumentation (onData type/len,
+audioPosted/dropped counters) in `streaming_recitation_service.dart` +
+`live_recitation_page.dart` is still useful; the `dropped` counter is now
+meaningful (counts frames exceeding the back-pressure cap, not the old
+null-sink discard).
