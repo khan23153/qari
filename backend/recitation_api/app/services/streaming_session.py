@@ -305,6 +305,7 @@ class StreamingRecitationSession:
         self._pcm = bytearray()
         self._samples_at_last_transcribe = 0
         self._transcribe_lock = asyncio.Lock()
+        self._transcribe_stop = False
         self._matcher = None
         self._last_status: dict[int, str] = {}
         self._last_hypothesis: list[str] = []
@@ -405,6 +406,28 @@ class StreamingRecitationSession:
     # ------------------------------------------------------------------
     def add_audio(self, chunk: bytes) -> None:
         self._pcm.extend(chunk)
+
+    # Background transcription loop (driven by the WebSocket handler so the
+    # receive loop never blocks on the slow Whisper call). Re-transcribes the
+    # accumulated audio on a fixed cadence and emits `word` events as words
+    # resolve. A single in-flight transcription is guarded by `_transcribe_lock`
+    # so concurrent ticks never stack.
+    def stop_transcription(self) -> "asyncio.Future":
+        self._transcribe_stop = True
+        return asyncio.sleep(0)  # no-op awaitable for callers
+
+    async def transcription_loop(self, websocket) -> None:
+        self._transcribe_stop = False
+        try:
+            while not self._transcribe_stop:
+                try:
+                    for event in await self.maybe_transcribe():
+                        await websocket.send_json(event)
+                except Exception as exc:  # pragma: no cover - model failures
+                    logger.error("stream.loop_transcribe_failed", session_id=self.session_id, error=str(exc))
+                await asyncio.sleep(TRANSCRIBE_INTERVAL_SEC)
+        except asyncio.CancelledError:
+            return
 
     @property
     def _total_samples(self) -> int:

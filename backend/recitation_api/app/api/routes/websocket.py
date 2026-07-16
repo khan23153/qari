@@ -149,6 +149,14 @@ async def recitation_stream(websocket: WebSocket):
     )
 
     finalized = False
+    # A single background task owns transcription so the receive loop never
+    # blocks on the (slow) Whisper call. Frames are buffered by `add_audio`
+    # the instant they arrive; the background task re-transcribes on its own
+    # cadence and emits `word` events. Without this, `maybe_transcribe` ran
+    # inline on every binary frame, stalling `websocket.receive()` and making
+    # the live tracker fall further and further behind real time on long
+    # surahs ("tracker writing too slow").
+    transcribe_task = asyncio.ensure_future(session.transcription_loop(websocket))
     try:
         while True:
             message = await websocket.receive()
@@ -158,9 +166,8 @@ async def recitation_stream(websocket: WebSocket):
 
             data = message.get("bytes")
             if data:
+                # Buffer only — transcription happens in the background task.
                 session.add_audio(data)
-                for event in await session.maybe_transcribe():
-                    await websocket.send_json(event)
                 continue
 
             text = message.get("text")
@@ -170,6 +177,9 @@ async def recitation_stream(websocket: WebSocket):
                 except json.JSONDecodeError:
                     continue
                 if payload.get("type") == "stop":
+                    # Tell the background task to stop looping, then do one
+                    # forced final transcription + emit the `final` result.
+                    await session.stop_transcription()
                     for event in await session.maybe_transcribe(force=True):
                         await websocket.send_json(event)
                     result = await session.finalize()
@@ -189,6 +199,12 @@ async def recitation_stream(websocket: WebSocket):
     except Exception as exc:
         logger.error("ws.stream.error", session_id=session.session_id, error=str(exc))
     finally:
+        await session.stop_transcription()
+        try:
+            transcribe_task.cancel()
+            await transcribe_task
+        except (asyncio.CancelledError, Exception):
+            pass
         if not finalized:
             # Persist whatever we captured so history / A/B playback still work.
             try:
