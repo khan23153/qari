@@ -1,12 +1,12 @@
 {
-  "version": "1.0.30",
-  "version_code": 41,
+  "version": "1.0.38",
+  "version_code": 49,
   "min_version": "1.0.0",
   "min_version_code": 1,
   "apk_url": "https://20.197.40.13/v1/app/download",
   "force_update": false,
-  "notes_en": "Crash fix (Android 14): all EventChannel sink calls now run on the main thread via Handler(Looper.getMainLooper()) (background-thread sink calls cause an uncatchable JNI crash). startForeground() now passes FOREGROUND_SERVICE_TYPE_MICROPHONE explicitly (manifest alone is insufficient on API 34+).",
-  "notes_ur": "لائیو تلاوت ڈایگناسٹک: مائیک کیپچر ناکامی کی اصل وجہ اب آن اسکرین دکھائی دیتی ہے۔",
-  "notes_hi": "Live Recitation diagnostic: the real mic-capture failure cause now shows on screen.",
+  "notes_en": "Live Recitation mic fix: frames are no longer dropped during the start/sink race. Native audio is buffered until the Flutter listener attaches, then flushed, so mic chunks and bytes sent both flow (fixes 'mic chunks: 0 · bytes sent: 0' silent capture).",
+  "notes_ur": "لائیو تلاوت فکس: اب شروعات کے دوران آڈیو فریم ضائع نہیں ہوتے اور مائیک کا ڈیٹا سرور تک پہنچتا ہے۔",
+  "notes_hi": "Live Recitation fix: mic audio frames are buffered until the listener attaches, so they reach the server instead of being dropped.",
   "data_version": 1
 }

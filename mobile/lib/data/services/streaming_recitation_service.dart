@@ -112,6 +112,17 @@ class StreamingRecitationService {
   String? _micError;
   String? get micError => _micError;
 
+  /// On-screen diagnostics for the native→Dart audio delivery, so we can debug
+  /// the "mic chunks: 0" case without `flutter logs` (useful on a phone with no
+  /// dev machine). Counts how many native audio frames actually reached the Dart
+  /// `onData` callback (vs `_chunkCount`, which counts successfully processed).
+  int _audioOnDataCount = 0;
+  int get audioOnDataCount => _audioOnDataCount;
+  String? _lastFrameType;
+  String? get lastFrameType => _lastFrameType;
+  String? _audioOnDataError;
+  String? get audioOnDataError => _audioOnDataError;
+
   /// Result of the Android audio-focus request (via `audio_session`). `null`
   /// until the session is activated; `false` means the OS denied focus, which
   /// on many ROMs yields a silently-dead recorder (0 chunks, 0 errors) — the
@@ -156,6 +167,9 @@ class StreamingRecitationService {
     _setState(LiveConnectionState.connecting);
     _totalSentBytes = 0;
     _chunkCount = 0;
+    _audioOnDataCount = 0;
+    _lastFrameType = null;
+    _audioOnDataError = null;
     _micError = null;
     _audioFocusGranted = null;
     _firstChunkAt = null;
@@ -234,9 +248,11 @@ class StreamingRecitationService {
     // Android 14+ it can be granted focus yet receive 0 frames. Capturing
     // natively inside the service is the sanctioned fix.
     await _activateAudioSession();
-    // Start the microphone foreground service so the OS grants capture focus on
-    // Android 14+ (fixes the "mic chunks: 0 / focus: NO" silent-capture case).
-    await _startForegroundMicService();
+    // Subscribe to the native mic stream BEFORE starting the foreground service
+    // so the Flutter EventChannel listener is attached and `audioSink` is set on
+    // the native side *before* the service begins producing + flushing frames.
+    // Otherwise the first frames are flushed into a null sink and (previously)
+    // dropped → "mic chunks: 0 · bytes sent: 0".
     try {
       _subscribeNativeMic();
       debugPrint('[Streaming] native mic stream SUBSCRIBED.');
@@ -248,6 +264,9 @@ class StreamingRecitationService {
       _setState(LiveConnectionState.error);
       throw StreamingConnectionException('Mic could not start: $e');
     }
+    // Start the microphone foreground service so the OS grants capture focus on
+    // Android 14+ (fixes the "mic chunks: 0 / focus: NO" silent-capture case).
+    await _startForegroundMicService();
 
     // --- Keep-alive pings so long hands-free sessions never drop ---
     _pingTimer = Timer.periodic(
@@ -343,8 +362,25 @@ class StreamingRecitationService {
 
     _audioSub = _micStreamChannel.receiveBroadcastStream().listen(
       (dynamic chunk) {
-        if (chunk is! Uint8List) return;
-        _onNativeAudio(chunk);
+        _audioOnDataCount++;
+        _lastFrameType = chunk.runtimeType.toString();
+        try {
+          debugPrint('[Streaming] native audio onData type=${chunk.runtimeType} '
+              'len=${chunk is List ? chunk.length : 'n/a'}');
+          Uint8List bytes;
+          if (chunk is Uint8List) {
+            bytes = chunk;
+          } else if (chunk is List<int>) {
+            bytes = Uint8List.fromList(chunk);
+          } else {
+            debugPrint('[Streaming] native audio UNKNOWN type, ignoring');
+            return;
+          }
+          _onNativeAudio(bytes);
+        } catch (e, st) {
+          _audioOnDataError = e.toString();
+          debugPrint('[Streaming] native audio onData ERROR: $e\n$st');
+        }
       },
       onError: (Object e, StackTrace? st) {
         _micError = e.toString();
@@ -357,15 +393,23 @@ class StreamingRecitationService {
 
   /// Forwards a native PCM16 frame to the live visualizer + upload buffer.
   void _onNativeAudio(Uint8List chunk) {
-    _emitAmplitude(chunk);
-    _chunkCount++;
-    _firstChunkAt ??= DateTime.now();
-    if (chunk.isNotEmpty) {
-      _audioBuffer.add(chunk);
-    }
-    if (_chunkCount <= 5 || _chunkCount % 50 == 0) {
-      debugPrint('[Streaming] mic chunk #$_chunkCount '
-          'len=${chunk.length} bytes (buffered=${_audioBuffer.length})');
+    try {
+      _emitAmplitude(chunk);
+      _chunkCount++;
+      _firstChunkAt ??= DateTime.now();
+      if (chunk.isNotEmpty) {
+        _audioBuffer.add(chunk);
+      }
+      if (_chunkCount <= 5 || _chunkCount % 50 == 0) {
+        debugPrint('[Streaming] mic chunk #$_chunkCount '
+            'len=${chunk.length} bytes (buffered=${_audioBuffer.length})');
+      }
+    } catch (e, st) {
+      // A throw here (e.g. an odd-length PCM buffer that asInt16List rejects)
+      // must NOT silently kill the listener — otherwise _chunkCount stays 0 and
+      // the whole session reports "0 bytes sent" despite native frames arriving.
+      debugPrint('[Streaming] _onNativeAudio ERROR (chunk len=${chunk.length}): '
+          '$e\n$st');
     }
   }
 
@@ -421,9 +465,14 @@ class StreamingRecitationService {
   /// Computes an RMS loudness (0–1) from a PCM16 little-endian chunk.
   void _emitAmplitude(Uint8List chunk) {
     if (chunk.length < 2) return;
+    // Only consume a whole-number of PCM16 samples; drop a trailing odd byte so
+    // asInt16List never throws (a throw here used to silently kill the audio
+    // listener, leaving _chunkCount at 0 despite frames arriving natively).
+    final sampleCount = chunk.lengthInBytes ~/ 2;
+    if (sampleCount == 0) return;
     final samples = chunk.buffer.asInt16List(
       chunk.offsetInBytes,
-      chunk.lengthInBytes ~/ 2,
+      sampleCount,
     );
     if (samples.isEmpty) return;
     var sumSq = 0.0;

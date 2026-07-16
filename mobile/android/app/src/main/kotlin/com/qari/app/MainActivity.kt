@@ -50,14 +50,14 @@ class MainActivity : FlutterActivity() {
             object : EventChannel.StreamHandler {
                 override fun onListen(args: Any?, sink: EventChannel.EventSink) {
                     try {
-                        MicStreamBridge.audioSink = sink
+                        MicStreamBridge.attachAudioSink(sink)
                     } catch (e: Exception) {
                         MicStreamBridge.statusSink?.success("stream onListen error: ${e.message}")
                     }
                 }
 
                 override fun onCancel(args: Any?) {
-                    MicStreamBridge.audioSink = null
+                    MicStreamBridge.attachAudioSink(null)
                 }
             },
         )

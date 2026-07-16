@@ -123,6 +123,10 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   /// Android audio-focus grant result (from `audio_session`). `false` ⇒ the OS
   /// denied focus ⇒ the recorder is silently dead ⇒ "mic chunks: 0".
   final ValueNotifier<bool?> _focusNotifier = ValueNotifier(null);
+  /// How many native audio frames actually reached the Dart `onData` callback.
+  /// Surfaced live so we can tell "native posted frames but Dart never got them"
+  /// (EventChannel delivery break) from "Dart got them but processing failed".
+  final ValueNotifier<int> _audioOnDataNotifier = ValueNotifier(0);
   /// True once we've been "listening" for a couple seconds but the recorder has
   /// produced zero chunks — i.e. the OS is blocking mic capture. Surfaces a
   /// live warning so the user doesn't have to wait until "Stop" to find out.
@@ -158,6 +162,7 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
     _sentBytesNotifier.dispose();
     _micErrorNotifier.dispose();
     _focusNotifier.dispose();
+    _audioOnDataNotifier.dispose();
     _noAudioNotifier.dispose();
     _service.dispose();
     _audioService.dispose();
@@ -383,6 +388,7 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
       // Capture whether Android granted audio focus — a `false` here is the
       // smoking gun for a silently-dead recorder (OS/contending app blocking).
       _focusNotifier.value = _service.audioFocusGranted;
+      _audioOnDataNotifier.value = _service.audioOnDataCount;
       // After ~2s of listening with zero recorder output, the OS is almost
       // certainly blocking mic capture — flag it live instead of waiting for
       // "Stop" (by which point the live UI is replaced by the error screen).
@@ -963,29 +969,40 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
               builder: (context, sent, _) => ValueListenableBuilder<String?>(
                 valueListenable: _micErrorNotifier,
                 builder: (context, err, _) => ValueListenableBuilder<bool?>(
-                valueListenable: _focusNotifier,
-                builder: (context, focus, _) {
-                  final focusStr = focus == null
-                      ? ''
-                      : focus
-                          ? ' · focus: yes'
-                          : ' · focus: NO';
-                  final statusStr = _service.nativeStatus ?? 'init';
-                  return Text(
-                    err != null
-                        ? 'diag · mic chunks: $chunks · bytes sent: $sent · '
-                            '$statusStr$focusStr\n'
-                            'recorder error: $err'
-                        : 'diag · mic chunks: $chunks · bytes sent: $sent · '
-                            '$statusStr$focusStr',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: (err != null || focus == false)
-                          ? theme.colorScheme.error
-                          : theme.colorScheme.onSurface.withValues(alpha: 0.4),
-                    ),
-                  );
-                },
-              ),
+                  valueListenable: _focusNotifier,
+                  builder: (context, focus, _) =>
+                      ValueListenableBuilder<int>(
+                    valueListenable: _audioOnDataNotifier,
+                    builder: (context, _, _) {
+                      final onData = _audioOnDataNotifier.value;
+                      final focusStr = focus == null
+                          ? ''
+                          : focus
+                              ? ' · focus: yes'
+                              : ' · focus: NO';
+                      final statusStr = _service.nativeStatus ?? 'init';
+                      final onDataErr = _service.audioOnDataError;
+                      final frameType = _service.lastFrameType;
+                      final onDataStr = ' · onData: $onData'
+                          '${frameType != null ? ' ($frameType)' : ''}'
+                          '${onDataErr != null ? ' · onDataErr: $onDataErr' : ''}';
+                      return Text(
+                        err != null
+                            ? 'diag · mic chunks: $chunks · bytes sent: $sent · '
+                                '$statusStr$focusStr$onDataStr\n'
+                                'recorder error: $err'
+                            : 'diag · mic chunks: $chunks · bytes sent: $sent · '
+                                '$statusStr$focusStr$onDataStr',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: (err != null || focus == false)
+                              ? theme.colorScheme.error
+                              : theme.colorScheme.onSurface
+                                  .withValues(alpha: 0.4),
+                        ),
+                      );
+                    },
+                  ),
+                ),
               ),
             ),
           ),

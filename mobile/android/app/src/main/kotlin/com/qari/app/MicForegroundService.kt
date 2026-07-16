@@ -67,6 +67,9 @@ class MicForegroundService : Service() {
     private var reader: AudioRecord? = null
     private var readThread: Thread? = null
     private var running = false
+    /** Monotonic token for the current capture; bumped in stopCapture so the
+     *  main-thread flush Runnable from a previous session stops re-posting. */
+    private var captureToken = 0
 
     /** All EventChannel sink calls MUST run on the main thread. Calling a Flutter
      *  sink from a background thread is an uncatchable JNI crash on Android. */
@@ -145,69 +148,181 @@ class MicForegroundService : Service() {
                 status("capture error: getMinBufferSize invalid (rate=$rate)")
                 return
             }
-            val ar = AudioRecord(
-                MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                rate,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                minBuf * 2,
-            )
-            if (ar.state != AudioRecord.STATE_INITIALIZED) {
-                ar.release()
-                status("capture error: AudioRecord not initialized (rate=$rate)")
+            val ar = buildAudioRecord(rate, minBuf * 2)
+            if (ar == null) {
+                status("capture error: AudioRecord not initialized (rate=$rate source=UNPROCESSED)")
                 return
             }
             ar.startRecording()
             if (ar.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
                 ar.release()
-                status("capture error: AudioRecord not recording (rate=$rate)")
+                status("capture error: AudioRecord not recording (rate=$rate source=UNPROCESSED)")
                 return
+            }
+            // Defensive: a stray OS/hal mute state can starve the mic. Ensure
+            // unmuted before we begin (no-op on most devices, harmless).
+            try {
+                val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+                am.isMicrophoneMute = false
+            } catch (_: Exception) {
             }
             reader = ar
             running = true
-            status("capture started: rate=$rate resample=$resample")
+            status("capture started: rate=$rate resample=$resample source=UNPROCESSED")
             val shortBuf = ShortArray(minBuf / 2)
             val resampler = if (resample) LinearResampler(rate, TARGET_RATE) else null
+            var zeroTicks = 0
+            var dataTicks = 0
+            var audioPosted = 0
+            var audioDropped = 0
+            var lastDiagAt = System.currentTimeMillis()
+            // Drain the native read loop into an in-service buffer and flush to the
+            // Flutter audio sink on the MAIN thread on a timer. Posting one
+            // `success()` per read tick from a tight background loop overwhelmed
+            // the main-thread Handler and the binary frames were silently dropped
+            // (status text survived because it's far less frequent). Buffering +
+            // one flush per ~50ms keeps delivery reliable while still streaming.
+            // Buffered PCM frames waiting to be delivered to the Flutter audio
+            // sink. CRITICAL: if `audioSink` is not attached yet when we flush,
+            // the OLD code discarded (cleared) the buffer → every frame produced
+            // during the start/sink race was lost, yielding "mic chunks: 0 ·
+            // bytes sent: 0" even though native capture was healthy. We now KEEP
+            // buffering until the sink attaches (capped to avoid OOM), then flush
+            // immediately via onAudioSinkAttached.
+            val outBuf = java.util.concurrent.ConcurrentLinkedQueue<ByteArray>()
+            var audioDropped = 0
+            val maxBufferedBytes = 1_600_000 // ~10s of 16kHz PCM16
+            val bufferedBytes = java.util.concurrent.atomic.AtomicInteger(0)
+            MicStreamBridge.onAudioSinkAttached = {
+                // Flush immediately on attach so pre-buffered frames are not lost.
+                mainHandler.post { flushNow(outBuf, maxBufferedBytes, bufferedBytes) }
+            }
             readThread = Thread {
                 try {
                     while (running) {
                         val n = ar.read(shortBuf, 0, shortBuf.size)
                         if (n > 0) {
+                            dataTicks++
                             val bytes = if (resampler != null) {
                                 resampler.resample(shortBuf, n)
                             } else {
                                 shortsToBytes(shortBuf, n)
                             }
-                            // Route to the main thread (Flutter sink rule).
-                            val data = bytes
-                            mainHandler.post { MicStreamBridge.audioSink?.success(data) }
+                            // Enforce a back-pressure cap so a late/never-attached
+                            // sink can't grow the buffer without bound (OOM).
+                            if (bufferedBytes.get() + bytes.size <= maxBufferedBytes) {
+                                outBuf.add(bytes)
+                                bufferedBytes.addAndGet(bytes.size)
+                            } else {
+                                audioDropped++
+                            }
                         } else if (n < 0) {
                             status("read error: $n")
                             break
+                        } else {
+                            zeroTicks++
                         }
                         // n == 0: HAL delivered nothing this tick; keep polling.
+                        val now = System.currentTimeMillis()
+                        if (now - lastDiagAt > 2000) {
+                            lastDiagAt = now
+                            status("reading: rate=$rate source=UNPROCESSED zeroTicks=$zeroTicks dataTicks=$dataTicks audioPosted=$audioPosted dropped=$audioDropped")
+                        }
                     }
                 } catch (e: Exception) {
                     status("read exception: ${e.javaClass.simpleName}: ${e.message}")
                 }
             }
             readThread?.start()
+            // Main-thread flusher: coalesces buffered PCM frames into one sink
+            // call every 50ms. Runs as long as capture is active.
+            val myToken = captureToken
+            val flushRunnable = object : Runnable {
+                override fun run() {
+                    if (!running || myToken != captureToken) return
+                    // Keep buffering until the Flutter audio sink attaches; do NOT
+                    // drop frames when it's null (that caused "mic chunks: 0").
+                    flushNow(outBuf, maxBufferedBytes) { bufferedBytes }
+                    mainHandler.postDelayed(this, 50)
+                }
+            }
+            mainHandler.postDelayed(flushRunnable, 50)
         } catch (e: Exception) {
             status("capture exception: ${e.javaClass.simpleName}: ${e.message}")
         }
     }
 
+    /** Coalesces all buffered PCM frames and delivers them to the Flutter audio
+     *  sink if attached. When the sink is absent the buffer is preserved (capped)
+     *  so no captured audio is lost during the start/sink attach race. */
+    private fun flushNow(
+        outBuf: java.util.concurrent.ConcurrentLinkedQueue<ByteArray>,
+        maxBufferedBytes: Int,
+        bufferedBytes: java.util.concurrent.atomic.AtomicInteger,
+    ) {
+        if (outBuf.isEmpty()) return
+        val sink = MicStreamBridge.audioSink ?: return // keep buffering
+        val total = outBuf.sumOf { it.size }
+        if (total == 0) return
+        val merged = ByteArray(total)
+        var off = 0
+        while (!outBuf.isEmpty()) {
+            val b = outBuf.poll()
+            System.arraycopy(b, 0, merged, off, b.size)
+            off += b.size
+        }
+        bufferedBytes.addAndGet(-total)
+        sink.success(merged)
+    }
+
+
+    private fun buildAudioRecord(rate: Int, bufSize: Int): AudioRecord? {
+        // Try UNPROCESSED first. On Android 16 / some OEM builds the
+        // VOICE_RECOGNITION and even MIC source can be reserved or starved by the
+        // HAL, delivering 0 frames despite focus being granted. UNPROCESSED (when
+        // supported) gives raw mic data. Fall back to MIC if UNPROCESSED fails.
+        val sources = listOfNotNull(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+                MediaRecorder.AudioSource.UNPROCESSED else null,
+            MediaRecorder.AudioSource.MIC,
+        )
+        for (src in sources) {
+            try {
+                val ar = AudioRecord(
+                    src,
+                    rate,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    bufSize,
+                )
+                if (ar.state == AudioRecord.STATE_INITIALIZED) {
+                    return ar
+                }
+                ar.release()
+            } catch (_: Exception) {
+                // try next source
+            }
+        }
+        return null
+    }
+
     private fun pickRate(): Pair<Int, Boolean> {
-        val ok = AudioRecord.getMinBufferSize(
-            TARGET_RATE,
+        // Lever (d): force the FALLBACK_RATE (44100) first. Some Android 16 / OEM
+        // HALs only serve the native 44.1k/48k rate and feed a 16 kHz AudioRecord
+        // nothing (read() returns 0 forever, focus granted, no error). We resample
+        // 44100 -> 16000 in software via LinearResampler. Fall back to 16 kHz if
+        // 44.1k isn't supported on this device.
+        val ok44 = AudioRecord.getMinBufferSize(
+            FALLBACK_RATE,
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT,
         )
-        return if (ok > 0) TARGET_RATE to false else FALLBACK_RATE to true
+        return if (ok44 > 0) FALLBACK_RATE to true else TARGET_RATE to false
     }
 
     private fun stopCapture() {
         running = false
+        captureToken++
         try {
             readThread?.join(500)
         } catch (_: Exception) {

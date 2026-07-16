@@ -1362,5 +1362,149 @@ history and continues from here. Specifically:
 - After editing Kotlin/Dart: `flutter pub get`, `flutter analyze`,
   `flutter build apk --release`, copy `mobile/build/app/outputs/flutter-apk/
   app-release.apk` → `releases/app-release.apk` (OTA serves it live).
-- Bump `mobile/pubspec.yaml` version AND `releases/app_release.json`
-  (version_name + version_code) together each build.
+  - Bump `mobile/pubspec.yaml` version AND `releases/app_release.json`
+   (version_name + version_code) together each build.
+
+## Session 2026-07-16 (afternoon) — Lever (a): AudioSource MIC + defensive unmute
+Applied the top-priority fix for the 0-frame mic capture (Android 16 device):
+- `MicForegroundService.kt` `startCapture()`: `AudioRecord` source changed from
+  `MediaRecorder.AudioSource.VOICE_RECOGNITION` → `MIC` (most compatible; Android
+  16 / OEM builds often reserve/starve VOICE_RECOGNITION → 0 frames even with
+  focus granted). Status string now reports `source=MIC`.
+- Added defensive `AudioManager.isMicrophoneMute = false` before capture (lever
+  c) — clears any stray OS mute state that could starve the HAL.
+- Bumped to **1.0.31+42** (`pubspec.yaml` + `releases/app_release.json` with
+  fix notes). `flutter analyze lib` → only pre-existing warnings/info (no errors);
+  `flutter build apk --release` → 76.1MB; copied to `releases/app-release.apk`
+  (OTA serves v1.0.31 live — bind-mounted read-only into core-api, no restart).
+- NOT committed/pushed (no git action requested). Working tree has this + the
+  earlier uncommitted Faster-Whisper backend work.
+ NEXT: user updates to v1.0.31 and retests. EXPECTED GOOD: diag shows
+ `capture started: rate=16000 resample=false source=MIC` AND `mic chunks` climbs.
+ IF STILL 0 frames: try `UNPROCESSED` source, then `adb logcat` (lever b), then
+ force 44.1k+resampler path (lever d). If frames flow, verify WS→backend ASR end
+ to end (backend expects 16 kHz PCM16 mono; native stream sends 16 kHz).
+
+## Session 2026-07-16 (user retested v1.0.31) — still 0 frames with source=MIC
+User updated to v1.0.31+42 and retested Live Recitation. Diag line:
+  `diag mic chunks: 0 bytes sent: 0 capture started: rate=16000 resample=false source=MIC focus: yes`
+Still 0 frames even with `source=MIC` + focus granted + 16kHz native. So lever
+(a) MIC did NOT fix it — confirms the HAL is starving the mic regardless of
+VOICE_RECOGNITION vs MIC source (both 0 frames). Moved to the NEXT lever.
+
+### Applied: AudioSource UNPROCESSED (falls back to MIC)
+- `MicForegroundService.kt`: added `buildAudioRecord(rate, bufSize)` helper that
+  tries `MediaRecorder.AudioSource.UNPROCESSED` first (API 29+, raw mic data —
+  some Android 16 / OEM HALs only serve raw mic via UNPROCESSED, starving the
+  processed VOICE_RECOGNITION/MIC sources), then falls back to MIC if
+  UNPROCESSED fails to initialize. `startCapture` now uses it; status reports
+  `source=UNPROCESSED` (or MIC if it fell through). Kept the defensive
+  `AudioManager.isMicrophoneMute = false` unmute.
+- Bumped to **1.0.32+43** (`pubspec.yaml` + `releases/app_release.json`).
+  `flutter analyze lib` → only pre-existing warnings/info (no errors). `flutter
+  build apk --release` → 76.1MB; copied to `releases/app-release.apk`. Verified
+  OTA `/v1/app/version` returns version 1.0.32 / version_code 43 (bind-mounted,
+  no restart). 
+- NOT committed/pushed (no git action requested). Working tree now has this +
+  the uncommitted Faster-Whisper backend work.
+ NEXT: user updates to v1.0.32 and retests. EXPECTED GOOD: diag shows
+ `capture started: rate=16000 resample=false source=UNPROCESSED` AND `mic
+ chunks` climbs → frames flow. IF STILL 0 frames: the Android 16 HAL is the
+ blocker on all sources → go to `adb logcat` (lever b) to confirm read() blocks
+ vs returns 0 and capture any native warning, then try lever (d) forcing 44.1k
+ (resample=true) even though 16k is "supported" (HAL may only serve native
+ 44100/48000). If frames flow, verify WS→backend ASR end-to-end.
+
+## Session 2026-07-16 (user retested v1.0.32) — still 0 frames, source=UNPROCESSED
+User updated to v1.0.32+43: diag `capture started: rate=16000 resample=false
+source=UNPROCESSED focus: yes` but `mic chunks: 0`, **no native warning**. So
+read() returns 0 silently — the HAL starves the mic on EVERY source (VR, MIC,
+UNPROCESSED). Source choice is exhausted; the only remaining device-side lever
+is forcing the native sample rate.
+
+### Applied: Lever (d) — force 44.1kHz + software resample to 16kHz
+- `MicForegroundService.kt` `pickRate()` now tries `FALLBACK_RATE` (44100) FIRST
+  (with `resample=true`); falls back to 16k only if 44.1k unsupported. Some
+  Android 16 / OEM HALs only serve the native 44.1k/48k rate and feed a 16 kHz
+  AudioRecord 0 frames forever. `LinearResampler(44100→16000)` handles the
+  downsample (already in the file).
+- Added read-loop DIAGNOSTICS: counters `zeroTicks` (read()==0) and `dataTicks`
+  (read()>0), surfaced every 2s via status `reading: rate=... zeroTicks=N
+  dataTicks=M`. Lets us conclusively distinguish a starved HAL (zeroTicks≫0,
+  dataTicks=0) from a transport/flush problem once frames appear.
+- Bumped to **1.0.33+44** (pubspec + app_release.json). `flutter analyze lib` →
+  only pre-existing warnings (no errors). `flutter build apk --release` → 76.1MB;
+  copied to `releases/app-release.apk`. Verified OTA `/v1/app/version` returns
+  1.0.33 / code 44.
+- NOT committed/pushed (no git action requested). Working tree: this + uncommitted
+  Faster-Whisper backend work.
+NEXT: user updates to v1.0.33 and retests. EXPECTED GOOD: diag shows
+ `capture started: rate=44100 resample=true source=UNPROCESSED` AND `mic chunks`
+ climbs (dataTicks > 0) → frames flow to backend. IF STILL `dataTicks=0` (HAL
+ starves even 44.1k): the device HAL is blocking mic data entirely despite focus
+ — that is a deeper OS/policy issue (privacy toggle, work-profile, DND, or OEM
+ "mic access" switch). Then escalate: `adb logcat` (lever b) for the exact HAL
+ rejection, re-check the device's OS-level mic permission/privacy dashboard
+ (Settings > Security & privacy > Privacy > Microphone / "Mic access"), and
+  consider `AudioManager.setMicrophoneMute(false)` already done + trying a real
+  voice-call/recorder app to confirm the mic works at all on that device.
+
+## Session 2026-07-16 (user retested v1.0.33) — MIC WORKS! but frames lost in transit
+User updated to v1.0.33+44. Diag: `reading: rate=44100 source=UNPROCESSED
+zeroTicks=0 dataTicks=100 focus: yes` BUT still `mic chunks: 0 bytes sent: 0`.
+So 44.1kHz + UNPROCESSED UNBLOCKED the HAL — the native read loop now gets
+real frames (dataTicks=100). The frames were being PRODUCED + posted to
+`MicStreamBridge.audioSink` but NEVER reached the Dart listener (`_chunkCount`
+stayed 0, so `_audioBuffer` empty → 0 bytes flushed). The status EventChannel
+worked (diag text arrived) but the BINARY audio channel dropped every frame.
+
+ROOT CAUSE: the read loop did `mainHandler.post { audioSink?.success(data) }`
+once per read tick from a tight background thread. At 44.1kHz that's hundreds
+of `success()` calls/sec on the main-thread Handler; the binary audio posts were
+silently dropped (the far-less-frequent status text survived). Classic
+background-thread→Handler flooding of an EventChannel binary sink.
+
+FIX (v1.0.34+45): decouple read speed from sink delivery. The background read
+thread now only pushes PCM `ByteArray`s into a `ConcurrentLinkedQueue`
+(`outBuf`). A MAIN-thread `flushRunnable` (every 50ms, guarded by a monotonic
+`captureToken` bumped in `stopCapture`) coalesces all queued frames into ONE
+merged `ByteArray` and calls `audioSink.success(merged)` once. Added
+`audioPosted` / `dropped` counters to the 2s diag so we can confirm delivery.
+`flutter analyze` no errors; rebuilt 76.1MB → `releases/app-release.apk`; OTA
+`/v1/app/version` returns 1.0.34 / code 45. NOT committed/pushed.
+NEXT: user updates to v1.0.34 and retests. EXPECTED GOOD: diag `mic chunks`
+climbs + `bytes sent` > 0 (audioPosted rising, dropped=0) → WS delivers PCM →
+backend ASR streams words. Then verify live word reveal + final results
+ end-to-end (backend expects 16kHz PCM16 mono; we send 44.1k resampled to 16k).
+ If `dropped` > 0, the Dart audio EventChannel subscription isn't attached
+ (audioSink null) — then check `_subscribeNativeMic` ordering.
+
+## Session 2026-07-16 (user retested v1.0.34) — native delivery OK, Dart still 0
+User updated to v1.0.34+45. Diag: `reading: ... audioPosted=118 dropped=0
+focus: yes` — native now delivers 118 merged frames to `audioSink` (non-null),
+so the native→Dart EventChannel works and frames are NOT dropped. BUT Dart
+still shows `mic chunks: 0 bytes sent: 0`. So the Dart listener `_onNativeAudio`
+never incremented `_chunkCount` despite 118 frames hitting the sink.
+
+That means either the listener's `onData` isn't firing, or it hits the early
+`return` on `if (chunk is! Uint8List)`. Native sends `ByteArray` (byte[]);
+Flutter's StandardMessageCodec decodes `byte[]` as `Uint8List`, so it SHOULD
+pass — but the symptom says otherwise. Unknown type silently swallowed.
+
+FIX (v1.0.35+46, DIAGNOSTIC): `streaming_recitation_service._audioSub` listener
+now `debugPrint`s the runtime type + length of every native audio frame, accepts
+BOTH `Uint8List` and `List<int>` (wraps the latter via `Uint8List.fromList`),
+and only ignores truly-unknown types. This will reveal in `flutter logs` whether
+the frames arrive as `Uint8List` (then the bug is downstream in `_onNativeAudio`)
+or as some other type (then the early `return` was the culprit and the wrapped
+path fixes it). Bumped pubspec + app_release.json → 1.0.35+46. Rebuilt 76.1MB →
+`releases/app-release.apk`; OTA `/v1/app/version` returns 1.0.35 / code 46.
+NOT committed/pushed.
+NEXT: user updates to v1.0.35, recites, then pastes the `[Streaming] native
+audio onData type=...` debug lines (from `flutter logs` / device console). That
+tells us exactly what type arrives and whether `_chunkCount` now climbs. If type
+is `Uint8List` and len>0, the fix is downstream (likely `_emitAmplitude` throwing
+on odd offset, or `_audioBuffer` not flushing) — then wrap `_onNativeAudio` body
+in try/catch + log.
+If `dropped` > 0, the Dart audio EventChannel subscription isn't attached
+(audioSink null) — then check `_subscribeNativeMic` ordering.
