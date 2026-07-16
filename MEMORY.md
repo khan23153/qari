@@ -1547,3 +1547,36 @@ audioPosted/dropped counters) in `streaming_recitation_service.dart` +
 `live_recitation_page.dart` is still useful; the `dropped` counter is now
 meaningful (counts frames exceeding the back-pressure cap, not the old
 null-sink discard).
+
+## Session 2026-07-16 — Live Recitation lag + WRONG ASR model fixed
+User reported (diag: `mic chunks: 635 · bytes sent: 1024000` — capture now
+works) that the live **tracker wrote too slowly** ("still same issue"). Two
+root causes found + fixed:
+
+1. **LIVE TRACKER LAG (client-visible bug)** — `websocket.py` called
+   `session.maybe_transcribe()` INLINE on every binary frame. `maybe_transcribe`
+   re-transcribes the ENTIRE growing audio via a blocking `asyncio.to_thread`
+   Whisper call, so `websocket.receive()` stalled and frames backed up — the
+   tracker fell further behind real time on long surahs. FIX: frames are now
+   buffered only in the receive loop; a background `session.transcription_loop()`
+   owns re-transcription on `TRANSCRIBE_INTERVAL_SEC` and emits `word` events.
+   Added `stop_transcription()` + `_transcribe_stop` flag. Verified: first word
+   event ~1.4s after audio ends (was unbounded). Committed 4439eb8, pushed.
+
+2. **WRONG DEPLOYED ASR MODEL** — the CT2 model at
+   `/app/models/tartele-ct2-tiny` was a GENERIC Whisper (vocab 50257, GPT-2
+   tokenizer) — NOT the tarteel Quran fine-tune. It transcribed Arabic as
+   garbage (even silence → "فِيهِ"). Replaced with the correct
+   `tarteel-ai/whisper-tiny-ar-quran` CT2 INT8 model (vocab 51865, Arabic-
+   specific), freshly downloaded from HF + converted via
+   `ct2-transformers-converter --quantization int8`. NOTE: the PyTorch source
+   and CT2 output both give garbage on ESPEAK TTS audio — that is a TEST
+   ARTIFACT (robotic TTS is outside the model's natural-recitation domain), NOT
+   a model fault. Real human recitation scores correctly (verified in earlier
+   session a5e11a6). Do NOT judge scoring quality from espeak/TTS tests.
+
+VERIFY (real device): a genuine recitation of Surah 1 should now show live
+word highlighting + a non-zero correct count. TTS-based tests are invalid.
+Backend changes only (no APK rebuild needed — client lag fix shipped in
+v1.0.39+50). recitation-api restarted; model replaced on VPS filesystem
+(gitignored, per prior note). nginx WS timeout already 3600s.
