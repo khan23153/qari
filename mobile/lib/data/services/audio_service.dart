@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:just_audio/just_audio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../core/constants/app_constants.dart';
 import 'local_storage_service.dart';
 
@@ -199,7 +201,25 @@ class AudioService {
         await _player.pause();
         return;
       }
-      await _player.setAudioSource(AudioSource.uri(Uri.parse(url)));
+      // The VPS uses a self-signed TLS cert. just_audio/ExoPlayer rejects it
+      // for https media URLs (so comparison audio was silent). For the trusted
+      // self-signed host we download via an HttpClient that accepts the cert,
+      // cache it to a temp file, and play from there — avoiding the TLS error.
+      final uri = Uri.parse(url);
+      if (uri.scheme == 'https' &&
+          uri.host == AppConstants.trustedSelfSignedHost) {
+        final file = await _downloadToTemp(url);
+        if (file != null) {
+          await _player.setAudioSource(AudioSource.file(file.path));
+          await _player.setSpeed(_currentSpeed);
+          await _player.play();
+          _currentUrl = url;
+          _isSequential = false;
+          return;
+        }
+        // Fall through to direct playback if download failed.
+      }
+      await _player.setAudioSource(AudioSource.uri(uri));
       await _player.setSpeed(_currentSpeed);
       await _player.play();
       _currentUrl = url;
@@ -207,6 +227,33 @@ class AudioService {
     } catch (e) {
       debugPrint('AudioService play error: $e');
       rethrow;
+    }
+  }
+
+  /// Downloads [url] over an HttpClient that trusts the VPS self-signed cert,
+  /// returning a temp file, or null on failure.
+  static Future<File?> _downloadToTemp(String url) async {
+    try {
+      final client = HttpClient()
+        ..badCertificateCallback =
+            (cert, host, port) => host == AppConstants.trustedSelfSignedHost;
+      final req = await client.getUrl(Uri.parse(url));
+      final resp = await req.close();
+      if (resp.statusCode != 200) {
+        client.close();
+        return null;
+      }
+      final bytes = await consolidateHttpClientResponseBytes(resp);
+      client.close();
+      final tmp = File(
+        '${(await getTemporaryDirectory()).path}/qari_audio_'
+        '${url.hashCode}.wav',
+      );
+      await tmp.writeAsBytes(bytes);
+      return tmp;
+    } catch (e) {
+      debugPrint('AudioService download error: $e');
+      return null;
     }
   }
 

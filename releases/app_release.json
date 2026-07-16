@@ -1,12 +1,12 @@
 {
-  "version": "1.0.39",
-  "version_code": 50,
+  "version": "1.0.40",
+  "version_code": 51,
   "min_version": "1.0.0",
   "min_version_code": 1,
   "apk_url": "https://20.197.40.13/v1/app/download",
   "force_update": false,
-  "notes_en": "Live Recitation: Stop & Review now finishes on first tap (no more repeated clicks); backend falls back to a working engine when the real Whisper model is unavailable so live word tracking + results always appear instead of '0 of 29'.",
-  "notes_ur": "لائیو تلاوت: اب 'Stop & Review' ایک بار ٹیپ کرنے سے کام کرتا ہے اور نتائج ہمیشہ ظاہر ہوتے ہیں۔",
-  "notes_hi": "Live Recitation: Stop & Review now works on first tap; backend falls back so results always appear.",
+  "notes_en": "Live Recitation: compare-audio now plays (was silent due to VPS self-signed cert — audio is downloaded + played locally). Stop & Review shows a 'Finalizing…' state while the server analyses your full recitation, so it no longer feels stuck.",
+  "notes_ur": "لائیو تلاوت: موازنہ آڈیو اب چلتی ہے اور 'Finalizing…' اسٹیٹ شامل کی گئی ہے۔",
+  "notes_hi": "Live Recitation: compare audio now plays; Stop & Review shows a 'Finalizing…' state.",
   "data_version": 1
 }

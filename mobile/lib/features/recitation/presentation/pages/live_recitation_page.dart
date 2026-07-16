@@ -22,7 +22,7 @@ import 'recitation_history_page.dart';
 import 'verse_identifier_page.dart';
 
 /// UI phases for the live (real-time) recitation experience.
-enum LiveRecitationUiState { setup, live, results, error }
+enum LiveRecitationUiState { setup, live, finalizing, results, error }
 
 /// What block of Quran the user is reciting continuously.
 enum RecitationScope { page, surah }
@@ -417,15 +417,14 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
     _stopping = true;
     _stopDiagTimer();
     await Haptics.vibrate(HapticsType.selection);
-    // Tell the server to finalize, but DON'T block on its `final` payload here
-    // (the forced final transcription can take >30s on a slow CPU, which made
-    // the button feel dead and tempted users to tap "Stop & Review" many times).
-    // The server still pushes a `final` event over the socket → `_onEvent`
-    // → `_finishWith`, which navigates to results. This path only provides a
-    // safety net if that event is missed (e.g. socket closed early).
+    // Show "Finalizing…" immediately so the long server-side final
+    // transcription (re-processing the whole recitation, can take many seconds
+    // on a slow CPU) doesn't make the button feel dead. The `final` WS event
+    // will drive navigation to results; the timer is only a safety net.
+    setState(() => _ui = LiveRecitationUiState.finalizing);
     unawaited(_service.stop());
-    Timer(const Duration(seconds: 12), () {
-      if (mounted && _ui == LiveRecitationUiState.live) {
+    Timer(const Duration(seconds: 45), () {
+      if (mounted && _ui == LiveRecitationUiState.finalizing) {
         _finishWith(_synthesizeResult());
       }
     });
@@ -696,6 +695,8 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
         return _buildSetup(theme);
       case LiveRecitationUiState.live:
         return _buildLive(theme);
+      case LiveRecitationUiState.finalizing:
+        return _buildFinalizing(theme);
       case LiveRecitationUiState.results:
         return RecitationResults(
           result: _result!,
@@ -1059,6 +1060,34 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   }
 
   // ─── Error ──────────────────────────────────────────────────────────────
+  Widget _buildFinalizing(ThemeData theme) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 24),
+            Text(
+              'Finalizing your recitation…',
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(color: theme.colorScheme.onSurface),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Analysing your full recitation. This can take a few seconds.',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildError(ThemeData theme) {
     return Center(
       child: Padding(
