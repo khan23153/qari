@@ -973,7 +973,7 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
                   builder: (context, focus, _) =>
                       ValueListenableBuilder<int>(
                     valueListenable: _audioOnDataNotifier,
-                    builder: (context, _, _) {
+                    builder: (context, _, __) {
                       final onData = _audioOnDataNotifier.value;
                       final focusStr = focus == null
                           ? ''

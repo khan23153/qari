@@ -174,7 +174,6 @@ class MicForegroundService : Service() {
             var zeroTicks = 0
             var dataTicks = 0
             var audioPosted = 0
-            var audioDropped = 0
             var lastDiagAt = System.currentTimeMillis()
             // Drain the native read loop into an in-service buffer and flush to the
             // Flutter audio sink on the MAIN thread on a timer. Posting one
@@ -242,7 +241,7 @@ class MicForegroundService : Service() {
                     if (!running || myToken != captureToken) return
                     // Keep buffering until the Flutter audio sink attaches; do NOT
                     // drop frames when it's null (that caused "mic chunks: 0").
-                    flushNow(outBuf, maxBufferedBytes) { bufferedBytes }
+                    flushNow(outBuf, maxBufferedBytes, bufferedBytes)
                     mainHandler.postDelayed(this, 50)
                 }
             }
