@@ -393,22 +393,23 @@ class StreamingRecitationService {
 
   /// Forwards a native PCM16 frame to the live visualizer + upload buffer.
   void _onNativeAudio(Uint8List chunk) {
+    // Count + buffer the frame FIRST, before any amplitude math, so a failure in
+    // RMS computation can never suppress chunk counting / server upload (that
+    // was the "mic chunks: 0 · bytes sent: 0" despite 500+ frames arriving).
+    _chunkCount++;
+    _firstChunkAt ??= DateTime.now();
+    if (chunk.isNotEmpty) {
+      _audioBuffer.add(chunk);
+    }
+    if (_chunkCount <= 5 || _chunkCount % 50 == 0) {
+      debugPrint('[Streaming] mic chunk #$_chunkCount '
+          'len=${chunk.length} bytes (buffered=${_audioBuffer.length})');
+    }
     try {
       _emitAmplitude(chunk);
-      _chunkCount++;
-      _firstChunkAt ??= DateTime.now();
-      if (chunk.isNotEmpty) {
-        _audioBuffer.add(chunk);
-      }
-      if (_chunkCount <= 5 || _chunkCount % 50 == 0) {
-        debugPrint('[Streaming] mic chunk #$_chunkCount '
-            'len=${chunk.length} bytes (buffered=${_audioBuffer.length})');
-      }
     } catch (e, st) {
-      // A throw here (e.g. an odd-length PCM buffer that asInt16List rejects)
-      // must NOT silently kill the listener — otherwise _chunkCount stays 0 and
-      // the whole session reports "0 bytes sent" despite native frames arriving.
-      debugPrint('[Streaming] _onNativeAudio ERROR (chunk len=${chunk.length}): '
+      _audioOnDataError = e.toString();
+      debugPrint('[Streaming] _emitAmplitude ERROR (chunk len=${chunk.length}): '
           '$e\n$st');
     }
   }
@@ -465,22 +466,25 @@ class StreamingRecitationService {
   /// Computes an RMS loudness (0–1) from a PCM16 little-endian chunk.
   void _emitAmplitude(Uint8List chunk) {
     if (chunk.length < 2) return;
-    // Only consume a whole-number of PCM16 samples; drop a trailing odd byte so
-    // asInt16List never throws (a throw here used to silently kill the audio
-    // listener, leaving _chunkCount at 0 despite frames arriving natively).
-    final sampleCount = chunk.lengthInBytes ~/ 2;
+    // The incoming `Uint8List` is often a VIEW (`_Uint8ArrayView`) with an odd
+    // `offsetInBytes` into a larger buffer. `buffer.asInt16List(offset, n)`
+    // throws RangeError when `offset` is not a multiple of 2 — and that throw
+    // happened here on every frame, skipping `_chunkCount++` and leaving the
+    // whole session at "mic chunks: 0 · bytes sent: 0" despite 500+ native
+    // frames arriving (onData: N). Read the samples manually via byte indexing
+    // so alignment can never throw.
+    final sampleCount = chunk.length ~/ 2; // drop a trailing odd byte
     if (sampleCount == 0) return;
-    final samples = chunk.buffer.asInt16List(
-      chunk.offsetInBytes,
-      sampleCount,
-    );
-    if (samples.isEmpty) return;
     var sumSq = 0.0;
-    for (final s in samples) {
-      final v = s / 32768.0;
+    for (var i = 0; i < sampleCount; i++) {
+      final lo = chunk[i * 2];
+      final hi = chunk[i * 2 + 1];
+      // little-endian 16-bit signed
+      final s = (hi << 8) | lo;
+      final v = (s >= 0x8000 ? s - 0x10000 : s) / 32768.0;
       sumSq += v * v;
     }
-    final rms = math.sqrt(sumSq / samples.length);
+    final rms = math.sqrt(sumSq / sampleCount);
     // Map RMS to a lively 0–1 range (recitation is fairly quiet at the mic).
     final normalized = (rms * 3.2).clamp(0.0, 1.0);
     if (!_amplitude.isClosed) _amplitude.add(normalized);
