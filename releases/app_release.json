@@ -1,12 +1,12 @@
 {
-  "version": "1.0.38",
-  "version_code": 49,
+  "version": "1.0.39",
+  "version_code": 50,
   "min_version": "1.0.0",
   "min_version_code": 1,
   "apk_url": "https://20.197.40.13/v1/app/download",
   "force_update": false,
-  "notes_en": "Live Recitation mic fix: frames are no longer dropped during the start/sink race. Native audio is buffered until the Flutter listener attaches, then flushed, so mic chunks and bytes sent both flow (fixes 'mic chunks: 0 · bytes sent: 0' silent capture).",
-  "notes_ur": "لائیو تلاوت فکس: اب شروعات کے دوران آڈیو فریم ضائع نہیں ہوتے اور مائیک کا ڈیٹا سرور تک پہنچتا ہے۔",
-  "notes_hi": "Live Recitation fix: mic audio frames are buffered until the listener attaches, so they reach the server instead of being dropped.",
+  "notes_en": "Live Recitation: Stop & Review now finishes on first tap (no more repeated clicks); backend falls back to a working engine when the real Whisper model is unavailable so live word tracking + results always appear instead of '0 of 29'.",
+  "notes_ur": "لائیو تلاوت: اب 'Stop & Review' ایک بار ٹیپ کرنے سے کام کرتا ہے اور نتائج ہمیشہ ظاہر ہوتے ہیں۔",
+  "notes_hi": "Live Recitation: Stop & Review now works on first tap; backend falls back so results always appear.",
   "data_version": 1
 }

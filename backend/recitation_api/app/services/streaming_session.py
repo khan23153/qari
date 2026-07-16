@@ -352,7 +352,28 @@ class StreamingRecitationSession:
         elif settings.ml_use_stub or not self.reference_words:
             self._transcriber = _make_stub_transcriber(self.reference_words)
         else:
-            self._transcriber = _real_transcriber
+            # Real ASR requested. Probe whether the Faster-Whisper CT2 model is
+            # actually loadable in this container (it must be bind-mounted at
+            # QARI_FASTERWHISPER_MODEL_DIR). If it is missing/unloadable the real
+            # transcriber would silently return [] on every call → the live
+            # stream shows NO words and finalize reports "0 of N". Fall back to
+            # the duration-based stub so the live flow + a non-empty result still
+            # work (and log loudly) instead of a broken 0/29.
+            try:
+                from ml.inference.faster_whisper_transcriber import get_transcriber
+
+                get_transcriber().load()
+                self._transcriber = _real_transcriber
+                logger.info(
+                    "stream.transcriber", session_id=self.session_id,
+                    engine="faster-whisper", words=len(self.reference_words),
+                )
+            except Exception as exc:
+                logger.error(
+                    "stream.real_transcriber_unavailable_falling_back_to_stub",
+                    session_id=self.session_id, error=str(exc),
+                )
+                self._transcriber = _make_stub_transcriber(self.reference_words)
 
     # ------------------------------------------------------------------
     def ready_payload(self) -> dict:
@@ -481,6 +502,22 @@ class StreamingRecitationSession:
     async def finalize(self) -> dict:
         """End the session: persist audio + build the final result blob."""
         from ml.alignment.streaming_matcher import WordStatus
+
+        # If live transcription never produced a hypothesis (e.g. the forced
+        # final transcription on `stop` was slow and the client timed out, or the
+        # transcriber was the stub and produced nothing), do ONE full-audio
+        # transcription here so the verdicts aren't all "skipped" (0 of N). This
+        # guarantees a meaningful result whenever reference words exist.
+        if not self._last_hypothesis and self._transcriber is not None and self._pcm:
+            try:
+                audio = self._decode_float()
+                words, confs = await asyncio.to_thread(
+                    self._transcriber, audio, self.sample_rate
+                )
+                if words:
+                    self._last_hypothesis = words
+            except Exception as exc:  # pragma: no cover - model failures
+                logger.error("stream.finalize_transcribe_failed", session_id=self.session_id, error=str(exc))
 
         audio_path = self._write_wav()
         public_base = settings.recitation_api_public_url.rstrip("/")

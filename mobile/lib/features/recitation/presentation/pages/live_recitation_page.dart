@@ -133,6 +133,9 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   final ValueNotifier<bool> _noAudioNotifier = ValueNotifier(false);
   DateTime? _listenStartedAt;
   Timer? _diagTimer;
+  /// Guards `_stop()` so repeated taps on "Stop & Review" (the old 10-click
+  /// workaround) only trigger one finalize.
+  bool _stopping = false;
 
   StreamSubscription<RecitationStreamEvent>? _eventSub;
   StreamSubscription<LiveConnectionState>? _connSub;
@@ -341,6 +344,7 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
     await Haptics.vibrate(HapticsType.medium);
     _listenStartedAt = DateTime.now();
     _noAudioNotifier.value = false;
+    _stopping = false;
     setState(() {
       _ui = LiveRecitationUiState.live;
       _clearReveal();
@@ -409,15 +413,29 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   }
 
   Future<void> _stop() async {
+    if (_stopping) return; // idempotent: ignore repeated taps while finishing
+    _stopping = true;
     _stopDiagTimer();
     await Haptics.vibrate(HapticsType.selection);
-    final ev = await _service.stop();
-    if (_ui == LiveRecitationUiState.results) return; // already handled via stream
-    _finishWith(ev?.result);
+    // Tell the server to finalize, but DON'T block on its `final` payload here
+    // (the forced final transcription can take >30s on a slow CPU, which made
+    // the button feel dead and tempted users to tap "Stop & Review" many times).
+    // The server still pushes a `final` event over the socket → `_onEvent`
+    // → `_finishWith`, which navigates to results. This path only provides a
+    // safety net if that event is missed (e.g. socket closed early).
+    unawaited(_service.stop());
+    Timer(const Duration(seconds: 12), () {
+      if (mounted && _ui == LiveRecitationUiState.live) {
+        _finishWith(_synthesizeResult());
+      }
+    });
   }
 
   void _finishWith(RecitationResult? result) {
     if (!mounted) return;
+    // Idempotent: the `final` event and `_stop()`'s safety timer can both call
+    // this; only the first one should navigate + persist.
+    if (_ui == LiveRecitationUiState.results) return;
 
     // If the app never sent any microphone audio to the server, there is
     // nothing to score — surfacing a silent "0 of N / Duration: 0s" is
