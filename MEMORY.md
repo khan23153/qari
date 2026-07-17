@@ -1580,3 +1580,171 @@ word highlighting + a non-zero correct count. TTS-based tests are invalid.
 Backend changes only (no APK rebuild needed — client lag fix shipped in
 v1.0.39+50). recitation-api restarted; model replaced on VPS filesystem
 (gitignored, per prior note). nginx WS timeout already 3600s.
+
+## Session 2026-07-17 — Live ASR upgraded tiny -> base (whisper-base-ar-quran)
+User captured Tarteel's live-voice traffic (HTTP Canary) to help improve OUR
+tracking (decision: "Make OUR backend track as well as Tarteel" — NOT proxy
+their API). Captures analyzed:
+- Live voice = `wss://voice-v2.tarteel.io/` (Cloudflare) running **uWebSockets
+  v20** (C++). Plain WS upgrade, no auth in the handshake (auth likely in first
+  frame). REST = `api.tarteel.io` (AWS) with `Authorization: TOKEN <hex>` (DRF
+  token). Reference audio served from **everyayah.com** (SAME CDN we use).
+  `/v1/track/pinpoint/` = AWS Pinpoint analytics + FCM push registration (device
+  make/model, username, last-active) — NOT recitation-related; deferred (we
+  already have Firebase for AUTH only; no push/analytics yet).
+- CONCLUSION: our architecture already MATCHES Tarteel (WS streaming, same audio
+  CDN, REST split). WSS frame payloads are encrypted so the exact audio format /
+  word-event JSON couldn't be captured — but we don't need it. The quality gap
+  is purely ASR model + matcher tuning, which we control. Did NOT rewrite our
+  transport to uWebSockets (premature; Whisper is the latency cost, not the WS).
+
+### DONE: ASR model upgrade (biggest accuracy win)
+- Converted `tarteel-ai/whisper-base-ar-quran` -> CT2 INT8 (76MB, vocab 51865)
+  via `python scripts/convert_tarteel_model.py` (deps present in
+  `/home/Innocent/venv`: ctranslate2 4.4.0, transformers 4.39.3, torch 2.2.2,
+  faster-whisper 1.0.3). Output: `backend/recitation_api/models/tarteel-ct2-base`
+  (gitignored, like the tiny + reference_data). The OLD tiny model dir remains.
+- `ml/inference/faster_whisper_transcriber.py`: `DEFAULT_MODEL_DIR` ->
+  `/app/models/tarteel-ct2-base`; docstring updated to base.
+- `scripts/convert_tarteel_model.py`: defaults -> base model + tarteel-ct2-base.
+- `infra/docker-compose.yml` recitation-api: `QARI_FASTERWHISPER_MODEL_DIR` ->
+  `/app/models/tarteel-ct2-base` (+ comment). base fine-tune ~2-3x more accurate
+  than tiny, still real-time on CPU with INT8.
+- DEPLOYED: `docker compose up -d --force-recreate recitation-api` (container
+  now `MODEL_DIR=/app/models/tarteel-ct2-base STUB=false`, healthy). Verified
+  in-container end-to-end: `engine=faster-whisper`, ref words resolved
+  (بسم الله الرحمن الرحيم), live word events emitted, duration_seconds=4,
+  4 verdicts. Base model loads + runs the full streaming pipeline. ✅
+
+### IMPORTANT: reverted a broken in-progress matcher rewrite
+While testing, found the working tree had an UNCOMMITTED rewrite of
+`ml/alignment/streaming_matcher.py` (+ its test) from a prior session with **4
+FAILING tests** (test_empty_hypothesis, test_progressive_reveal_word_by_word,
+test_live_pass_masks_words_beyond_reach, test_mispronounced_word_flagged_error).
+Confirmed the last COMMITTED matcher passes 9/9. Per user, REVERTED the broken
+rewrite (`git checkout -- ml/alignment/streaming_matcher.py
+ml/tests/test_streaming_matcher.py`) to keep the base-model upgrade on a
+known-good matcher. After revert: `pytest ml/tests
+backend/recitation_api/tests/test_streaming.py` = **120 passed**.
+
+### STATE / NEXT
+- Working tree (uncommitted, no git action requested): `infra/docker-compose.yml`,
+  `ml/inference/faster_whisper_transcriber.py`, `scripts/convert_tarteel_model.py`.
+  Converted base model dir is gitignored. NOTE: on any OTHER machine / fresh VPS,
+  run `python scripts/convert_tarteel_model.py` to regenerate the base CT2 model
+  before starting recitation-api (the tiny model dir also still exists).
+- No mobile/APK change (backend-only). App still v1.0.39+50.
+- NEXT ideas if tracking still lags on real recitation: (a) sliding-window
+  transcription instead of re-transcribing the whole buffer; (b) matcher
+  threshold/normalization tuning; (c) consider whisper-small if base still weak
+  (slower on CPU). Also deferred: FCM push notifications (Tarteel pinpoint
+  equivalent) — user chose to finish the model upgrade first.
+- REMINDER: espeak/TTS audio gives GARBAGE scores — a test artifact, NOT a model
+  signal. Only judge quality from a REAL human recitation on device.
+
+## Session 2026-07-17 (later) — LOW SURAH VOLUME fixed + live lag root-caused
+Two things this session.
+
+### FIXED + DEPLOYED: Quran surah audio very low volume (v1.0.41+52)
+User: playing any surah in the Quran section is very quiet even at 200% volume.
+ROOT CAUSE: the live AI Recitation flow configures the PROCESS-WIDE
+`audio_session` for mic capture with `usage: voiceCommunication` +
+`contentType: speech` (streaming_recitation_service._activateAudioSession).
+On stop it only calls `setActive(false)` — which releases focus but does NOT
+reset the session's audio ATTRIBUTES. So a surah played afterwards inherits the
+low-gain COMMUNICATION routing (earpiece/phone-call path) → very quiet even at
+max MEDIA volume.
+FIX (mobile-only, `mobile/lib/data/services/audio_service.dart`):
+- Added `_ensureMediaSession()` — reconfigures the shared `audio_session` for
+  MEDIA (`usage: media`, `contentType: music`), requests media focus, and forces
+  `_player.setVolume(1.0)`. Called before BOTH playback paths (`playSurahSequence`
+  and `_playUrl`), so surah/ayah audio ALWAYS routes through the loud media
+  stream regardless of what a prior recitation left behind. Import added:
+  `package:audio_session/audio_session.dart` (already a dep).
+- `flutter analyze` on the file: no errors/warnings (2 harmless info lints).
+- Bumped pubspec 1.0.40+51 → **1.0.41+52** + releases/app_release.json (notes).
+  NOTE: prior version on disk was already 1.0.40+51 (ahead of the 1.0.39+50 in
+  older MEMORY notes — the v1.0.40 was the compare-audio/self-signed-cert build).
+- BUILT (ANDROID_HOME=/home/Innocent/Android, PATH+=/home/Innocent/flutter/bin)
+  → 76.1MB, copied to `releases/app-release.apk`. VERIFIED OTA live:
+  `/v1/app/version` returns 1.0.41/52, `/v1/app/download` serves 76,128,171 bytes
+  (application/vnd.android.package-archive), no container restart (bind-mounted).
+  User must UPDATE via OTA to get the volume fix.
+
+### Live recitation LAG — root-caused, fix STARTED then REVERTED (redo next)
+User: "still lagging" after the tiny→base model upgrade. BENCHMARKED inside the
+container (4 CPUs): each transcription pass takes ~2.5–4s (base) / ~1.9–2.8s
+(tiny), but `maybe_transcribe` re-transcribes the ENTIRE growing PCM buffer
+every `TRANSCRIBE_INTERVAL_SEC=1.2`s. So per-pass cost grows with recitation
+length and always runs slower than real time → the live reveal falls further and
+further behind (base made it WORSE, not better). The lock skips stacked passes
+but the reveal still lags.
+PLANNED FIX (sliding window): transcribe only a bounded recent WINDOW (~8s with
+~2s overlap) each pass and APPEND new words to a cumulative `_hypothesis` list
+(the StreamingMatcher REQUIRES a cumulative hypothesis — it resumes at
+`_hyp_cursor`). Keep the STUB transcriber on the full-buffer path (it only needs
+the total sample COUNT to reveal words over time). Also make the loop cadence
+adaptive so passes don't stack.
+STATUS: I began editing `streaming_session.py` (added TRANSCRIBE_WINDOW_SEC /
+OVERLAP consts, `_committed_samples`/`_hypothesis` state, `_is_stub` flag,
+ranged `_decode_float(start,end)`) but did NOT finish rewriting `maybe_transcribe`
+and left `_is_stub` unset in the real-transcriber branch. Since the user wanted
+the VOLUME fix deployed now (mobile-only) and the container runs bind-mounted
+`--reload` code, I REVERTED streaming_session.py to the committed known-good
+state (`git checkout --`) so the backend stays healthy. REDO the sliding-window
+fix cleanly next session. The base model IS deployed (docker-compose +
+transcriber default point at /app/models/tarteel-ct2-base) and working; the lag
+is purely the whole-buffer re-transcription, not the model.
+UNCOMMITTED working tree now: MEMORY.md, infra/docker-compose.yml,
+ml/inference/faster_whisper_transcriber.py, scripts/convert_tarteel_model.py
+(base-model upgrade — deployed), mobile/lib/data/services/audio_service.dart +
+pubspec + app_release.json (volume fix — deployed via APK). No git commit/push
+done (no git action requested).
+
+## Session 2026-07-17 (later still) — Live lag FIXED: sliding-window transcription
+Completed the deferred lag fix. ROOT CAUSE recap: `maybe_transcribe`
+re-transcribed the ENTIRE growing PCM buffer every 1.2s, so per-pass Whisper
+cost grew with recitation length (benchmarked in-container: full-buffer 8.0s @60s
+audio, 8.8s @90s and climbing) — the reveal fell ever further behind real time.
+
+FIX (`backend/recitation_api/app/services/streaming_session.py`):
+- Real ASR now transcribes ONLY the last `TRANSCRIBE_WINDOW_SEC=10.0`s of audio
+  each pass (`_decode_float(start_sample=...)` gained a range) and STITCHES the
+  new words onto a cumulative `_hypothesis` via new pure-function
+  `stitch_hypothesis()` — finds the largest word overlap (<= `STITCH_MAX_OVERLAP
+  _WORDS=12`) between the prefix tail and the window head and appends only the
+  remainder, so overlapping windows never double-count a spoken word. The
+  StreamingMatcher still receives a CUMULATIVE hypothesis (it resumes at
+  `_hyp_cursor`), so no matcher changes were needed.
+- The duration-based STUB still runs on the FULL buffer (it reveals words from
+  the total sample count and is cheap). New `_is_stub` flag set in all 3
+  transcriber-assignment branches of `load_reference` gates the two paths.
+- `_last_hypothesis` kept as an alias of the cumulative `_hypothesis` so
+  `finalize()` + existing callers are unchanged.
+- Per-pass cost is now ~CONSTANT (bounded by the 10s window): benchmarked
+  windowed ~4.1s @90s vs full-buffer 8.8s (and flat as recitation grows). NOTE:
+  base model on this 4-CPU VPS is still ~4-6s/pass on WORST-CASE noise; real
+  speech transcribes faster. The window stops the UNBOUNDED growth that was the
+  main lag driver. If still too slow later: lower window, or drop to tiny for
+  live, or add a faster decode config.
+- TESTS: added 5 to `backend/recitation_api/tests/test_streaming.py`
+  (`test_stitch_hypothesis_*` x4 + `test_real_transcriber_uses_bounded_window`
+  proving cumulative stitch + overlap dedup on the real (non-stub) path). Full
+  suite: `pytest ml/tests backend/recitation_api/tests/test_streaming.py` =
+  **125 passed**.
+- DEPLOYED: streaming_session.py is bind-mounted into recitation-api (`--reload`);
+  also did `docker compose restart recitation-api` → healthy, real base model
+  loads, windowed pipeline verified end-to-end in-container (cumulative
+  hypothesis builds, overlap deduped, finalize returns verdicts). No APK/mobile
+  change (backend-only). No git commit/push (no git action requested).
+
+CURRENT UNCOMMITTED WORKING TREE (all deployed/live, none committed):
+- infra/docker-compose.yml, ml/inference/faster_whisper_transcriber.py,
+  scripts/convert_tarteel_model.py  (tiny->base model upgrade)
+- backend/recitation_api/app/services/streaming_session.py +
+  backend/recitation_api/tests/test_streaming.py  (sliding-window lag fix)
+- mobile/lib/data/services/audio_service.dart + mobile/pubspec.yaml +
+  releases/app_release.json + releases/app-release.apk  (v1.0.41+52 volume fix)
+- MEMORY.md
+Converted base model dir `backend/recitation_api/models/tarteel-ct2-base` is
+gitignored (regenerate with scripts/convert_tarteel_model.py on a fresh host).
