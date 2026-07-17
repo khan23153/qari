@@ -44,6 +44,26 @@ TRANSCRIBE_INTERVAL_SEC = 1.2
 # Stub transcriber: assumed seconds per recited word (reveals words over time).
 STUB_SECONDS_PER_WORD = 0.9
 
+# --- Sliding-window transcription (fixes unbounded live lag) ----------------
+# The OLD live loop re-transcribed the ENTIRE growing audio buffer on every
+# pass, so per-pass cost grew with recitation length. On a CPU VPS each Whisper
+# pass already takes ~2.5-4s (base) which is slower than the 1.2s cadence, so the
+# reveal fell further and further behind real time (worse with the bigger model).
+#
+# Instead we transcribe only a bounded WINDOW of the most recent audio each pass
+# and STITCH the new words onto a cumulative `_hypothesis` list (the
+# StreamingMatcher requires a cumulative hypothesis — it resumes at `_hyp_cursor`
+# and never re-scans resolved words). Per-pass cost is now ~constant (bounded by
+# the window length), so the reveal keeps up regardless of recitation length.
+#
+# The window must comfortably exceed the ~1.2s new-audio interval so a word that
+# straddles the boundary is re-read in the next window's OVERLAP and stitched
+# (deduplicated) rather than lost.
+TRANSCRIBE_WINDOW_SEC = 10.0
+# Max words of overlap to search when stitching a new window onto the cumulative
+# hypothesis (drops words the previous window already contributed).
+STITCH_MAX_OVERLAP_WORDS = 12
+
 # A transcriber turns a float32 mono 16 kHz signal into (normalized_words,
 # per_word_confidences).
 Transcriber = Callable[["object", int], "tuple[list[str], list[float]]"]
@@ -255,6 +275,41 @@ def _make_stub_transcriber(reference_words: list[str]) -> Transcriber:
     return _transcribe
 
 
+def stitch_hypothesis(
+    prefix: list[str],
+    prefix_confs: list[float],
+    window_words: list[str],
+    window_confs: list[float],
+    *,
+    max_overlap: int = STITCH_MAX_OVERLAP_WORDS,
+) -> tuple[list[str], list[float]]:
+    """Append a re-transcribed audio WINDOW onto the cumulative hypothesis.
+
+    Consecutive windows overlap in time, so ``window_words`` re-contains the tail
+    of what ``prefix`` already holds. We find the largest ``k`` such that the last
+    ``k`` words of ``prefix`` equal the first ``k`` words of ``window_words`` and
+    only append the remainder — so the same spoken word is never counted twice.
+
+    Falls back to appending the whole window when no overlap is found (e.g. the
+    user recited fast enough that the window is entirely new). Pure function (no
+    timestamps needed) so it is trivially unit-testable.
+    """
+    if not window_words:
+        return list(prefix), list(prefix_confs)
+    if not prefix:
+        return list(window_words), list(window_confs)
+
+    max_k = min(max_overlap, len(prefix), len(window_words))
+    best_k = 0
+    for k in range(max_k, 0, -1):
+        if prefix[-k:] == window_words[:k]:
+            best_k = k
+            break
+    merged = list(prefix) + list(window_words[best_k:])
+    merged_confs = list(prefix_confs) + list(window_confs[best_k:])
+    return merged, merged_confs
+
+
 # ---------------------------------------------------------------------------
 # Session
 # ---------------------------------------------------------------------------
@@ -308,9 +363,18 @@ class StreamingRecitationSession:
         self._transcribe_stop = False
         self._matcher = None
         self._last_status: dict[int, str] = {}
+        # Cumulative hypothesis (stitched from per-window transcriptions) + its
+        # per-word confidences. `_last_hypothesis` is kept as an alias to the
+        # cumulative words so `finalize()` and existing callers keep working.
+        self._hypothesis: list[str] = []
+        self._hypothesis_confs: list[float] = []
         self._last_hypothesis: list[str] = []
         self._explicit_transcriber = transcriber
         self._transcriber: Optional[Transcriber] = None
+        # Whether the active transcriber is the duration-based stub (which needs
+        # the FULL buffer sample count to reveal words over time) vs a real ASR
+        # (which uses the bounded sliding window). Set in load_reference.
+        self._is_stub = True
 
     # ------------------------------------------------------------------
     def load_reference(self) -> None:
@@ -350,8 +414,12 @@ class StreamingRecitationSession:
 
         if self._explicit_transcriber is not None:
             self._transcriber = self._explicit_transcriber
+            # An explicit transcriber (tests / real ASR injection) is treated as
+            # real so it uses the bounded sliding window.
+            self._is_stub = False
         elif settings.ml_use_stub or not self.reference_words:
             self._transcriber = _make_stub_transcriber(self.reference_words)
+            self._is_stub = True
         else:
             # Real ASR requested. Probe whether the Faster-Whisper CT2 model is
             # actually loadable in this container (it must be bind-mounted at
@@ -365,6 +433,7 @@ class StreamingRecitationSession:
 
                 get_transcriber().load()
                 self._transcriber = _real_transcriber
+                self._is_stub = False
                 logger.info(
                     "stream.transcriber", session_id=self.session_id,
                     engine="faster-whisper", words=len(self.reference_words),
@@ -375,6 +444,7 @@ class StreamingRecitationSession:
                     session_id=self.session_id, error=str(exc),
                 )
                 self._transcriber = _make_stub_transcriber(self.reference_words)
+                self._is_stub = True
 
     # ------------------------------------------------------------------
     def ready_payload(self) -> dict:
@@ -437,23 +507,39 @@ class StreamingRecitationSession:
     def duration_seconds(self) -> float:
         return self._total_samples / self.sample_rate if self.sample_rate else 0.0
 
-    def _decode_float(self):
+    def _decode_float(self, start_sample: int = 0, end_sample: Optional[int] = None):
         # Numpy-free decode: convert the raw PCM16 bytes into a list of float32
         # samples in [-1, 1]. Kept dependency-light so the live stream runs in
-        # the API container without the full ML stack. The stub transcriber only
-        # needs the sample COUNT; the real (Whisper) transcriber would convert
-        # this list to a tensor itself when QARI_ML_USE_STUB is false.
+        # the API container without the full ML stack. Optionally decode only the
+        # sample range [start_sample, end_sample) — the sliding window transcribes
+        # a bounded recent span instead of the whole growing buffer.
         if not self._pcm:
             return []
         import array
 
+        start_byte = max(0, start_sample) * 2
+        end_byte = (
+            len(self._pcm)
+            if end_sample is None
+            else min(len(self._pcm), end_sample * 2)
+        )
+        if end_byte <= start_byte:
+            return []
         samples = array.array("h")
-        samples.frombytes(bytes(self._pcm))
+        samples.frombytes(bytes(self._pcm[start_byte:end_byte]))
         return [s / 32768.0 for s in samples]
 
     # ------------------------------------------------------------------
     async def maybe_transcribe(self, *, force: bool = False) -> list[dict]:
-        """Re-transcribe if enough new audio arrived; return new word events."""
+        """Re-transcribe if enough new audio arrived; return new word events.
+
+        For the real ASR we transcribe only a bounded SLIDING WINDOW of the most
+        recent audio (``TRANSCRIBE_WINDOW_SEC``) and stitch the new words onto the
+        cumulative hypothesis — so per-pass cost stays ~constant and the live
+        reveal keeps up regardless of recitation length. The duration-based STUB
+        still needs the full buffer (it reveals words from the total sample
+        count), so it runs on the whole buffer (which is cheap for the stub).
+        """
         if self._matcher is None or self._transcriber is None:
             return []
         new_samples = self._total_samples - self._samples_at_last_transcribe
@@ -465,16 +551,50 @@ class StreamingRecitationSession:
 
         async with self._transcribe_lock:
             self._samples_at_last_transcribe = self._total_samples
-            audio = self._decode_float()
-            try:
-                words, confs = await asyncio.to_thread(
-                    self._transcriber, audio, self.sample_rate
+            total = self._total_samples
+
+            if self._is_stub:
+                # Stub reveals words from the TOTAL duration → needs full buffer.
+                audio = self._decode_float()
+                try:
+                    words, confs = await asyncio.to_thread(
+                        self._transcriber, audio, self.sample_rate
+                    )
+                except Exception as exc:  # pragma: no cover - model failures
+                    logger.error(
+                        "stream.transcribe_failed",
+                        session_id=self.session_id, error=str(exc),
+                    )
+                    return []
+                self._hypothesis = list(words)
+                self._hypothesis_confs = list(confs)
+            else:
+                # Real ASR: transcribe only the last TRANSCRIBE_WINDOW_SEC of
+                # audio and stitch the new words onto the cumulative hypothesis.
+                window_samples = int(TRANSCRIBE_WINDOW_SEC * self.sample_rate)
+                start = max(0, total - window_samples)
+                audio = self._decode_float(start_sample=start)
+                try:
+                    win_words, win_confs = await asyncio.to_thread(
+                        self._transcriber, audio, self.sample_rate
+                    )
+                except Exception as exc:  # pragma: no cover - model failures
+                    logger.error(
+                        "stream.transcribe_failed",
+                        session_id=self.session_id, error=str(exc),
+                    )
+                    return []
+                self._hypothesis, self._hypothesis_confs = stitch_hypothesis(
+                    self._hypothesis,
+                    self._hypothesis_confs,
+                    win_words,
+                    win_confs,
                 )
-            except Exception as exc:  # pragma: no cover - model failures
-                logger.error("stream.transcribe_failed", session_id=self.session_id, error=str(exc))
-                return []
-            self._last_hypothesis = words
-            states = self._matcher.evaluate(words, confs)
+
+            self._last_hypothesis = self._hypothesis
+            states = self._matcher.evaluate(
+                self._hypothesis, self._hypothesis_confs
+            )
             return self._diff_events(states)
 
     def _diff_events(self, states) -> list[dict]:

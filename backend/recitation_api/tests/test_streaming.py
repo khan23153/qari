@@ -134,3 +134,75 @@ def _recv_until(ws, msg_type, limit=50):
         if msg.get("type") == msg_type:
             return msg
     raise AssertionError(f"did not receive '{msg_type}' message")
+
+
+# ---------------------------------------------------------------------------
+# Sliding-window transcription (lag fix)
+# ---------------------------------------------------------------------------
+
+def test_stitch_hypothesis_empty_prefix():
+    words, confs = ss.stitch_hypothesis([], [], ["a", "b"], [0.9, 0.9])
+    assert words == ["a", "b"]
+    assert confs == [0.9, 0.9]
+
+
+def test_stitch_hypothesis_dedups_overlap():
+    """A new window that re-contains the prefix tail must not double-count."""
+    words, confs = ss.stitch_hypothesis(
+        ["a", "b", "c"], [1, 1, 1], ["b", "c", "d", "e"], [1, 1, 2, 2]
+    )
+    assert words == ["a", "b", "c", "d", "e"]
+    assert confs == [1, 1, 1, 2, 2]
+
+
+def test_stitch_hypothesis_no_overlap_appends_all():
+    words, _ = ss.stitch_hypothesis(["a", "b"], [1, 1], ["c", "d"], [1, 1])
+    assert words == ["a", "b", "c", "d"]
+
+
+def test_stitch_hypothesis_window_fully_contained():
+    """If the whole window is already in the prefix, nothing new is added."""
+    words, _ = ss.stitch_hypothesis(["a", "b", "c"], [1, 1, 1], ["b", "c"], [1, 1])
+    assert words == ["a", "b", "c"]
+
+
+def test_real_transcriber_uses_bounded_window(monkeypatch):
+    """The real (non-stub) path transcribes only the recent window, and the
+    stitched cumulative hypothesis grows across passes without double-counting."""
+    monkeypatch.setattr(
+        ss,
+        "resolve_reference_words_sequence",
+        lambda ayah_refs: (REFERENCE, REFERENCE, "https://example/ref.mp3", REFERENCE_ENTRIES, []),
+    )
+    monkeypatch.setattr(ss.settings, "ml_use_stub", False, raising=False)
+
+    # Fake ASR: returns the words "spoken" in the audio window handed to it. We
+    # encode the spoken word count in the audio length so we can simulate a
+    # growing recitation window-by-window.
+    calls = {"n": 0}
+
+    def fake_transcriber(audio, sr):
+        calls["n"] += 1
+        # window 1 -> ["بسم","الله"]; window 2 (overlaps) -> ["الله","الرحمن"]
+        if calls["n"] == 1:
+            return ["بسم", "الله"], [0.9, 0.9]
+        return ["الله", "الرحمن"], [0.9, 0.9]
+
+    import asyncio
+
+    async def run():
+        sess = ss.StreamingRecitationSession(
+            surah=1, ayah_from=1, ayah_to=1, transcriber=fake_transcriber
+        )
+        sess.load_reference()
+        assert sess._is_stub is False
+        # Feed >1.2s of audio so a pass triggers, then transcribe twice.
+        sess.add_audio(b"\x00\x00" * (16000 * 3))
+        await sess.maybe_transcribe(force=True)
+        sess.add_audio(b"\x00\x00" * (16000 * 3))
+        await sess.maybe_transcribe(force=True)
+        # Cumulative hypothesis stitched, overlap "الله" deduped.
+        assert sess._hypothesis == ["بسم", "الله", "الرحمن"]
+
+    asyncio.run(run())
+
