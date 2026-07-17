@@ -9,16 +9,18 @@ engine cannot meet).
 
 ASR model
 ---------
-``tarteel-ai/whisper-tiny-ar-quran`` — a Whisper-tiny variant fine-tuned by
+``tarteel-ai/whisper-base-ar-quran`` — a Whisper-base variant fine-tuned by
 Tarteel specifically on Quranic Arabic recitation (NOT conversational Arabic).
+The ``base`` fine-tune is ~2-3x more accurate than ``tiny`` for live tracking
+and still runs in real-time on a CPU-only VPS with INT8 quantization.
 It must be **converted to the CTranslate2 format** before use:
 
     ct2-transformers-converter \\
-        --model tarteel-ai/whisper-tiny-ar-quran \\
-        --output_dir tarteel-ct2-tiny --quantization int8
+        --model tarteel-ai/whisper-base-ar-quran \\
+        --output_dir tarteel-ct2-base --quantization int8
 
 See ``scripts/convert_tarteel_model.py`` for a one-command helper. The resulting
-folder is mounted into the container at ``/app/models/tarteel-ct2-tiny`` and its
+folder is mounted into the container at ``/app/models/tarteel-ct2-base`` and its
 location is overridable via ``QARI_FASTERWHISPER_MODEL_DIR``.
 
 The transcriber returns **raw** Arabic word tokens (not yet normalized). The
@@ -38,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 # Default location of the converted CTranslate2 model inside the container.
 # Override with the QARI_FASTERWHISPER_MODEL_DIR environment variable.
-DEFAULT_MODEL_DIR = "/app/models/tarteel-ct2-tiny"
+DEFAULT_MODEL_DIR = "/app/models/tarteel-ct2-base"
 ENV_MODEL_DIR = "QARI_FASTERWHISPER_MODEL_DIR"
 
 

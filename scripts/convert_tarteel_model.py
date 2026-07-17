@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
-"""Convert tarteel-ai/whisper-tiny-ar-quran to CTranslate2 (INT8) for CPU.
+"""Convert tarteel-ai/whisper-base-ar-quran to CTranslate2 (INT8) for CPU.
 
 The live recitation engine uses ``faster-whisper`` (CTranslate2 runtime) instead
 of the heavy PyTorch Whisper, so it can run with low latency on a CPU-only VPS.
 CTranslate2 cannot read a standard HuggingFace model directly — it must be
 converted first. This script wraps the official ``ct2-transformers-converter``
 CLI (provided by the ``ctranslate2`` package) and writes the optimized model to
-``backend/recitation_api/models/tarteel-ct2-tiny`` (which the container mounts
-at ``/app/models/tarteel-ct2-tiny``).
+``backend/recitation_api/models/tarteel-ct2-base`` (which the container mounts
+at ``/app/models/tarteel-ct2-base``).
 
 Requirements (only needed at conversion time, not at inference):
     pip install "transformers==4.39.3" torch ctranslate2
 
 Usage:
     python scripts/convert_tarteel_model.py
-    python scripts/convert_tarteel_model.py --model tarteel-ai/whisper-tiny-ar-quran \
-        --output backend/recitation_api/models/tarteel-ct2-tiny --quantization int8
+    python scripts/convert_tarteel_model.py --model tarteel-ai/whisper-base-ar-quran \
+        --output backend/recitation_api/models/tarteel-ct2-base --quantization int8
 
 The container reads the output location from QARI_FASTERWHISPER_MODEL_DIR
-(default /app/models/tarteel-ct2-tiny).
+(default /app/models/tarteel-ct2-base).
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ import sys
 # Resolve repo root (this file lives in <repo>/scripts).
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_OUTPUT = os.path.join(
-    REPO_ROOT, "backend", "recitation_api", "models", "tarteel-ct2-tiny"
+    REPO_ROOT, "backend", "recitation_api", "models", "tarteel-ct2-base"
 )
 
 
@@ -39,7 +39,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument(
         "--model",
-        default="tarteel-ai/whisper-tiny-ar-quran",
+        default="tarteel-ai/whisper-base-ar-quran",
         help="Source HuggingFace Whisper model to convert.",
     )
     p.add_argument(

@@ -73,11 +73,13 @@ services:
       # and the ML engine. Mount `ml` and put it on the path. The live stream
       # now uses Faster-Whisper (CTranslate2, INT8) for CPU-efficient real-time
       # ASR — no GPU and no large PyTorch Whisper model required in this
-      # container. The converted model lives at /app/models/tarteel-ct2-tiny
-      # (created by scripts/convert_tarteel_model.py) which is bind-mounted in.
+      # container. The converted model lives at /app/models/tarteel-ct2-base
+      # (created by scripts/convert_tarteel_model.py --model
+      # tarteel-ai/whisper-base-ar-quran) which is bind-mounted in. The `base`
+      # fine-tune is ~2-3x more accurate than `tiny` and still real-time on CPU.
       PYTHONPATH: /app
       QARI_ML_USE_STUB: "false"
-      QARI_FASTERWHISPER_MODEL_DIR: /app/models/tarteel-ct2-tiny
+      QARI_FASTERWHISPER_MODEL_DIR: /app/models/tarteel-ct2-base
       QARI_REFERENCE_DATA_DIR: /app/reference_data
     depends_on:
       redis:
