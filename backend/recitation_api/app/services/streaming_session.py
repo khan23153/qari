@@ -58,8 +58,10 @@ STUB_SECONDS_PER_WORD = 0.9
 #
 # The window must comfortably exceed the ~1.2s new-audio interval so a word that
 # straddles the boundary is re-read in the next window's OVERLAP and stitched
-# (deduplicated) rather than lost.
-TRANSCRIBE_WINDOW_SEC = 10.0
+# (deduplicated) rather than lost. 6s is the sweet spot on the CPU VPS: large
+# enough for reliable context/overlap, small enough that each Whisper pass is
+# ~2.2s (tiny) so the live reveal keeps up with continuous speech.
+TRANSCRIBE_WINDOW_SEC = 6.0
 # Max words of overlap to search when stitching a new window onto the cumulative
 # hypothesis (drops words the previous window already contributed).
 STITCH_MAX_OVERLAP_WORDS = 12

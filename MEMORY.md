@@ -1748,3 +1748,33 @@ CURRENT UNCOMMITTED WORKING TREE (all deployed/live, none committed):
 - MEMORY.md
 Converted base model dir `backend/recitation_api/models/tarteel-ct2-base` is
 gitignored (regenerate with scripts/convert_tarteel_model.py on a fresh host).
+
+## Session 2026-07-17 (night) — "still buffering" → live model back to TINY + 6s window
+User tested and live recitation STILL felt like buffering. Checked live server
+logs during a real device session (words=29, surah 1): the sliding window WAS
+working (each pass processed max 10s, not the whole buffer), but the `base` model
+took **~5-6s per 10s window** on this 4-CPU VPS → words only updated every 5-6s
+= the "buffering" feel. Benchmarked in-container (10s window):
+- BASE 2-thread ~6.0s, BASE 4-thread ~6.5s (4 threads DIDN'T help — contention)
+- TINY 2-thread ~2.8s, TINY 4-thread ~3.2s
+Then benchmarked window size (there's a ~2s fixed Whisper overhead per call
+regardless of window): TINY@6s ~2.2s (rtf 0.37), BASE@6s ~3.1s. So `base` is
+simply too slow for real-time HERE; `tiny` keeps up.
+
+DECISION (user chose): live tracking uses **TINY + 6s window** (most responsive).
+CHANGES:
+- `infra/docker-compose.yml` recitation-api `QARI_FASTERWHISPER_MODEL_DIR` →
+  `/app/models/tarteel-ct2-tiny` (recreated container; verified MODEL=tiny,
+  healthy). The `inference-worker` (batch per-ayah upload flow) is UNAFFECTED —
+  it still uses the more-accurate `base`/PyTorch engine where latency is fine.
+- `backend/recitation_api/app/services/streaming_session.py`
+  `TRANSCRIBE_WINDOW_SEC` 10.0 → **6.0** (sweet spot: reliable overlap, ~2.2s/pass).
+- `ml/inference/faster_whisper_transcriber.py` `DEFAULT_MODEL_DIR` → tiny +
+  docstring updated (tiny=live, base=batch).
+VERIFIED end-to-end in-container with tiny+6s: per-pass transcribe **1.3-1.8s**
+(was ~6s) — ~3-4x faster, real-time. `pytest test_streaming.py
+test_streaming_matcher.py` = 19 passed. No mobile/APK change (backend-only).
+NOTE: both tiny AND base CT2 model dirs exist on the VPS + are gitignored; the
+env var alone switches which one live uses. If accuracy on tiny is too low later,
+options: keep tiny for live reveal + run base once for the FINAL score, or get a
+faster CPU/GPU for base real-time.
