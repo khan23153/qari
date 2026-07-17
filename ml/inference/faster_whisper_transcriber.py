@@ -12,18 +12,19 @@ ASR model
 ``tarteel-ai/whisper-{tiny,base}-ar-quran`` — Whisper variants fine-tuned by
 Tarteel specifically on Quranic Arabic recitation (NOT conversational Arabic).
 
-For **live streaming** on a CPU-only VPS the ``tiny`` fine-tune is used
-(``/app/models/tarteel-ct2-tiny``, ~2.2s per 6s window) because ``base`` is too
-slow for real-time here (~6s/window → visible "buffering"). The heavier ``base``
-model (more accurate) is reserved for the batch per-ayah upload flow where
-latency doesn't matter. Both must be **converted to CTranslate2** first:
+For **live streaming** the ``base`` fine-tune is now used
+(``/app/models/tarteel-ct2-base``) because it transcribes Quranic Arabic far
+more accurately than ``tiny`` — the user-reported "correct words marked wrong"
+was primarily tiny-model noise. On this 4-CPU VPS the sliding 6s window keeps
+base at ~3-4s/pass (real-time-ish); if it ever lags, drop the window or fall
+back to ``tiny``. Both must be **converted to CTranslate2** first:
 
     ct2-transformers-converter \\
-        --model tarteel-ai/whisper-tiny-ar-quran \\
-        --output_dir tarteel-ct2-tiny --quantization int8
+        --model tarteel-ai/whisper-base-ar-quran \\
+        --output_dir tarteel-ct2-base --quantization int8
 
 See ``scripts/convert_tarteel_model.py`` for a one-command helper. The resulting
-folder is mounted into the container at ``/app/models/tarteel-ct2-tiny`` and its
+folder is mounted into the container at ``/app/models/tarteel-ct2-base`` and its
 location is overridable via ``QARI_FASTERWHISPER_MODEL_DIR``.
 
 The transcriber returns **raw** Arabic word tokens (not yet normalized). The
@@ -43,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 # Default location of the converted CTranslate2 model inside the container.
 # Override with the QARI_FASTERWHISPER_MODEL_DIR environment variable.
-DEFAULT_MODEL_DIR = "/app/models/tarteel-ct2-tiny"
+DEFAULT_MODEL_DIR = "/app/models/tarteel-ct2-base"
 ENV_MODEL_DIR = "QARI_FASTERWHISPER_MODEL_DIR"
 
 

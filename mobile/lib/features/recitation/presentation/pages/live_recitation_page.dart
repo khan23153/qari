@@ -436,6 +436,12 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
     // this; only the first one should navigate + persist.
     if (_ui == LiveRecitationUiState.results) return;
 
+    // Tear down the mic + socket immediately so the native foreground service
+    // stops pushing PCM into the (now irrelevant) EventChannel sink while the
+    // results screen is shown. Keeping capture alive here was the most likely
+    // trigger for the hard native crash reported after a recitation finished.
+    unawaited(_service.cancel());
+
     // If the app never sent any microphone audio to the server, there is
     // nothing to score — surfacing a silent "0 of N / Duration: 0s" is
     // confusing. Show a clear, actionable error instead so the user knows to
