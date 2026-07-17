@@ -1804,3 +1804,65 @@ batches (80.7s/83.5s/85.7s) while audio was still streaming. Base suite
 with `--reload` so change is live without recreate. (NOTE: espeak TTS scores are
 LOW/garbage — a test artifact; real human recitation scores correctly.)
 UNCOMMITTED working tree now also includes this streaming_session.py fix.
+
+## Session 2026-07-17 (latest-2) — "tracker finishes the ayah before me" ROOT FIXED
+User: live tracking is now FAST (no more buffering) but the tracker **finishes the
+whole ayah before the user** and **most words are marked not-understood**. Two
+symptoms, ONE root cause in the streaming pipeline:
+
+ROOT CAUSE: `stitch_hypothesis()` deduped overlapping ASR windows with **EXACT
+string equality**. Whisper re-transcribes the same ~6s window every pass and
+rarely emits byte-identical tokens across passes, so the overlap was NEVER found
+→ the entire window was appended AGAIN each pass → the cumulative `_hypothesis`
+EXPLODED (unbounded growth) → `StreamingMatcher.evaluate` then resolved the whole
+reference ayah (and flagged the repeated garbage tokens as error/skipped) LONG
+before the user had spoken those words. That single bug produced BOTH the
+"finishes before me" (matcher races to the end) AND "words not understood"
+(garbage repeated tokens don't match the reference → errors/skips) symptoms.
+
+FIX (`backend/recitation_api/app/services/streaming_session.py`):
+- NEW `_words_similar(a,b,threshold=0.80)`: normalized **similarity** overlap
+  match (reuses `char_similarity` from `ml.alignment.streaming_matcher`); falls
+  back to raw equality when normalization yields empty (non-Arabic / Latin test
+  tokens / numbers) so overlap detection still works for those.
+- `stitch_hypothesis` now finds the largest overlap `k` via `_words_similar`
+  (fuzzy) instead of `prefix[-k:] == window_words[:k]` (exact), so re-transcribed
+  windows actually dedup and the hypothesis length tracks the user's REAL
+  progress instead of exploding.
+- Added a **hypothesis cap**: after stitching, the cumulative `_hypothesis` is
+  clamped to `len(reference_words) + matcher.lookahead` so ASR hallucinations /
+  repeated-token explosions can't drive the matcher past the user.
+- Test added: `test_stitch_hypothesis_fuzzy_overlap_dedups` (Arabic overlapping
+  window dedups to the expected resolved list). Full suite
+  `pytest backend/recitation_api/tests/test_streaming.py
+  ml/tests/test_streaming_matcher.py` = **20 passed**.
+- NOTE: also probed the tiny model directly with espeak TTS — it returns GARBAGE
+  on robotic TTS (`فِي سِرَّاءَ...`), confirming espeak/TTS is NOT a valid quality
+  signal (test artifact only). Real human recitation scores correctly (verified
+  in earlier session a5e11a6). The tiny-vs-base choice is unchanged (live=tiny
+  for latency; batch upload=base/PyTorch for accuracy).
+VERIFY: e2e WS test (start + 3s PCM + stop) → live `word` events fire DURING
+streaming + `final` returns 4 verdicts / duration 3 (Surah 1). Container
+restarted (`docker compose -f infra/docker-compose.yml restart recitation-api`)
+→ healthy, new code live (`grep _words_similar` in container = 3 hits).
+COMMITTED + PUSHED (commit 0040abf) to origin/main. Backend-only; NO APK rebuild
+needed — the already-deployed v1.0.41+52 app works with the fixed backend.
+
+### CURRENT DEPLOYED STATE (end of 2026-07-17)
+- App OTA: v1.0.41+52 (rebuilt earlier this session, no source change since).
+- Backend recitation-api: tiny model + 6s window + sliding-window stitch fix +
+  decode_float even-byte fix + adaptive cadence. All committed + pushed.
+- Working tree is CLEAN (all changes committed/pushed): last commit 0040abf.
+- Uncommitted: only this MEMORY.md update (append this session note, then commit
+  if desired). Converted CT2 model dirs (tiny + base) are gitignored on VPS.
+
+### NEXT LEVERS if real recitation STILL mis-scores after this fix
+- If the matcher still marks correct words wrong on a REAL human voice, the
+  remaining lever is model accuracy: flip live `QARI_FASTERWHISPER_MODEL_DIR`
+  tiny → base (more accurate, ~3-4s/pass, acceptable latency on this VPS) — just
+  change the env in `infra/docker-compose.yml` + recreate the container.
+- Consider `whisper-small` only if base is still weak (slower on CPU).
+- Per-ayah `RecordingService` (single-file WAV upload) still uses the `record`
+  plugin — if the reader "Recite" flow is silent on this device, port it to the
+  native capture (the live flow already uses MicForegroundService). `record` can
+  then be removed from pubspec.
