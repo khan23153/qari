@@ -160,6 +160,17 @@ def test_stitch_hypothesis_no_overlap_appends_all():
     assert words == ["a", "b", "c", "d"]
 
 
+def test_stitch_hypothesis_fuzzy_overlap_dedups():
+    """Re-transcription rarely emits byte-identical tokens across passes, so the
+    overlap must be found on a *similarity* basis — otherwise every window is
+    appended again and the hypothesis explodes (matcher races past the user)."""
+    words, _ = ss.stitch_hypothesis(
+        ["بسم", "الله", "الرحمن"], [1, 1, 1],
+        ["الله", "الرحمن", "الرحيم"], [1, 1, 1],
+    )
+    assert words == ["بسم", "الله", "الرحمن", "الرحيم"]
+
+
 def test_stitch_hypothesis_window_fully_contained():
     """If the whole window is already in the prefix, nothing new is added."""
     words, _ = ss.stitch_hypothesis(["a", "b", "c"], [1, 1, 1], ["b", "c"], [1, 1])

@@ -277,6 +277,29 @@ def _make_stub_transcriber(reference_words: list[str]) -> Transcriber:
     return _transcribe
 
 
+def _words_similar(a: str, b: str, threshold: float = 0.80) -> bool:
+    """Loose word match used when stitching overlapping ASR windows.
+
+    The ASR re-transcribes the same audio every pass, and the model rarely emits
+    byte-identical tokens across passes (segmentation / diacritic-stripping noise
+    differ). An *exact* equality check therefore almost never finds the overlap,
+    so every window got appended again and the cumulative hypothesis grew without
+    bound — which made the matcher blow through the entire reference ayah long
+    before the user had spoken those words. Comparing on the normalized form with
+    a similarity floor recovers the overlap.
+    """
+    na, nb = _normalize(a), _normalize(b)
+    # When normalization strips everything (e.g. non-Arabic / Latin test tokens,
+    # numbers), fall back to a raw comparison so overlap detection still works.
+    if not na or not nb:
+        return a == b
+    if na == nb:
+        return True
+    from ml.alignment.streaming_matcher import char_similarity
+
+    return char_similarity(na, nb) >= threshold
+
+
 def stitch_hypothesis(
     prefix: list[str],
     prefix_confs: list[float],
@@ -289,8 +312,10 @@ def stitch_hypothesis(
 
     Consecutive windows overlap in time, so ``window_words`` re-contains the tail
     of what ``prefix`` already holds. We find the largest ``k`` such that the last
-    ``k`` words of ``prefix`` equal the first ``k`` words of ``window_words`` and
-    only append the remainder — so the same spoken word is never counted twice.
+    ``k`` words of ``prefix`` are *similar* to the first ``k`` words of
+    ``window_words`` (fuzzy, not exact — see :func:`_words_similar`) and only
+    append the remainder — so the same spoken word is never counted twice and the
+    hypothesis length tracks the user's actual progress instead of exploding.
 
     Falls back to appending the whole window when no overlap is found (e.g. the
     user recited fast enough that the window is entirely new). Pure function (no
@@ -304,7 +329,10 @@ def stitch_hypothesis(
     max_k = min(max_overlap, len(prefix), len(window_words))
     best_k = 0
     for k in range(max_k, 0, -1):
-        if prefix[-k:] == window_words[:k]:
+        if all(
+            _words_similar(prefix[-(k - m)], window_words[m])
+            for m in range(k)
+        ):
             best_k = k
             break
     merged = list(prefix) + list(window_words[best_k:])
@@ -600,12 +628,25 @@ class StreamingRecitationSession:
                         session_id=self.session_id, error=str(exc),
                     )
                     return []
-                self._hypothesis, self._hypothesis_confs = stitch_hypothesis(
+                stitched, stitched_confs = stitch_hypothesis(
                     self._hypothesis,
                     self._hypothesis_confs,
                     win_words,
                     win_confs,
                 )
+                # Clamp the cumulative hypothesis so ASR hallucinations /
+                # repeated-token explosions can't drive the matcher far past the
+                # reference. The matcher only ever resolves up to len(reference),
+                # so anything beyond a small margin is pure noise that would make
+                # it skip ahead of the user. Keep at most ref_len + LOOKAHEAD words.
+                cap = len(self.reference_words) + getattr(
+                    self._matcher, "lookahead", 3
+                )
+                if len(stitched) > cap:
+                    stitched = stitched[:cap]
+                    stitched_confs = stitched_confs[:cap]
+                self._hypothesis = stitched
+                self._hypothesis_confs = stitched_confs
 
             self._last_hypothesis = self._hypothesis
             states = self._matcher.evaluate(
