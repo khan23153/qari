@@ -113,16 +113,16 @@ void main() {
     // Ghunnah colouring applied → at least one per-letter TextSpan carries a
     // non-null (rule) colour, proving the word is painted per-letter by rule.
     final richTexts = tester.widgetList<RichText>(find.byType(RichText));
-    var hasColouredSpan = false;
-    for (final rt in richTexts) {
-      final span = rt.text;
-      if (span is TextSpan && span.children != null) {
-        for (final c in span.children!) {
-          debugPrint('TESTSPAN color=${c.style?.color}');
-          if (c is TextSpan && c.style?.color != null) hasColouredSpan = true;
-        }
+    bool hasColouredSpan = false;
+    void visit(InlineSpan span) {
+      if (span is TextSpan && span.style?.color != null) hasColouredSpan = true;
+      final kids = span is TextSpan ? span.children : null;
+      if (kids != null) {
+        for (final k in kids) visit(k);
       }
     }
+
+    for (final rt in richTexts) visit(rt.text);
     expect(hasColouredSpan, isTrue);
   });
 

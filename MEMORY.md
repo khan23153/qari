@@ -1778,3 +1778,29 @@ NOTE: both tiny AND base CT2 model dirs exist on the VPS + are gitignored; the
 env var alone switches which one live uses. If accuracy on tiny is too low later,
 options: keep tiny for live reveal + run base once for the FINAL score, or get a
 faster CPU/GPU for base real-time.
+
+## Session 2026-07-17 (latest) — Root cause of "still buffering" FOUND + FIXED
+User still felt buffering on live tracking even after tiny+6s-window deploy.
+ROOT CAUSE: a `ValueError: bytes length not a multiple of item size` in
+`StreamingRecitationSession._decode_float()` — `_decode_float(start_sample=...)`
+passed `end_byte = len(self._pcm)` which can be ODD (partial final PCM frame),
+and `array.array("h").frombytes` requires an even length. This exception fired
+on EVERY sliding-window pass (real-ASR path), so `maybe_transcribe` threw before
+producing any words → NO `word` events during streaming. The reveal only
+"dumped" at the forced final transcribe / `finalize()` (full-buffer decode). So
+the tracker looked frozen/buffering, then dumped everything at the end.
+FIX (`backend/recitation_api/app/services/streaming_session.py`):
+- `_decode_float()` now rounds `end_byte` DOWN to an even boundary before
+  `frombytes`, so partial trailing frames never crash the pass.
+- `transcription_loop()` cadence made adaptive: sleeps only the REMAINING
+  `TRANSCRIBE_INTERVAL_SEC - pass_time` after each pass (was a fixed 1.2s sleep
+  stacked on top of the ~1.5s pass → ~2.7s gaps). Keeps the reveal smooth.
+VERIFIED: WS end-to-end with real espeak Arabic clips — `word` events now fire
+PROGRESSIVELY during streaming (batches at ~0.5-2s intervals as audio arrives),
+not all at the forced final. 9s Surah-1-3 clip: 10 words revealed in 3 live
+batches (80.7s/83.5s/85.7s) while audio was still streaming. Base suite
+`pytest backend/recitation_api/tests/test_streaming.py ml/tests/test_streaming_matcher.py`
+= 19 passed. Backend-only change (no APK rebuild). Container bind-mounts code
+with `--reload` so change is live without recreate. (NOTE: espeak TTS scores are
+LOW/garbage — a test artifact; real human recitation scores correctly.)
+UNCOMMITTED working tree now also includes this streaming_session.py fix.

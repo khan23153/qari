@@ -493,11 +493,19 @@ class StreamingRecitationSession:
         try:
             while not self._transcribe_stop:
                 try:
+                    t0 = asyncio.get_event_loop().time()
                     for event in await self.maybe_transcribe():
                         await websocket.send_json(event)
                 except Exception as exc:  # pragma: no cover - model failures
                     logger.error("stream.loop_transcribe_failed", session_id=self.session_id, error=str(exc))
-                await asyncio.sleep(TRANSCRIBE_INTERVAL_SEC)
+                # Sleep only the *remaining* interval after a (possibly slow)
+                # transcription pass so the cadence stays ~constant regardless of
+                # how long Whisper took. This keeps the live reveal smooth
+                # instead of a fixed 1.2s gap stacked on top of each pass.
+                elapsed = asyncio.get_event_loop().time() - t0
+                remaining = TRANSCRIBE_INTERVAL_SEC - elapsed
+                if remaining > 0:
+                    await asyncio.sleep(remaining)
         except asyncio.CancelledError:
             return
 
@@ -525,6 +533,12 @@ class StreamingRecitationSession:
             if end_sample is None
             else min(len(self._pcm), end_sample * 2)
         )
+        # PCM length may be odd (partial final frame); align to an even byte
+        # boundary so `array.frombytes` never sees a half-sample. Without this
+        # the real-ASR sliding-window path raised ValueError on every pass ->
+        # no word events fired during streaming (the reveal only "dumped" on the
+        # forced final transcribe), which is exactly the "buffering" feel.
+        end_byte -= end_byte % 2
         if end_byte <= start_byte:
             return []
         samples = array.array("h")
