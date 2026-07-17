@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:just_audio/just_audio.dart';
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
@@ -40,6 +41,13 @@ class AudioService {
   bool? _urduCdnAvailable;
   final Dio _probeDio = Dio();
 
+  /// Whether the shared audio session has been (re)configured for MEDIA
+  /// playback. The live recitation flow configures the process-wide
+  /// `audio_session` for `voiceCommunication` (mic capture), which routes
+  /// subsequent playback through the low-gain COMMUNICATION path — so a surah
+  /// played afterwards is very quiet even at max media volume. We reconfigure
+  /// the session for `media`/`music` before every playback to guarantee loud,
+  /// media-stream output regardless of what a prior recitation left behind.
   AudioService() {
     _init();
   }
@@ -51,6 +59,30 @@ class AudioService {
       _isInitialized = true;
     } catch (e) {
       debugPrint('AudioService init error: $e');
+    }
+  }
+
+  /// Configures the shared audio session for loud MEDIA playback and requests
+  /// media audio focus. Idempotent-ish: always re-applies before playback so it
+  /// overrides any `voiceCommunication` config left by the live recitation flow
+  /// (the root cause of low surah volume). Non-fatal on failure.
+  Future<void> _ensureMediaSession() async {
+    try {
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration(
+        androidAudioAttributes: AndroidAudioAttributes(
+          contentType: AndroidAudioContentType.music,
+          usage: AndroidAudioUsage.media,
+        ),
+        androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+        androidWillPauseWhenDucked: true,
+      ));
+      await session.setActive(true);
+      // Ensure the player itself is at full volume (a prior ducking/attenuation
+      // could have lowered it).
+      await _player.setVolume(1.0);
+    } catch (e) {
+      debugPrint('AudioService media session config error: $e');
     }
   }
 
@@ -152,6 +184,7 @@ class AudioService {
     debugPrint('AudioService: playing surah sequence (${urls.length} ayahs, '
         'start @ $initialIndex)');
     try {
+      await _ensureMediaSession();
       final sources = urls
           .map((u) => AudioSource.uri(Uri.parse(u)))
           .toList(growable: false);
@@ -201,6 +234,7 @@ class AudioService {
         await _player.pause();
         return;
       }
+      await _ensureMediaSession();
       // The VPS uses a self-signed TLS cert. just_audio/ExoPlayer rejects it
       // for https media URLs (so comparison audio was silent). For the trusted
       // self-signed host we download via an HttpClient that accepts the cert,

@@ -1,12 +1,12 @@
 {
-  "version": "1.0.40",
-  "version_code": 51,
+  "version": "1.0.41",
+  "version_code": 52,
   "min_version": "1.0.0",
   "min_version_code": 1,
   "apk_url": "https://20.197.40.13/v1/app/download",
   "force_update": false,
-  "notes_en": "Live Recitation: compare-audio now plays (was silent due to VPS self-signed cert — audio is downloaded + played locally). Stop & Review shows a 'Finalizing…' state while the server analyses your full recitation, so it no longer feels stuck.",
-  "notes_ur": "لائیو تلاوت: موازنہ آڈیو اب چلتی ہے اور 'Finalizing…' اسٹیٹ شامل کی گئی ہے۔",
-  "notes_hi": "Live Recitation: compare audio now plays; Stop & Review shows a 'Finalizing…' state.",
+  "notes_en": "Fixed: Quran surah audio played at very low volume (even at max) after using Live Recitation — playback now always routes through the loud media stream. Live recitation ASR upgraded to the more accurate whisper-base model.",
+  "notes_ur": "درست کیا گیا: قرآن کی سورت کی آواز بہت کم تھی، اب میڈیا والیوم پر مکمل آواز آتی ہے۔",
+  "notes_hi": "ठीक किया: सूरह की आवाज़ बहुत कम थी, अब पूरी मीडिया वॉल्यूम पर बजती है।",
   "data_version": 1
 }
