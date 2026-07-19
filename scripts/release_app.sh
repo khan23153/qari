@@ -9,6 +9,11 @@
 #   ./scripts/release_app.sh --bump                  # bump version_code (patch)
 #   ./scripts/release_app.sh --bump --data-version   # also bump backend data_version
 #   ./scripts/release_app.sh --notes-en "Bug fixes" --notes-ur "..."
+#   ./scripts/release_app.sh --use-tarteel-live false   # use in-house VPS backend
+#   ./scripts/release_app.sh --tarteel-token <hex>      # bake DRF auth token
+#
+# The live recitation stream defaults to Tarteel's real-time voice API.
+# Override via env (USE_TARTEEL_LIVE, TARTEEL_LIVE_TOKEN) or the flags above.
 #
 # After running, commit releases/app_release.json + releases/app-release.apk
 # and push to the server (or sync the releases/ dir to the host). The running
@@ -32,6 +37,14 @@ NOTES_EN=""
 NOTES_UR=""
 NOTES_HI=""
 
+# ── Tarteel live tracking flags ────────────────────────────────────────────
+# The live recitation stream defaults to Tarteel's real-time voice API
+# (wss://voice-v2.tarteel.io) rather than our own /ws/recitation/stream VPS
+# backend. Pass USE_TARTEEL_LIVE=false to revert to the in-house backend.
+# The DRF auth token is read from $TARTEEL_LIVE_TOKEN (or --tarteel-token).
+USE_TARTEEL_LIVE="${USE_TARTEEL_LIVE:-true}"
+TARTEEL_LIVE_TOKEN="${TARTEEL_LIVE_TOKEN:-}"
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --bump) BUMP=1 ;;
@@ -39,6 +52,8 @@ while [[ $# -gt 0 ]]; do
     --notes-en) NOTES_EN="$2"; shift ;;
     --notes-ur) NOTES_UR="$2"; shift ;;
     --notes-hi) NOTES_HI="$2"; shift ;;
+    --tarteel-token) TARTEEL_LIVE_TOKEN="$2"; shift ;;
+    --use-tarteel-live) USE_TARTEEL_LIVE="$2"; shift ;;
     *) echo "Unknown arg: $1" >&2; exit 1 ;;
   esac
   shift
@@ -65,8 +80,12 @@ PY
 [[ "$BUMP" -eq 1 ]] && bump_pubspec
 
 # ── Build the release APK ──────────────────────────────────────────────────
-echo "==> Building release APK..."
-( cd "$MOBILE" && flutter pub get && flutter build apk --release )
+echo "==> Building release APK (USE_TARTEEL_LIVE=$USE_TARTEEL_LIVE)..."
+DART_DEFINES="--dart-define=USE_TARTEEL_LIVE=$USE_TARTEEL_LIVE"
+if [[ -n "$TARTEEL_LIVE_TOKEN" ]]; then
+  DART_DEFINES="$DART_DEFINES --dart-define=TARTEEL_LIVE_TOKEN=$TARTEEL_LIVE_TOKEN"
+fi
+( cd "$MOBILE" && flutter pub get && flutter build apk --release $DART_DEFINES )
 
 if [[ ! -f "$APK_OUT" ]]; then
   echo "Build failed: $APK_OUT not found" >&2
@@ -93,6 +112,8 @@ data["version_code"] = code
 data["apk_url"] = "https://20.197.40.13/v1/app/download"
 
 if "$NOTES_EN": data["notes_en"] = "$NOTES_EN"
+elif "$USE_TARTEEL_LIVE" == "true":
+    data["notes_en"] = "Live Recitation routes through Tarteel's real-time voice API (wss://voice-v2.tarteel.io) with the captured protocol (base64 JSON audio frames)."
 if "$NOTES_UR": data["notes_ur"] = "$NOTES_UR"
 if "$NOTES_HI": data["notes_hi"] = "$NOTES_HI"
 

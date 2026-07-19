@@ -7,6 +7,7 @@ import 'dart:typed_data';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/constants/app_constants.dart';
@@ -257,6 +258,7 @@ class StreamingRecitationService {
         ? []
         : ayahRefs.map((r) => [r.$1, r.$2]).toList();
     if (useTarteel) {
+      await _appVersion();
       _sendTarteelHandshake(surahNumber, ayahNumber, words);
     } else {
       _socket!.add(jsonEncode({
@@ -354,6 +356,18 @@ class StreamingRecitationService {
   ///   STATES_UPDATE events).
   /// The reference word list is NOT sent to Tarteel (it tracks against its own
   /// internal mushaf); we keep our local [_words] for the results grid.
+  static String? _cachedAppVersion;
+  static Future<String> _appVersion() async {
+    if (_cachedAppVersion != null) return _cachedAppVersion!;
+    try {
+      final info = await PackageInfo.fromPlatform();
+      _cachedAppVersion = '${info.version}+${info.buildNumber}';
+    } catch (_) {
+      _cachedAppVersion = '1.0.45';
+    }
+    return _cachedAppVersion!;
+  }
+
   void _sendTarteelHandshake(
     int surahNumber,
     int ayahNumber,
@@ -367,7 +381,7 @@ class StreamingRecitationService {
       'type': 1,
       'event': 'START_STREAM',
       'data': {
-        'appVersion': '1.0.44',
+        'appVersion': _cachedAppVersion ?? '1.0.45',
         'audioConfig': {
           'fileFormat': 'WAV',
           'channels': 1,
@@ -549,13 +563,17 @@ class StreamingRecitationService {
       final frame = Uint8List.fromList(_audioBuffer.takeBytes());
       _totalSentBytes += frame.length;
       if (AppConstants.useTarteelLiveApi) {
-        // Tarteel expects RAW binary WAV frames on the WebSocket (NOT a JSON
-        // envelope). Its ERROR responses confirm it rejects any `event`-wrapped
-        // audio frame. So we send the 16kHz PCM16 WAV container directly.
+        // Tarteel expects audio frames as a JSON envelope, NOT raw binary.
+        // Its server rejects raw bytes with:
+        //   "The message sent is not valid, please format it using
+        //    {event: [eventName], data: [data]}"
+        // The wire shape (captured) is {"type":3,"data":"<base64 WAV>"}.
         final wav = _wrapWav(frame, AppConstants.liveRecitationSampleRate);
-        sock.add(wav);
-        debugPrint('[Tarteel] FLUSH #$_chunkCount -> sent ${wav.length} raw wav '
-            'bytes (totalSent=$_totalSentBytes)');
+        final b64 = base64Encode(wav);
+        sock.add(jsonEncode({'type': 3, 'data': b64}));
+        _totalSentBytes += wav.length;
+        debugPrint('[Tarteel] FLUSH #$_chunkCount -> sent audio frame '
+            '(wav=${wav.length} b64=${b64.length}, totalSent=$_totalSentBytes)');
       } else {
         sock.add(frame);
         debugPrint('[Streaming] FLUSH #$_chunkCount -> sent ${frame.length} bytes '
