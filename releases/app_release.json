@@ -1,11 +1,11 @@
 {
   "version": "1.0.46",
-  "version_code": 58,
+  "version_code": 59,
   "min_version": "1.0.0",
   "min_version_code": 1,
   "apk_url": "https://20.197.40.13/v1/app/download",
   "force_update": false,
-  "notes_en": "Live Recitation routes through Tarteel's real-time voice API (wss://voice-v2.tarteel.io) with the captured protocol (base64 JSON audio frames).",
+  "notes_en": "Live Recitation routes through Tarteel's real-time voice API (wss://voice-v2.tarteel.io).",
   "notes_ur": "لائیو تلاوت اب Tarteel کی وائس API استعمال کرتی ہے۔",
   "notes_hi": "लाइव रिकिटेशन अब Tarteel की वॉयस API का उपयोग करता है।",
   "data_version": 1
