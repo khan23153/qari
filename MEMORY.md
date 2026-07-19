@@ -2027,13 +2027,17 @@ words correctly. Summary of the protocol (verified from device captures):
 untouched and still the production target once model quality is good enough):
 - `app_constants.dart`: `useTarteelLiveApi` (USE_TARTEEL_LIVE), `tarteelLiveWsUrl`,
   `tarteelLiveToken` (TARTEEL_LIVE_TOKEN), `tarteelDebugEchoUrl`,
-  `tarteelAudioEvent` (TARTEEL_AUDIO_EVENT, default "AUDIO_CHUNK" — now unused
-  since audio is raw binary).
+  `tarteelAudioEvent` (TARTEEL_AUDIO_EVENT, default "AUDIO_CHUNK" — the event
+  name Tarteel expects; if rejected, try AUDIO / AUDIO_FRAME via the dart-define
+  WITHOUT a code change).
 - `streaming_recitation_service.dart`:
   - `_sendTarteelHandshake` → `{"type":1,"event":"START_STREAM","data":{...}}`
     with authToken, audioConfig (WAV/16000), recitationMode FOLLOW_ALONG.
   - `_flushAudio` → wraps the 16k PCM16 in a WAV container (`_wrapWav`) and sends
-    the RAW BYTES on the socket (`sock.add(wav)`), no JSON.
+    a JSON envelope `{"event": tarteelAudioEvent, "data": "<base64 WAV>"}` on the
+    socket. **NOT raw bytes** — Tarteel rejects raw/binary and `{"type":3,...}`
+    with: "The message sent is not valid, please format it using
+    {event: [eventName], data: [data]}". This was the bug fixed in v1.0.46+60.
   - 15s WS connect timeout so a stalled connect surfaces as an error, not a hang.
   - `_echoTarteelFrame` now uses a cert-bypassing `HttpClient` (the plain `http`
     client rejected our VPS self-signed TLS, so frames never reached the server
@@ -2081,5 +2085,49 @@ errors are all resolved.
   Our /ws/recitation/stream backend is deployed + working (silence gate, sliding
   window, real Faster-Whisper tiny model) — it's the long-term home once its
   accuracy matches Tarteel.
+
+## Session 2026-07-19 — Tarteel audio-frame envelope fix + VPS rebuild/push
+The running OTA APK had reverted to the VPS backend (`wss://20.197.40.13`) instead
+of Tarteel. Root causes + fixes this session:
+
+- **Build env is the VPS itself** (this machine IS 20.197.40.13). Flutter is at
+  `/home/Innocent/flutter`, Android SDK at `/home/Innocent/Android`. Backend stack
+  is docker-compose (infra-nginx-1, infra-core-api-1, infra-recitation-api-1,
+  infra-inference-worker-1, postgres, redis) — all healthy. `releases/` is mounted
+  into core-api at `/app/releases`, so dropping a new APK there is INSTANTLY live
+  (no container restart). OTA serves `https://20.197.40.13/v1/app/download`.
+- **Rebuilt with Tarteel on**: `flutter build apk --release
+  --dart-define=USE_TARTEEL_LIVE=true
+  --dart-define=TARTEEL_LIVE_TOKEN=5d2dc38fcbd3f2be1e4841211850a94733812f2d`
+  (`scripts/release_app.sh --use-tarteel-live true --tarteel-token <hex> --bump`
+  does build + version bump + APK copy + app_release.json in one step).
+- **BUG FIX (the real issue)**: Tarteel returned
+  `ERROR {"event":"ERROR","data":{"data":{"message":"The message sent is not
+  valid, please format it using {event: [eventName], data: [data]} and try
+  again"}}}`. The audio frame was sent as `{"type":3,"data":"<base64>"}`. Fixed in
+  `streaming_recitation_service.dart` `_flushAudio` → now sends
+  `{"event": AppConstants.tarteelAudioEvent, "data": "<base64 WAV>"}`
+  (default event name "AUDIO_CHUNK"). Verified: compiled APK contains
+  `voice-v2.tarteel.io` and ZERO `20.197.40.13/ws/recitation` references.
+- **TLS caveat**: nginx uses a SELF-SIGNED cert (`/etc/nginx/certs/server.crt`),
+  so curl/browsers reject HTTPS (`unknown CA`). The app trusts `20.197.40.13` via
+  `network_security_config`, so the app itself is unaffected. Plan a real cert
+  (Let's Encrypt for api.qari.app) later.
+- **Git push**: no creds on VPS. Pushed via PAT passed inline:
+  `git -c credential.helper="" push
+  https://x-access-token:<PAT>@github.com/khan23153/qari.git main`.
+  (Large-file warning on the 72MB APK — harmless; Git LFS still planned.)
+- **The string `5d2dc38fcbd3f2be1e4841211850a94733812f2d` is the TARTEEL DRF
+  token, NOT a git commit** — it is not in repo history. Do not `git cat-file` it.
+
+### DEPLOY STATE (2026-07-19 end of day)
+- App OTA: **v1.0.46+60** (bumped from +59 via --bump), built with
+  `USE_TARTEEL_LIVE=true` + token. Live at `https://20.197.40.13/v1/app/download`,
+  verified serving (HTTP 200, bytes match built APK).
+- Commits pushed: `ebf8805` (Tarteel build on) + `77357d1` (audio envelope fix)
+  → `main` (`15a7ef7..77357d1`).
+- Backend unchanged (Tarteel is client-side proxy).
+- NEXT suspect if Tarteel STILL rejects audio: the event name. Try
+  `--dart-define=TARTEEL_AUDIO_EVENT=AUDIO` (or `AUDIO_FRAME`) — no code change.
 
 
