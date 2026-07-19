@@ -563,14 +563,17 @@ class StreamingRecitationService {
       final frame = Uint8List.fromList(_audioBuffer.takeBytes());
       _totalSentBytes += frame.length;
       if (AppConstants.useTarteelLiveApi) {
-        // Tarteel expects audio frames as a JSON envelope, NOT raw binary.
-        // Its server rejects raw bytes with:
+        // Tarteel expects every frame in the {event: [name], data: [data]}
+        // envelope. Sending raw bytes (or {"type":3,...}) is rejected with:
         //   "The message sent is not valid, please format it using
         //    {event: [eventName], data: [data]}"
-        // The wire shape (captured) is {"type":3,"data":"<base64 WAV>"}.
+        // So the audio frame is {event: <AUDIO_EVENT>, data: "<base64 WAV>"}.
         final wav = _wrapWav(frame, AppConstants.liveRecitationSampleRate);
         final b64 = base64Encode(wav);
-        sock.add(jsonEncode({'type': 3, 'data': b64}));
+        sock.add(jsonEncode({
+          'event': AppConstants.tarteelAudioEvent,
+          'data': b64,
+        }));
         _totalSentBytes += wav.length;
         debugPrint('[Tarteel] FLUSH #$_chunkCount -> sent audio frame '
             '(wav=${wav.length} b64=${b64.length}, totalSent=$_totalSentBytes)');
