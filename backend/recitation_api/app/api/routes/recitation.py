@@ -6,7 +6,7 @@ import uuid
 import wave
 from typing import Optional
 
-from fastapi import APIRouter, Form, File, UploadFile, HTTPException, status
+from fastapi import APIRouter, Form, File, UploadFile, HTTPException, status, Request
 from pydantic import ValidationError
 
 from app.core.config import settings
@@ -29,6 +29,31 @@ def _get_redis() -> redis.Redis:
     if _redis is None:
         _redis = redis.from_url(settings.redis_url, decode_responses=True)
     return _redis
+
+
+@router.post("/tarteel_debug_echo")
+async def tarteel_debug_echo(request: Request) -> dict:
+    """DEV-ONLY: logs a raw frame received from Tarteel's live voice API so we
+    can reverse-engineer its (encrypted) protocol without pulling logs off the
+    phone. The Flutter app POSTs every incoming Tarteel WS frame here. Harmless
+    no-op; returns 200. Remove once the word-event schema is mapped.
+    """
+    try:
+        body = await request.body()
+        ctype = request.headers.get("content-type", "")
+        if "application/json" in ctype:
+            try:
+                parsed = json.loads(body)
+                logger.info("tarteel_echo.json", size=len(body), payload=parsed)
+            except Exception:
+                logger.info("tarteel_echo.text", size=len(body), body=body.decode("utf-8", "replace"))
+        else:
+            # Binary frame — log a hex preview so we can see the structure.
+            preview = body[:128].hex()
+            logger.info("tarteel_echo.binary", size=len(body), hex_preview=preview)
+    except Exception as e:  # never fail the caller
+        logger.warning("tarteel_echo.error", error=str(e))
+    return {"ok": True}
 
 
 def _validate_wav_header(content: bytes) -> tuple[int, int, int]:

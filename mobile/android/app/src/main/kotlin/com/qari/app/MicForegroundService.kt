@@ -15,6 +15,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.Process
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -132,8 +133,14 @@ class MicForegroundService : Service() {
     private fun status(msg: String) {
         MicStreamBridge.lastStatus = msg
         // Route to the main thread — Flutter sinks must not be called from a
-        // background thread (uncatchable JNI crash).
-        mainHandler.post { MicStreamBridge.statusSink?.success(msg) }
+        // background thread (uncatchable JNI crash). Also guard against a
+        // cancelled sink throwing (which would otherwise hard-crash the app).
+        mainHandler.post {
+            try {
+                MicStreamBridge.statusSink?.success(msg)
+            } catch (_: Exception) {
+            }
+        }
     }
 
     private fun startCapture() {
@@ -197,6 +204,13 @@ class MicForegroundService : Service() {
                 mainHandler.post { flushNow(outBuf, maxBufferedBytes, bufferedBytes) }
             }
             readThread = Thread {
+                // Android expects the AudioRecord read loop to run at audio
+                // thread priority; without it some OEMs starve the read (or the
+                // OS watchdog reaps the process under heavy capture load).
+                try {
+                    Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
+                } catch (_: Exception) {
+                }
                 try {
                     while (running) {
                         val n = ar.read(shortBuf, 0, shortBuf.size)
@@ -271,7 +285,15 @@ class MicForegroundService : Service() {
             off += b.size
         }
         bufferedBytes.addAndGet(-total)
-        sink.success(merged)
+        // Flutter's EventSink throws IllegalStateException if `success` is called
+        // after the listener cancels/closure. That throw is uncatchable JNI-side
+        // and hard-crashes the whole app. Always guard the call.
+        try {
+            sink.success(merged)
+        } catch (_: Exception) {
+            // Listener gone (user cancelled / page disposed). Leave capture
+            // running; the next flush will simply find a null sink and buffer.
+        }
     }
 
 

@@ -66,6 +66,19 @@ TRANSCRIBE_WINDOW_SEC = 6.0
 # hypothesis (drops words the previous window already contributed).
 STITCH_MAX_OVERLAP_WORDS = 12
 
+# --- Silence gating (fixes "ayah auto-completes while the user is silent") -----
+# When the user is quiet, the mic still streams low-level room noise and Whisper
+# frequently HALLUCINATES Arabic-looking tokens on near-silent audio. Those
+# phantom words flowed into the matcher and "completed" the ayah automatically
+# even though the user said nothing. We measure the RMS energy of each
+# transcribed window and, when it is below this floor, treat the segment as
+# silence: skip transcription entirely and emit NO word events (so nothing
+# resolves until the user actually recites). 16-bit PCM normalized to [-1, 1];
+# a calm room is typically ~0.002–0.01, speech is >0.02. Set conservatively low
+# so only near-total silence (the user not reciting at all) is gated — quiet
+# recitation must still pass through to ASR.
+SILENCE_RMS_THRESHOLD = 0.006
+
 # A transcriber turns a float32 mono 16 kHz signal into (normalized_words,
 # per_word_confidences).
 Transcriber = Callable[["object", int], "tuple[list[str], list[float]]"]
@@ -545,6 +558,16 @@ class StreamingRecitationSession:
     def duration_seconds(self) -> float:
         return self._total_samples / self.sample_rate if self.sample_rate else 0.0
 
+    def _rms_energy(self, samples: list[float]) -> float:
+        """Root-mean-square energy of a float32 signal in [0, 1].
+
+        Used to detect silence: near-silent mic audio (room tone / the user not
+        reciting) has a very low RMS, while actual recitation is markedly higher.
+        """
+        if not samples:
+            return 0.0
+        return (sum(s * s for s in samples) / len(samples)) ** 0.5
+
     def _decode_float(self, start_sample: int = 0, end_sample: Optional[int] = None):
         # Numpy-free decode: convert the raw PCM16 bytes into a list of float32
         # samples in [-1, 1]. Kept dependency-light so the live stream runs in
@@ -618,6 +641,14 @@ class StreamingRecitationSession:
                 window_samples = int(TRANSCRIBE_WINDOW_SEC * self.sample_rate)
                 start = max(0, total - window_samples)
                 audio = self._decode_float(start_sample=start)
+                # Silence gate: if this window is essentially quiet (the user is
+                # not reciting), Whisper would still hallucinate phantom Arabic
+                # words that "complete" the ayah on their own. Skip transcription
+                # and emit NO events so nothing resolves until there is real
+                # speech. Do NOT advance `_samples_at_last_transcribe` so the next
+                # pass that does contain speech still re-scans this quiet span.
+                if self._rms_energy(audio) < SILENCE_RMS_THRESHOLD:
+                    return []
                 try:
                     win_words, win_confs = await asyncio.to_thread(
                         self._transcriber, audio, self.sample_rate

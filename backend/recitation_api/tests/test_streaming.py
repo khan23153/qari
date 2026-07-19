@@ -200,6 +200,18 @@ def test_real_transcriber_uses_bounded_window(monkeypatch):
         return ["الله", "الرحمن"], [0.9, 0.9]
 
     import asyncio
+    import math
+
+    # Non-silent audio: a sine wave with real RMS energy, so the silence gate
+    # (which drops pure `b"\x00\x00"` room tone) does not suppress the pass.
+    def _tone(seconds, sr=16000, freq=220.0):
+        import struct
+
+        out = bytearray()
+        for n in range(int(seconds * sr)):
+            s = int(12000 * math.sin(2 * math.pi * freq * n / sr))
+            out += struct.pack("<h", s)
+        return bytes(out)
 
     async def run():
         sess = ss.StreamingRecitationSession(
@@ -208,12 +220,44 @@ def test_real_transcriber_uses_bounded_window(monkeypatch):
         sess.load_reference()
         assert sess._is_stub is False
         # Feed >1.2s of audio so a pass triggers, then transcribe twice.
-        sess.add_audio(b"\x00\x00" * (16000 * 3))
+        sess.add_audio(_tone(3))
         await sess.maybe_transcribe(force=True)
-        sess.add_audio(b"\x00\x00" * (16000 * 3))
+        sess.add_audio(_tone(3))
         await sess.maybe_transcribe(force=True)
         # Cumulative hypothesis stitched, overlap "الله" deduped.
         assert sess._hypothesis == ["بسم", "الله", "الرحمن"]
+
+    asyncio.run(run())
+
+
+def test_silence_does_not_auto_complete_ayah(monkeypatch):
+    """When the user says nothing, near-silent mic audio must NOT resolve any
+    reference word — the ayah must NOT auto-complete on phantom ASR tokens."""
+    monkeypatch.setattr(
+        ss,
+        "resolve_reference_words_sequence",
+        lambda ayah_refs: (REFERENCE, REFERENCE, "https://example/ref.mp3", REFERENCE_ENTRIES, []),
+    )
+    monkeypatch.setattr(ss.settings, "ml_use_stub", False, raising=False)
+
+    # A "real" transcriber that returns hallucinated words regardless of input
+    # (simulating Whisper emitting tokens on silence).
+    def fake_transcriber(audio, sr):
+        return ["بسم", "الله", "الرحمن", "الرحيم"], [0.9, 0.9, 0.9, 0.9]
+
+    import asyncio
+
+    async def run():
+        sess = ss.StreamingRecitationSession(
+            surah=1, ayah_from=1, ayah_to=1, transcriber=fake_transcriber
+        )
+        sess.load_reference()
+        # Pure silence: zeroed PCM. The silence gate must drop it.
+        sess.add_audio(b"\x00\x00" * (16000 * 3))
+        events = await sess.maybe_transcribe(force=True)
+        assert events == [], "silence must not resolve any word"
+        # No reference word should be marked resolved.
+        assert sess._last_status == {}
 
     asyncio.run(run())
 

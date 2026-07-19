@@ -1,16 +1,42 @@
 package com.qari.app
 
 import android.os.Bundle
+import android.os.FileUtils
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
+import java.io.PrintWriter
+import java.io.StringWriter
 
 class MainActivity : FlutterActivity() {
     companion object {
         const val MIC_CHANNEL = "com.qari.app/mic_foreground"
         const val MIC_STREAM = "com.qari.app/mic_stream"
         const val MIC_STATUS = "com.qari.app/mic_status"
+        const val CRASH_CHANNEL = "com.qari.app/crash"
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // Capture any otherwise-uncatchable native crash (e.g. from the mic
+        // foreground service / AudioRecord JNI path) so we can read the stack
+        // from the device instead of a silent process death. The stack is
+        // written to a file the Flutter side picks up and reports.
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                val sw = StringWriter()
+                throwable.printStackTrace(PrintWriter(sw))
+                val crashFile = File(cacheDir, "crash.txt")
+                crashFile.writeText(
+                    "thread=${thread.name}\ntime=${System.currentTimeMillis()}\n${sw.toString()}",
+                )
+            } catch (_: Exception) {
+            }
+            defaultHandler?.uncaughtException(thread, throwable)
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -78,6 +104,22 @@ class MainActivity : FlutterActivity() {
                 }
             },
         )
+
+        MethodChannel(messenger, CRASH_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "readCrash" -> {
+                    try {
+                        val f = File(cacheDir, "crash.txt")
+                        val text = if (f.exists()) f.readText() else ""
+                        f.delete()
+                        result.success(text)
+                    } catch (e: Exception) {
+                        result.success("")
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
     }
 
     override fun onDestroy() {

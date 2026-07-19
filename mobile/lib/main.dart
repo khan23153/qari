@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:http/http.dart' as http;
 
 import 'core/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
@@ -68,6 +70,11 @@ Future<void> main() async {
         child: QariApp(),
       ),
     );
+
+    // On startup, if a previous native crash was captured by the
+    // UncaughtExceptionHandler in MainActivity, read it and echo it to the VPS
+    // debug endpoint so it can be inspected without pulling device logs.
+    _reportNativeCrashIfAny();
   }, (error, stack) {
     debugPrint('Uncaught error: $error\n$stack');
     runApp(
@@ -94,6 +101,29 @@ Future<void> main() async {
   });
 }
 
+/// Reads a native crash captured by MainActivity's UncaughtExceptionHandler
+/// (written to the app cache dir) and echoes it to the VPS debug endpoint so
+/// it can be inspected from the server logs without pulling device logs.
+Future<void> _reportNativeCrashIfAny() async {
+  try {
+    const channel = MethodChannel('com.qari.app/crash');
+    final text = await channel.invokeMethod<String>('readCrash');
+    if (text != null && text.isNotEmpty) {
+      debugPrint('[NativeCrash] captured:\n$text');
+      try {
+        await http.post(
+          Uri.parse(AppConstants.tarteelDebugEchoUrl),
+          headers: {'content-type': 'application/json'},
+          body: jsonEncode({'native_crash': text}),
+        );
+      } catch (_) {
+        // best-effort only
+      }
+    }
+  } catch (_) {
+    // ignore — crash reporting must never break startup
+  }
+}
 class QariApp extends ConsumerStatefulWidget {
   const QariApp({super.key});
 

@@ -1866,3 +1866,220 @@ needed — the already-deployed v1.0.41+52 app works with the fixed backend.
   plugin — if the reader "Recite" flow is silent on this device, port it to the
   native capture (the live flow already uses MicForegroundService). `record` can
   then be removed from pubspec.
+
+## Session 2026-07-18 — Live tracking auto-completed the ayah on SILENCE (FIXED)
+User reported: in live tracking, if they said NO word, the word would
+automatically appear and finish the ayah. ROOT CAUSE: the live ASR
+(Faster-Whisper) **hallucinates Arabic tokens even on near-silent audio**
+(room tone / user not reciting). Those phantom words flowed into
+`stitch_hypothesis` → `StreamingMatcher.evaluate`, which resolved reference
+words as matched/error/skipped → the ayah "completed" automatically with no
+speech. There was no silence detection gating the transcription.
+
+FIX (`backend/recitation_api/app/services/streaming_session.py`):
+- NEW `SILENCE_RMS_THRESHOLD = 0.012` + `_rms_energy()` helper (RMS of the
+  float32 window in [0,1]).
+- `maybe_transcribe()` (real-ASR branch): before transcribing, measure the
+  window's RMS. If below threshold (silence), return `[]` and **do NOT advance**
+  `_samples_at_last_transcribe` — so the quiet span is re-scanned once the user
+  actually speaks, and NO word events fire while quiet. The ayah can now only
+  progress on real speech. Stub transcriber is unaffected (it keys off duration,
+  not speech energy — but the live path uses real ASR, so this is the relevant
+  branch).
+- `ml/inference/faster_whisper_transcriber.py`: `transcribe()` now sets
+  `vad_filter=True` (threshold 0.5, min speech 250ms) so the model itself drops
+  non-speech segments — defense in depth behind the RMS gate.
+
+VERIFY: `pytest backend/recitation_api/tests/test_streaming.py
+ml/tests/test_streaming_matcher.py` = **21 passed** (added
+`test_silence_does_not_auto_complete_ayah` proving pure-silence input yields 0
+word events + no resolved words; also fixed `test_real_transcriber_uses_bounded_window`
+to use a non-silent sine wave so the gate doesn't suppress it). DEPLOYED:
+`docker compose -f infra/docker-compose.yml restart recitation-api` → healthy,
+grep confirms `SILENCE_RMS_THRESHOLD`/`_rms_energy` (3 hits) + `vad_filter=True`
+live in the container. Backend-only; NO APK rebuild needed (app v1.0.41+52 works
+with the fixed backend). NOTE: `_rms_energy` reads list of floats; the stub path
+still uses full-buffer decode and is NOT gated (stub is demo-only; the
+production live path is real ASR).
+- UNCOMMITTED working tree: this MEMORY.md + the two backend fixes above.
+
+## Session 2026-07-19 — Live tracking temporarily routed to Tarteel API
+User decided to point the Live Recitation stream at Tarteel's public real-time
+voice API (`wss://voice-v2.tarteel.io`, uWebSockets v20 / Cloudflare — captured
+earlier, Session 2026-07-17) as a TEMPORARY stand-in while our own model is
+improved. Will revert to our `/ws/recitation/stream` backend later.
+
+CHANGES (mobile-only, no backend change):
+- `app_constants.dart`: added `useTarteelLiveApi` (dart-define
+  `USE_TARTEEL_LIVE`, default false), `tarteelLiveWsUrl =
+  'wss://voice-v2.tarteel.io'`, and `tarteelLiveToken` (dart-define
+  `TARTEEL_LIVE_TOKEN`, default empty). Tarteel is behind Cloudflare (valid CA),
+  so the self-signed bypass is unnecessary there.
+- `streaming_recitation_service.dart`: `start()` now picks the WS URL based on
+  `useTarteelLiveApi`; sends a Tarteel-style first-frame auth (`{type:auth,
+  authorization:"TOKEN <hex>", token}` when a token is set) + a `start` frame
+  with `{type,surah,ayah,words,sample_rate}`. `_onSocketData` selects the parser
+  by the flag.
+- `recitation_stream_event.dart`: added `RecitationStreamEvent.fromTarteelJson`
+  — a TOLERANT best-effort parser (Tarteel frames are encrypted / schema
+  undocumented) covering plausible field names (`word`/`tracking`/`result`,
+  `word_index`/`word_id`/`index`, `expected`/`word`/`target`, etc.). Logs unknown
+  event types so the parser can be refined once the user supplies a real token +
+  sample payload.
+
+BUILD/DEPLOY: APK rebuilt with `--dart-define=USE_TARTEEL_LIVE=true` →
+v1.0.43+54, copied to `releases/app-release.apk` (76.1MB). `pubspec.yaml` +
+`releases/app_release.json` bumped to 1.0.43/54. VPS `/v1/app/version` returned
+empty at session time (VPS likely down — verify before OTA users get it).
+NOT committed/pushed (no git action requested).
+
+NEXT: user will send a Tarteel DRF token (to set `TARTEEL_LIVE_TOKEN`) + ideally
+a captured sample payload so `fromTarteelJson` can be tightened to the real
+schema. Until then, the handshake fields are educated guesses. To revert: build
+WITHOUT the dart-define (or `USE_TARTEEL_LIVE=false`).
+
+## Session 2026-07-19 (later) — Tarteel protocol reverse-engineered from Reqable
+User shared a Reqable capture of Tarteel's live WS. REAL protocol:
+- TX (app→Tarteel): `{"type":3,"data":"<base64 PCM16>"}` per audio chunk
+  (NOT raw binary). Plus `{"type":1,"event":"START_STREAM",...}` to start.
+- RX (Tarteel→app): `{"type":2,"text":"{...}"}` text frames; inner JSON has
+  `event`: `PARTIAL_TRANSCRIPT` (data.queryText = live ASR string) and
+  `STATES_UPDATE` (data.stateIndexOffset + data.newStates[] + data.mistakeUpdates
+  + data.audioProcessedMs). Observed newStates codes: 0=scheduled, 1=correct,
+  2=mistake. Tarteel's word INDEX space diverges from our local `_words`, so the
+  index alone can't map to our Arabic words.
+
+FIXES (this session, mobile + 1 backend echo endpoint):
+- `streaming_recitation_service.dart`: audio flush now sends
+  `{"type":3,"data":base64(pcm)}` on Tarteel (was raw binary → Tarteel returned
+  empty transcripts). Handshake sends `{"type":1,"event":"START_STREAM",...}`.
+  `_onSocketData` parses Tarteel text frames via `fromTarteelJson` (list) and
+  echoes every raw frame to our VPS debug endpoint. `stop()` on Tarteel resolves
+  ~immediately (no `final` event from Tarteel) so "Stop & Review" no longer hangs.
+- `recitation_stream_event.dart`: rewrote `fromTarteelJson` → returns
+  `List<RecitationStreamEvent>`. `STATES_UPDATE` → word events with idx+status;
+  `PARTIAL_TRANSCRIPT` → a word event carrying `spoken` = the transcript (the
+  page fuzzy-matches it to local words). Added `_tarteelStateCode`.
+- `live_recitation_page.dart`: for Tarteel, `_onEvent` now reveals the LOCAL
+  target word by matching the transcript's last token (`_matchTarteelWord` /
+  `_normalizeArabic`) instead of trusting Tarteel's index — fixes "words not
+  appearing". Added `_revealWord` helper. This addresses the "same word not
+  appearing" bug.
+- BACKEND: added `POST /v1/recitations/tarteel_debug_echo` to recitation-api
+  (logs raw frame / native crash to server logs). Deployed (restart
+  recitation-api). Reachable via HTTPS (self-signed, app trusts it).
+- `main.dart` + `MainActivity.kt`: added a native `UncaughtExceptionHandler`
+  that writes the stack to `cacheDir/crash.txt`; on next launch the app reads it
+  via `com.qari.app/crash` MethodChannel and echoes it to the VPS debug endpoint
+  → so the "app crashes after ~8s" native crash can be read from `docker logs`
+  without pulling device logs.
+- VPS HTTPS (443) confirmed WORKING (self-signed; `curl -k` returns the version
+  JSON = 1.0.43/54 and the echo endpoint). Earlier `curl` without `-k` gave a
+  false "down" reading. OTA serves v1.0.43+54.
+
+BUILD/DEPLOY: rebuilt with `--dart-define=USE_TARTEEL_LIVE=true` → still
+v1.0.43+54 (version not bumped; it's a debug/temp build) → `releases/app-release.apk`.
+NOT committed/pushed.
+
+NEXT for the user: update via OTA, do ONE short recitation (e.g. Surah 1:1). Then:
+1. Do words now appear live? (transcript-match reveal should work if Tarteel
+   transcribes our base64 audio). 2. If it still crashes at ~8s, the crash stack
+   will now be in `docker logs infra-recitation-api-1 | grep native_crash` — I
+   read it from the VPS. 3. If words still don't appear, `docker logs ... |
+   grep tarteel_echo` shows the real STATES_UPDATE/PARTIAL_TRANSCRIPT payloads
+   and I tune the parser. No Tarteel DRF token has been supplied yet; the build
+   works anonymously (Tarteel may rate-limit/anonymously track).
+
+## Session 2026-07-19 (later) — Tarteel live protocol FULLY REVERSE-ENGINEERED + working
+
+After the user supplied a Tarteel DRF token + captured the real request/response
+frames, the entire Tarteel live-voice protocol was mapped and the app now tracks
+words correctly. Summary of the protocol (verified from device captures):
+
+### Tarteel WS protocol (wss://voice-v2.tarteel.io, behind Cloudflare)
+- **Handshake (init config)** — MUST be sent as `{"type":1,"event":"START_STREAM",
+  "data":{ audioConfig:{fileFormat:"WAV",channels:1,sampleRate:16000,
+  languageCode:"ar-BH",enableInterimResults:true,enableWordTimeOffsets:true,
+  maxAlternatives:1}, authToken:"<DRF token>", deviceId, devicePlatform:"android",
+  isMemorization:false, isDiacritized:true, isNewSttServer:true,
+  recitationMode:"FOLLOW_ALONG", shouldCollectAudio:true, shouldLabelAudio:true,
+  ... }}`. NOTE: integer `type:1` (NOT string "START_STREAM"); token goes in
+  `data.authToken`. Sending `type:"START_STREAM"` makes Tarteel reply
+  "server has not been configured" — it never registered the session.
+- **Audio frames** — RAW BINARY WAV (44-byte header + 16kHz PCM16), sent directly
+  on the WebSocket (NOT JSON, NOT base64-in-JSON). One WAV per ~250ms flush
+  window. Any JSON `{"event":"AUDIO"...}` envelope is rejected with "event AUDIO
+  received is not supported". (Tarteel's own frames look like `{type:3,buffer}`
+  on the wire — raw binary.) The native capture is 44.1kHz UNPROCESSED (the only
+  rate the Android-16 HAL serves) and software-resampled to 16kHz in
+  MicForegroundService.LinearResampler before the WAV wrap.
+- **Server → app responses** (TEXT frames, `{"event":...,"data":{...}}`):
+  - `PARTIAL_TRANSCRIPT` → `data.queryText` (live ASR string; empty during silence).
+  - `STATES_UPDATE` → `data.isLost` (bool), `data.stateIndexOffset` (int),
+    `data.newStates` (list of `{"type":"SUCCESS"|"FAILURE",startTime,endTime,
+    word:"",position:null}`), `data.mistakeUpdates` (map), `data.audioProcessedMs`.
+  - `SESSION_END` / `COMPLETE` / `RESULT` → treated as final by naive clients.
+- Auth: DRF token in `data.authToken` of START_STREAM. Without it Tarteel sends
+  nothing back (silent). Token supplied by user: `5d2dc38f...` (baked via
+  `--dart-define=TARTEEL_LIVE_TOKEN=`).
+
+### App changes (all mobile, Tarteel-only; our /ws/recitation/stream backend is
+untouched and still the production target once model quality is good enough):
+- `app_constants.dart`: `useTarteelLiveApi` (USE_TARTEEL_LIVE), `tarteelLiveWsUrl`,
+  `tarteelLiveToken` (TARTEEL_LIVE_TOKEN), `tarteelDebugEchoUrl`,
+  `tarteelAudioEvent` (TARTEEL_AUDIO_EVENT, default "AUDIO_CHUNK" — now unused
+  since audio is raw binary).
+- `streaming_recitation_service.dart`:
+  - `_sendTarteelHandshake` → `{"type":1,"event":"START_STREAM","data":{...}}`
+    with authToken, audioConfig (WAV/16000), recitationMode FOLLOW_ALONG.
+  - `_flushAudio` → wraps the 16k PCM16 in a WAV container (`_wrapWav`) and sends
+    the RAW BYTES on the socket (`sock.add(wav)`), no JSON.
+  - 15s WS connect timeout so a stalled connect surfaces as an error, not a hang.
+  - `_echoTarteelFrame` now uses a cert-bypassing `HttpClient` (the plain `http`
+    client rejected our VPS self-signed TLS, so frames never reached the server
+    logs). Added `_tarteelLastRx` / `_tarteelLastError` surfaced in the diag line
+    so Tarteel's exact error payload shows on-screen without the VPS round-trip.
+  - `sentSampleRate` (16000) constant shown in diag as `sentRate` to disprove the
+    "44.1k vs 16k" confusion.
+- `recitation_stream_event.dart` `fromTarteelJson`:
+  - STATES_UPDATE parses each `newStates[i]` as an object, reads `item['type']`
+    (string "SUCCESS"/"FAILURE"), maps to matched/error. `_tarteelStateCode`
+    extended for string codes SUCCESS/COMPLETED/FAILURE. `isLost` is ignored
+    (drift frames don't clear the canvas; tracking re-syncs on real states).
+  - PARTIAL_TRANSCRIPT / STATES_UPDATE / COMPLETE / SESSION_END / RESULT handled.
+- `live_recitation_page.dart` `_onEvent` (Tarteel branch):
+  - STRICT navigation: Tarteel `finalResult`/`error` events are IGNORED for
+    navigation — the live canvas stays open; only "Stop & Review" finalizes
+    (synthesizes a result from revealed words). This stops Tarteel's early
+    COMPLETE/SESSION_END from yanking the user to results mid-recitation.
+  - WORD REVEAL IS STRICTLY SEQUENTIAL: a `_tarteelCursor` advances only on
+    STATES_UPDATE events (those with `wordIndex != null`); PARTIAL_TRANSCRIPT
+    (interim ASR) does NOT advance. Each advance reveals `_words[cursor]` in
+    order. This FIXED the "اللَّهِ لِلَّهِ" bug — previously the code matched the
+    last ASR token against the local word list, so repeated/mis-heard "Allah"
+    revealed the wrong words. Now Al-Fatiha reveals in correct order.
+  - `_matchTarteelWord` / `_normalizeArabic` are now unused (left for reference).
+
+### VERIFY (device, v1.0.44+55 Tarteel build): words now reveal LIVE in correct
+mushaf order as the user recites; mistakes (`FAILURE`) tint red; diag shows
+`sentRate: 16000` + `tarteelRx: STATES_UPDATE` / `PARTIAL_TRANSCRIPT`. The
+"server has not been configured" / "event AUDIO not supported" / JSON-format
+errors are all resolved.
+
+### DEPLOY STATE (2026-07-19 end of day)
+- App OTA: v1.0.44+55, built with `--dart-define=USE_TARTEEL_LIVE=true
+  --dart-define=TARTEEL_LIVE_TOKEN=5d2dc38f...`. Tarteel live tracking WORKS.
+- Working tree (uncommitted before this note): MEMORY.md + the mobile Tarteel
+  changes + releases/app-release.apk (v1.0.44+55) + releases/app_release.json.
+  Backend (recitation-api) unchanged this session — Tarteel is a client-side
+  proxy, no backend change needed.
+- NOTE: the per-ayah `RecordingService` (reader "Recite") still uses the `record`
+  plugin (may be 0-frame on this Android-16 device). The live flow uses native
+  MicForegroundService. `record` can be removed from pubspec once both paths are
+  native. `http` was added to pubspec (used by the Tarteel debug echo).
+- To REVERT to our own backend: build WITHOUT USE_TARTEEL_LIVE (or set false).
+  Our /ws/recitation/stream backend is deployed + working (silence gate, sliding
+  window, real Faster-Whisper tiny model) — it's the long-term home once its
+  accuracy matches Tarteel.
+
+

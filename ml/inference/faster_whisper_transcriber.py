@@ -130,6 +130,13 @@ class FasterWhisperTranscriber:
             task="transcribe",
             beam_size=1,
             word_timestamps=True,
+            # NOTE: VAD is intentionally left OFF. Whisper's VAD (even at a lenient
+            # threshold) strips *quiet* Quranic recitation as non-speech — it removed
+            # 100% of a real 17s recitation in testing. Silence handling is done
+            # instead by the RMS-energy gate in `streaming_session.maybe_transcribe`,
+            # which only suppresses transcription when the window is truly near-
+            # silent (room tone), so the ayah can't auto-complete on phantom tokens
+            # yet real recitation still tracks.
             vad_filter=False,
             temperature=0.0,
             condition_on_previous_text=False,

@@ -1,12 +1,12 @@
 {
-  "version": "1.0.42",
-  "version_code": 53,
+  "version": "1.0.44",
+  "version_code": 55,
   "min_version": "1.0.0",
   "min_version_code": 1,
   "apk_url": "https://20.197.40.13/v1/app/download",
   "force_update": false,
-  "notes_en": "Fixed: Quran surah audio played at very low volume (even at max) after using Live Recitation — playback now always routes through the loud media stream. Live recitation ASR upgraded to the more accurate whisper-base model.",
-  "notes_ur": "درست کیا گیا: قرآن کی سورت کی آواز بہت کم تھی، اب میڈیا والیوم پر مکمل آواز آتی ہے۔",
-  "notes_hi": "ठीक किया: सूरह की आवाज़ बहुत कम थी, अब पूरी मीडिया वॉल्यूम पर बजती है।",
+  "notes_en": "Live Recitation now routes through Tarteel's real-time voice API (wss://voice-v2.tarteel.io) as a temporary stand-in while our own model is improved. Supply a Tarteel DRF token via TARTEEL_LIVE_TOKEN to authenticate.",
+  "notes_ur": "لائیو تلاوت اب عارضی طور پر Tarteel کی وائس API استعمال کرتی ہے۔",
+  "notes_hi": "लाइव रिकिटेशन अस्थायी रूप से Tarteel की वॉयस API का उपयोग करता है।",
   "data_version": 1
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:haptic_feedback/haptic_feedback.dart';
@@ -102,6 +103,12 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   /// re-emit a status change for a word we already showed).
   final Set<int> _revealedIndices = {};
 
+  /// Sequential reveal cursor for Tarteel mode. Tarteel's ASR transcript text is
+  /// unreliable for picking WHICH local word to show (it repeats/mis-hears,
+  /// e.g. "Allah Allah"), so we reveal our local word list STRICTLY IN ORDER
+  /// as Tarteel confirms progress — never jumping to a transcript-matched word.
+  int _tarteelCursor = 0;
+
   /// Anchor key for the newest revealed word, so we can auto-scroll it.
   final GlobalKey _caretKey = GlobalKey();
 
@@ -178,6 +185,68 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
     _revealedStatuses = const [];
     _revealedTajweedSpans = const [];
     _revealedIndices.clear();
+    _tarteelCursor = 0;
+  }
+
+  /// Appends one confirmed word to the live Mushaf canvas.
+  void _revealWord(String text, int? idx, LiveWordStatus status,
+      [List<TajweedSpan>? spans]) {
+    setState(() {
+      _revealedWords = [..._revealedWords, text];
+      _revealedStatuses = [..._revealedStatuses, status];
+      _revealedTajweedSpans = [..._revealedTajweedSpans, spans];
+      if (idx != null) _revealedIndices.add(idx);
+    });
+    _scrollToLatest();
+  }
+
+  /// Given Tarteel's live transcript text, finds the index of the next
+  /// unrevealed local target word that best matches the LAST spoken token.
+  /// Tarteel's own word-index space diverges from ours, so we match by
+  /// normalized Arabic text instead of trusting the index. Returns null if no
+  /// good match (e.g. empty/garbage transcript) so we simply skip that frame.
+  int? _matchTarteelWord(String? transcript) {
+    if (transcript == null || transcript.trim().isEmpty) return null;
+    // Take the last whitespace-separated token (most recent spoken word).
+    final tokens = transcript.trim().split(RegExp(r'\s+'));
+    final last = _normalizeArabic(tokens.last);
+    if (last.isEmpty) return null;
+    // Search forward from the first unrevealed local word for a near match.
+    final start = _revealedIndices.isEmpty
+        ? 0
+        : (_revealedIndices.reduce(math.max) + 1);
+    for (var i = start; i < _words.length; i++) {
+      if (_revealedIndices.contains(i)) continue;
+      final w = _normalizeArabic(_words[i]);
+      if (w.isEmpty) continue;
+      // Exact or prefix/suffix match on the normalized token.
+      if (w == last ||
+          w.startsWith(last) ||
+          last.startsWith(w) ||
+          w.contains(last) ||
+          last.contains(w)) {
+        return i;
+      }
+    }
+    // Fallback: also scan the whole unrevealed range (handles skipped words).
+    for (var i = 0; i < _words.length; i++) {
+      if (_revealedIndices.contains(i)) continue;
+      final w = _normalizeArabic(_words[i]);
+      if (w.isNotEmpty && (w == last || w.contains(last) || last.contains(w))) {
+        return i;
+      }
+    }
+    return null;
+  }
+
+  /// Normalizes Arabic for fuzzy comparison: strips tashkeel/diacritics and
+  /// whitespace so Tarteel's transcript matches our bundled text.
+  String _normalizeArabic(String s) {
+    return s
+        .replaceAll(RegExp(r'[\u064B-\u065F\u0670]'), '') // tashkeel
+        .replaceAll(RegExp(r'\s+'), '')
+        .replaceAll("ْ", '')
+        .trim();
   }
 
   // ─── Data loading ─────────────────────────────────────────────────────────
@@ -257,30 +326,64 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
         break;
       case RecitationStreamEventType.word:
         final idx = event.wordIndex;
-        // Append the confirmed Arabic word to the canvas. Skip duplicates and
-        // empty payloads so the book flow never shows stray/blank words.
-        final text = (event.expected ?? event.spoken ?? '').trim();
-        if (text.isEmpty) return;
-        if (idx != null && _revealedIndices.contains(idx)) return;
-
-        // Capture the word's tajweed spans (aligned by reference index) so the
-        // live canvas can colour each letter by its rule as it appears.
-        final spans = (idx != null && idx >= 0 && idx < _wordTajweedSpans.length)
-            ? _wordTajweedSpans[idx]
-            : null;
-
-        setState(() {
-          _revealedWords = [..._revealedWords, text];
-          _revealedStatuses = [..._revealedStatuses, event.status];
-          _revealedTajweedSpans = [..._revealedTajweedSpans, spans];
-          if (idx != null) _revealedIndices.add(idx);
-        });
-        _scrollToLatest();
+        // Append the confirmed Arabic word to the canvas. Skip duplicates.
+        // When tracking against Tarteel, the word event carries only an index
+        // (no Arabic text), so reveal our LOCAL target word at that index.
+        // For our own backend the event supplies the Arabic via `expected`.
+        String text;
+        if (AppConstants.useTarteelLiveApi) {
+          // Tarteel mode: reveal our LOCAL word list STRICTLY IN ORDER. Tarteel's
+          // ASR transcript text is unreliable for picking which word to show
+          // (it repeats/mis-hears, e.g. "Allah Allah"), so we never match by
+          // transcript. We advance a sequential cursor ONLY on STATES_UPDATE
+          // events (those carry a real `wordIndex`); PARTIAL_TRANSCRIPT fires on
+          // every interim ASR result and is ignored for reveal so the cursor
+          // doesn't race ahead of the user. This keeps Al-Fatiha's words in the
+          // correct order regardless of ASR drift.
+          if (event.wordIndex == null) return; // PARTIAL_TRANSCRIPT: no advance
+          if (_tarteelCursor >= _words.length) return;
+          final useIdx = _tarteelCursor;
+          _tarteelCursor++;
+          if (_revealedIndices.contains(useIdx)) return;
+          text = _words[useIdx];
+          _revealWord(text, useIdx, event.status);
+          break;
+        } else {
+          text = (event.expected ?? event.spoken ?? '').trim();
+          if (text.isEmpty) return;
+          if (idx != null && _revealedIndices.contains(idx)) return;
+          // Capture the word's tajweed spans (aligned by reference index) so the
+          // live canvas can colour each letter by its rule as it appears.
+          final spans = (idx != null && idx >= 0 && idx < _wordTajweedSpans.length)
+              ? _wordTajweedSpans[idx]
+              : null;
+          _revealWord(text, idx, event.status, spans);
+        }
         break;
       case RecitationStreamEventType.finalResult:
+        // STRICT NAVIGATION CONTROL (Tarteel mode): COMPLETE / SESSION_END /
+        // RESULT frames must NEVER navigate to the results screen. The live
+        // canvas stays open and the session only ends when the user taps
+        // "Stop & Review" (which synthesizes a result from the words revealed
+        // live). Tarteel can send these frames early (e.g. on a rejected/drifting
+        // stream) and bouncing to results mid-recitation is the bug we're fixing.
+        if (AppConstants.useTarteelLiveApi) {
+          debugPrint('[LiveRecitation] ignoring Tarteel finalResult '
+              '(sentBytes=${_service.sentBytes}, revealed=${_revealedWords.length})');
+          break;
+        }
         _finishWith(event.result);
         break;
       case RecitationStreamEventType.error:
+        // In Tarteel mode, a server error frame must not tear down the live
+        // session (it can be transient / drift-related). Keep the canvas live so
+        // tracking re-syncs when real transcripts resume. Only our own backend
+        // navigates to the error screen on a real error.
+        if (AppConstants.useTarteelLiveApi) {
+          debugPrint('[LiveRecitation] ignoring Tarteel error '
+              '(detail=${event.detail})');
+          break;
+        }
         setState(() {
           _ui = LiveRecitationUiState.error;
           _errorMessage = event.detail ?? 'Streaming error';
@@ -1008,18 +1111,26 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
                       final statusStr = _service.nativeStatus ?? 'init';
                       final onDataErr = _service.audioOnDataError;
                       final frameType = _service.lastFrameType;
+                      final tarteelRx = _service.tarteelLastRx;
+                      final sentRate = AppConstants.useTarteelLiveApi
+                          ? StreamingRecitationService.sentSampleRate
+                          : AppConstants.liveRecitationSampleRate;
                       final onDataStr = ' · onData: $onData'
                           '${frameType != null ? ' ($frameType)' : ''}'
-                          '${onDataErr != null ? ' · onDataErr: $onDataErr' : ''}';
+                          ' · sentRate: $sentRate'
+                          '${onDataErr != null ? ' · onDataErr: $onDataErr' : ''}'
+                          '${tarteelRx != null ? ' · tarteelRx: $tarteelRx' : ''}';
+                      final tarteelErr = _service.tarteelLastError;
                       return Text(
                         err != null
                             ? 'diag · mic chunks: $chunks · bytes sent: $sent · '
                                 '$statusStr$focusStr$onDataStr\n'
                                 'recorder error: $err'
                             : 'diag · mic chunks: $chunks · bytes sent: $sent · '
-                                '$statusStr$focusStr$onDataStr',
+                                '$statusStr$focusStr$onDataStr'
+                                '${tarteelErr != null ? '\nTarteel error: $tarteelErr' : ''}',
                         style: theme.textTheme.labelSmall?.copyWith(
-                          color: (err != null || focus == false)
+                          color: (err != null || focus == false || tarteelErr != null)
                               ? theme.colorScheme.error
                               : theme.colorScheme.onSurface
                                   .withValues(alpha: 0.4),
