@@ -4,6 +4,37 @@
 > Read this file first at the start of every session. Update it whenever
 > meaningful work is done. Keep it concise.
 
+## ⚠️ VPS MIGRATION IN PROGRESS (read before any deploy work)
+User is migrating from the OLD VPS **20.197.40.13** to a NEW VPS (IP not yet
+decided — fill `NEW_VPS_IP` below once known). Everything built/served from the
+old host must be re-created on the new host. This is a FULL migration, not a
+restart.
+
+- **OLD VPS**: `20.197.40.13` (HTTPS, self-signed cert at `/etc/nginx/certs/server.crt`).
+  OTA served `https://20.197.40.13/v1/app/download`. This host will be decommissioned.
+- **NEW_VPS_IP**: `___FILL_ME_IN___`  ← replace once the new VPS is provisioned.
+- Backend is docker-compose (`infra/docker-compose.yml`): services = infra-nginx-1,
+  infra-core-api-1, infra-recitation-api-1, infra-inference-worker-1, postgres, redis.
+- Decision: **redeploy the full stack with docker compose** on the new VPS (not a
+  piecemeal copy). See "VPS Migration Checklist" at the bottom of this file.
+
+### Hardcoded old IP references to update on migration
+Search the repo for `20.197.40.13` and replace with `NEW_VPS_IP` (or a domain):
+- `infra/nginx.conf` (proxy_pass targets / server_name)
+- `mobile/lib/.../app_constants.dart` (`baseUrl`, `wsBaseUrl`, `recitationStreamWsUrl`,
+  `trustedSelfSignedHost`) — these drive OTA + WS endpoints in the app.
+- Any `network_security_config.xml` entry pinning `20.197.40.13` (app trusts the
+  self-signed cert for that host).
+- `releases/app_release.json` / OTA notes if they embed the IP.
+- README.md / docs if they reference the IP.
+Prefer moving to a domain (e.g. `api.qari.app`) long-term — but for now the app
+builds hardcode the host, so a rebuild+OTA is required after the IP changes.
+NOTE: the LAST app build (v1.0.46+60) was a **Tarteel-live** build
+(`USE_TARTEEL_LIVE=true`) — it points at Tarteel's `wss://voice-v2.tarteel.io`,
+NOT our VPS. Our own `/ws/recitation/stream` backend is still the production
+target once our model accuracy is good enough. When rebuilding for the new VPS,
+decide whether to ship Tarteel-on or our-backend-on.
+
 ## Project
 - **Qari**: AI-powered Quran learning app (Flutter mobile + Python/FastAPI backend).
 - Repo: https://github.com/khan23153/qari
@@ -2129,5 +2160,59 @@ of Tarteel. Root causes + fixes this session:
 - Backend unchanged (Tarteel is client-side proxy).
 - NEXT suspect if Tarteel STILL rejects audio: the event name. Try
   `--dart-define=TARTEEL_AUDIO_EVENT=AUDIO` (or `AUDIO_FRAME`) — no code change.
+
+## VPS MIGRATION CHECKLIST (do these when NEW_VPS_IP is known)
+Fresh VPS host. Nothing carries over automatically — re-create everything.
+
+### 1. Base setup on new VPS
+- Install Docker + docker compose, git, Python venv deps
+  (`/home/Innocent/venv`: fastapi, httpx, pytest-asyncio, redis, etc.).
+- Clone repo: `git clone https://github.com/khan23153/qari.git`.
+- Flutter at `/home/Innocent/flutter` (NOT in PATH) + Android SDK at
+  `/home/Innocent/Android` — needed to rebuild+deploy the OTA APK here.
+
+### 2. Backend (docker compose redeploy)
+- `infra/docker-compose.yml` already defines all services. Before `up`:
+  - Update `nginx.conf` server_name + proxy_pass targets to NEW_VPS_IP.
+  - `recitation-api` mounts `../ml` + `PYTHONPATH:/app` + `QARI_ML_USE_STUB=false`
+    + `QARI_FASTERWHISPER_MODEL_DIR=/app/models/tarteel-ct2-tiny` (live=tiny@6s
+    window; batch upload uses base/PyTorch in inference-worker).
+  - `inference-worker` uses `QARI_ML_USE_STUB=false` (real Whisper/QuranASR).
+- `docker compose -f infra/docker-compose.yml up -d` (creates nginx, core-api,
+  recitation-api, inference-worker, postgres, redis).
+- Postgres: run `alembic upgrade head` (the `ayahs.audio_url_ur` column migration
+  `0003_ayah_audio_url_ur` MUST exist or the ayahs query fails).
+- **Regenerate gitignored model + reference data** (NOT in repo, must rebuild):
+  - CT2 models: `python scripts/convert_tarteel_model.py` → writes
+    `backend/recitation_api/models/tarteel-ct2-tiny` (+ `-ct2-base`).
+  - Reference bundle: `python scripts/build_reference_from_local_corpus.py` →
+    `backend/recitation_api/reference_data` (6236 ayahs; needed so recitation
+    scoring isn't empty).
+- Verify: `curl -k https://NEW_VPS_IP/v1/app/version` returns the version JSON.
+
+### 3. TLS / cert
+- Old VPS used a self-signed cert at `/etc/nginx/certs/server.crt`. Either copy
+  that cert/key to the new host (so the app's pinned `trustedSelfSignedHost`
+  keeps working) OR issue a real Let's Encrypt cert for `api.qari.app` (preferred
+  long-term). Until a real cert, the app trusts the self-signed host via
+  `network_security_config.xml` — update the host there if IP changes.
+
+### 4. OTA APK rebuild + deploy (REQUIRED after IP change)
+The app hardcodes the backend host, so a new IP means a new build + OTA push:
+- Update `app_constants.dart` host → NEW_VPS_IP (or domain).
+- Decide Tarteel-on vs own-backend (last build was Tarteel-on; see top note).
+- `scripts/release_app.sh` (build + bump version + copy APK) or manually:
+  `flutter pub get && flutter build apk --release` → copy
+  `mobile/build/app/outputs/flutter-apk/app-release.apk` → `releases/app-release.apk`
+  (bind-mounted into core-api at `/app/releases`, instantly live, no restart).
+  Bump `pubspec.yaml` + `releases/app_release.json` together.
+- Verify `https://NEW_VPS_IP/v1/app/download` serves the new APK.
+
+### 5. After migration
+- Replace all `20.197.40.13` refs in MEMORY.md + repo with NEW_VPS_IP.
+- Decommission old VPS only after confirming the new one serves OTA + WS + recitation.
+- Uncommitted working-tree state from old VPS (2026-07-19): MEMORY.md +
+  mobile Tarteel changes + app-release.apk + app_release.json. Backend code is
+  committed/pushed (last backend commit 0040abf; Tarteel is client-side only).
 
 
