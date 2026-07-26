@@ -32,6 +32,11 @@ concurrency:
   group: build-apk-${{ github.ref }}
   cancel-in-progress: false
 
+# The commit-back step pushes the built APK + bumped metadata; the repo's
+# default GITHUB_TOKEN is read-only, so grant contents write explicitly.
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
