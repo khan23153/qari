@@ -63,13 +63,26 @@ class AppConstants {
     return env;
   }
 
-  /// Tarteel audio-chunk event name. Tarteel requires every frame in the
-  /// `{event: [name], data: [data]}` envelope; the audio event name is NOT
-  /// "AUDIO" (server rejects it). Override at build time to try candidates:
+  /// Tarteel audio-chunk event name — ONLY used for the JSON-envelope fallback
+  /// (see [tarteelAudioAsJson]). The verified transport for audio is RAW BINARY
+  /// WAV frames on the socket; the `{event,data}` text envelope is a fallback.
+  /// Override at build time to try candidates:
   ///   --dart-define=TARTEEL_AUDIO_EVENT=AUDIO_CHUNK
   static String get tarteelAudioEvent {
     const env = String.fromEnvironment('TARTEEL_AUDIO_EVENT');
     return env.isNotEmpty ? env : 'AUDIO_CHUNK';
+  }
+
+  /// When true, Tarteel audio frames are sent as `{event,data}` JSON TEXT
+  /// frames instead of raw binary WAV. The device-verified protocol
+  /// (v1.0.44+55) is raw binary — the server parses TEXT frames as event
+  /// envelopes, which is where the "format it using {event: [eventName],
+  /// data: [data]}" rejection came from. Keep false unless Tarteel changes
+  /// their transport. Override:
+  ///   --dart-define=TARTEEL_AUDIO_AS_JSON=true
+  static bool get tarteelAudioAsJson {
+    const env = bool.fromEnvironment('TARTEEL_AUDIO_AS_JSON', defaultValue: false);
+    return env;
   }
 
   /// DEV-ONLY: the app POSTs every raw Tarteel frame here so we can inspect the

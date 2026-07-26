@@ -130,6 +130,14 @@ class StreamingRecitationService {
   /// needing the (often-failing) VPS echo round-trip.
   String? _tarteelLastError;
   String? get tarteelLastError => _tarteelLastError;
+
+  /// Audio transport mode for Tarteel. false = raw binary WAV frames (the
+  /// device-verified protocol, default); true = `{event,data}` JSON envelope
+  /// (fallback). Auto-flips ONCE per session if the server rejects the current
+  /// format (see _onSocketData), so a Tarteel-side transport change degrades
+  /// to a retry instead of a dead session.
+  bool _tarteelSendJsonEnvelope = AppConstants.tarteelAudioAsJson;
+  bool _tarteelFormatSwitched = false;
   String? _audioOnDataError;
   String? get audioOnDataError => _audioOnDataError;
 
@@ -347,13 +355,14 @@ class StreamingRecitationService {
 
   /// Sends the Tarteel live-voice handshake. Captured + verified schema (the
   /// client→Tarteel START_STREAM frame):
-  ///   {"type":"START_STREAM","data":{ audioConfig, authToken, deviceId,
-  ///    devicePlatform, recitationMode:"FOLLOW_ALONG", isMemorization,
-  ///    isDiacritized, shouldCollectAudio, ... }}
-  /// `type` is a STRING (not an int). The DRF token goes in `data.authToken`.
-  /// Audio frames → `{"type":3,"data":"<base64 PCM16>"}` (verified).
-  /// Server replies → `{"type":2,"text":"{...}"}` (PARTIAL_TRANSCRIPT /
-  ///   STATES_UPDATE events).
+  ///   {"type":1,"event":"START_STREAM","data":{ audioConfig, authToken,
+  ///    deviceId, devicePlatform, recitationMode:"FOLLOW_ALONG",
+  ///    isMemorization, isDiacritized, shouldCollectAudio, ... }}
+  /// `type` is the INTEGER 1 (a string "START_STREAM" type makes Tarteel
+  /// reply "server has not been configured"). The DRF token goes in
+  /// `data.authToken`. Audio frames → raw BINARY WAV on the socket (see
+  /// _flushAudio). Server replies → TEXT `{"event":...,"data":{...}}` frames
+  /// (PARTIAL_TRANSCRIPT / STATES_UPDATE events).
   /// The reference word list is NOT sent to Tarteel (it tracks against its own
   /// internal mushaf); we keep our local [_words] for the results grid.
   static String? _cachedAppVersion;
@@ -563,20 +572,32 @@ class StreamingRecitationService {
       final frame = Uint8List.fromList(_audioBuffer.takeBytes());
       _totalSentBytes += frame.length;
       if (AppConstants.useTarteelLiveApi) {
-        // Tarteel expects every frame in the {event: [name], data: [data]}
-        // envelope. Sending raw bytes (or {"type":3,...}) is rejected with:
-        //   "The message sent is not valid, please format it using
-        //    {event: [eventName], data: [data]}"
-        // So the audio frame is {event: <AUDIO_EVENT>, data: "<base64 WAV>"}.
+        // Tarteel audio transport is RAW BINARY WAV frames on the socket —
+        // this is the device-verified protocol (v1.0.44+55: words tracked
+        // live). TEXT frames are parsed by the server as {event,data} JSON
+        // envelopes, which is exactly why the earlier `{"type":3,...}` TEXT
+        // frame was rejected with "format it using {event: [eventName],
+        // data: [data]}" — the fix is NOT to wrap audio in that envelope
+        // (audio is not an event; `{"event":"AUDIO",...}` gets "event AUDIO
+        // received is not supported"), it is to send binary. The JSON
+        // envelope is kept only as a fallback (auto-enabled at runtime if
+        // the server ever rejects binary, or forced via
+        // --dart-define=TARTEEL_AUDIO_AS_JSON=true).
         final wav = _wrapWav(frame, AppConstants.liveRecitationSampleRate);
-        final b64 = base64Encode(wav);
-        sock.add(jsonEncode({
-          'event': AppConstants.tarteelAudioEvent,
-          'data': b64,
-        }));
+        if (_tarteelSendJsonEnvelope) {
+          final b64 = base64Encode(wav);
+          sock.add(jsonEncode({
+            'event': AppConstants.tarteelAudioEvent,
+            'data': b64,
+          }));
+          debugPrint('[Tarteel] FLUSH #$_chunkCount -> sent JSON audio frame '
+              '(wav=${wav.length} b64=${b64.length}, totalSent=$_totalSentBytes)');
+        } else {
+          sock.add(wav);
+          debugPrint('[Tarteel] FLUSH #$_chunkCount -> sent BINARY WAV frame '
+              '(${wav.length} bytes, totalSent=$_totalSentBytes)');
+        }
         _totalSentBytes += wav.length;
-        debugPrint('[Tarteel] FLUSH #$_chunkCount -> sent audio frame '
-            '(wav=${wav.length} b64=${b64.length}, totalSent=$_totalSentBytes)');
       } else {
         sock.add(frame);
         debugPrint('[Streaming] FLUSH #$_chunkCount -> sent ${frame.length} bytes '
@@ -668,6 +689,18 @@ class StreamingRecitationService {
           (ev == 'ERROR' || ev == 'error' || ev == 'UNKNOWN' || ev == 'FATAL' || ev == null)) {
         _tarteelLastError = data.length > 300 ? data.substring(0, 300) : data;
         debugPrint('[Tarteel] RX error/unknown frame: $_tarteelLastError');
+        // Audio-format rejection → switch transport once (binary <-> JSON
+        // envelope) and keep streaming, instead of erroring every flush.
+        final lower = data.toLowerCase();
+        final isFormatError = lower.contains('format it using') ||
+            lower.contains('is not valid') ||
+            lower.contains('is not supported');
+        if (isFormatError && !_tarteelFormatSwitched) {
+          _tarteelFormatSwitched = true;
+          _tarteelSendJsonEnvelope = !_tarteelSendJsonEnvelope;
+          debugPrint('[Tarteel] audio format rejected -> switching transport '
+              'to ${_tarteelSendJsonEnvelope ? 'JSON envelope' : 'binary WAV'}');
+        }
       }
       final events = AppConstants.useTarteelLiveApi
           ? RecitationStreamEvent.fromTarteelJson(json)
