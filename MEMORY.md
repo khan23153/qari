@@ -4,21 +4,27 @@
 > Read this file first at the start of every session. Update it whenever
 > meaningful work is done. Keep it concise.
 
-## ✅ VPS MIGRATION RESOLVED (2026-07-26): same IP kept
-User confirmed the NEW VPS uses the **same public IP `20.197.40.13`** as the
-old one. Consequence: **NO code/config changes are needed for the IP** — every
-hardcoded reference (app_constants.dart, network_security_config.xml,
-nginx.conf, docker-compose.yml, api_client.dart, release_app.sh,
-app_release.json) already points at 20.197.40.13 and stays valid. No IP-driven
-APK rebuild/OTA push is required. What DOES still apply from the checklist at
-the bottom of this file: re-creating the stack on the new host (docker compose
-up, alembic upgrade, CT2 model conversion, reference bundle regeneration) and
-the TLS cert (copy the old self-signed cert/key so the app's pinned trust for
-20.197.40.13 keeps working, or move to Let's Encrypt).
+## ✅ VPS MIGRATION RESOLVED (2026-07-27): NEW IP = 137.23.42.171
+CORRECTION: the user initially said the new VPS kept the old IP — that was
+WRONG. The new VPS is an **Oracle Cloud (Mumbai) instance with public IP
+`137.23.42.171`** (verified via `curl -4 ifconfig.me`); `20.197.40.13` was the
+old Azure box (dead). All hardcoded references were migrated to 137.23.42.171
+(app_constants.dart baseUrl + trustedSelfSignedHost, api_client.dart,
+network_security_config.xml, nginx.conf server_name, docker-compose.yml CORS +
+QARI_RECITATION_API_PUBLIC_URL, release_app.sh, app_release.json) and a new
+APK was built — any build older than this migration points at the DEAD IP.
 
-- **VPS (old and new)**: `20.197.40.13` (HTTPS, self-signed cert at `/etc/nginx/certs/server.crt`).
-  OTA served `https://20.197.40.13/v1/app/download`.
-- **NEW_VPS_IP**: `20.197.40.13` (confirmed by user 2026-07-26 — unchanged).
+- **VPS (current)**: `137.23.42.171` — Oracle Cloud Mumbai, Ubuntu 22.04,
+  Docker + Compose v2 plugin (manually installed binary; NEVER use the old
+  `docker-compose` v1 — it breaks with "KeyError: ContainerConfig").
+  Stack: infra-nginx/core-api/recitation-api/inference-worker/postgres/redis/
+  minio — all healthy. alembic applied, reference_data + tarteel-ct2-base
+  model generated on-host (host pip needs matching ctranslate2/transformers
+  versions — see scripts/convert_tarteel_model.py docstring).
+- **OLD (decommissioned)**: `20.197.40.13` (Azure). Do not use.
+- OCI Security List: ingress 22/80/443 (+all-protocols rule) open. If ports
+  hang from outside despite this, check host iptables REJECT rules
+  (icmp-host-prohibited) — Oracle Ubuntu ships them by default.
 - Backend is docker-compose (`infra/docker-compose.yml`): services = infra-nginx-1,
   infra-core-api-1, infra-recitation-api-1, infra-inference-worker-1, postgres, redis.
 - Decision: **redeploy the full stack with docker compose** on the new VPS (not a

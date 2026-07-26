@@ -40,7 +40,7 @@ services:
       QARI_DATABASE_URL: postgresql+asyncpg://qari:qari@postgres:5432/qari
       QARI_REDIS_URL: redis://redis:6379/0
       QARI_ENVIRONMENT: dev
-      QARI_CORS_ORIGINS: '["http://20.197.40.13"]'
+      QARI_CORS_ORIGINS: '["http://137.23.42.171"]'
     depends_on:
       postgres:
         condition: service_healthy
@@ -63,11 +63,11 @@ services:
       QARI_REDIS_URL: redis://redis:6379/1
       QARI_CORE_API_BASE_URL: http://core-api:8000
       QARI_ENVIRONMENT: dev
-      QARI_CORS_ORIGINS: '["http://20.197.40.13"]'
+      QARI_CORS_ORIGINS: '["http://137.23.42.171"]'
       # Public base URL so the worker can hand the mobile a playable HTTP URL
       # for the user's uploaded recording (the mobile cannot open the
       # server-local filesystem path). Must match the mobile API base host.
-      QARI_RECITATION_API_PUBLIC_URL: https://20.197.40.13
+      QARI_RECITATION_API_PUBLIC_URL: https://137.23.42.171
       # The real-time streaming pipeline runs INSIDE recitation-api, so it must
       # be able to import the `ml` package (StreamingMatcher + reference store)
       # and the ML engine. Mount `ml` and put it on the path. The live stream
@@ -103,7 +103,7 @@ services:
       QARI_ML_USE_STUB: "false"
       QARI_REFERENCE_DATA_DIR: /app/reference_data
       QARI_CORE_API_BASE_URL: http://core-api:8000
-      QARI_RECITATION_API_PUBLIC_URL: https://20.197.40.13
+      QARI_RECITATION_API_PUBLIC_URL: https://137.23.42.171
       PYTHONPATH: /app
     depends_on:
       redis:
