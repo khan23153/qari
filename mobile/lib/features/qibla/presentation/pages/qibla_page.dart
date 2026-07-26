@@ -97,9 +97,16 @@ class _QiblaPageState extends ConsumerState<QiblaPage>
     }
 
     // 3. Live magnetometer updates — rotate the dial as the phone turns.
+    // Wrap-aware low-pass smoothing: raw magnetometer readings jitter by
+    // several degrees per event, which made the needle tremble and "feel
+    // wrong". Blend each reading toward the previous one along the SHORTEST
+    // angular path (so 359°→1° doesn't spin the dial the long way round).
     _compassSubscription = FlutterCompass.events?.listen((event) {
-      if (event.heading != null && mounted) {
-        setState(() => _deviceHeading = event.heading!);
+      final h = event.heading;
+      if (h != null && mounted) {
+        final delta = ((h - _deviceHeading + 540) % 360) - 180;
+        setState(() =>
+            _deviceHeading = (_deviceHeading + delta * 0.25 + 360) % 360);
       }
     });
 
@@ -239,9 +246,20 @@ class _QiblaPageState extends ConsumerState<QiblaPage>
                         Text(
                           _hasLocation
                               ? 'Rotate until the glowing needle settles on Qibla.'
-                              : 'Rotate until the glowing needle settles on Qibla.',
+                              : 'Using an approximate location — enable GPS for a precise bearing.',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Hold the phone FLAT (screen up). If the direction '
+                          'looks off, wave the phone in a figure-8 to '
+                          'calibrate the compass, and move away from metal '
+                          'objects, magnets and chargers.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
                           ),
                           textAlign: TextAlign.center,
                         ),
