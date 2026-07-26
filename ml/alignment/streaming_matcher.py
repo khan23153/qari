@@ -31,6 +31,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
+from .phonetic import PHONETIC_MATCH_THRESHOLD, phonetic_similarity
+
 
 class WordStatus(str, Enum):
     """Live status of a single reference word during streaming."""
@@ -117,11 +119,19 @@ class StreamingMatcher:
         match_threshold: float = MATCH_SIMILARITY_THRESHOLD,
         lookahead: int = LOOKAHEAD,
         window_size: int = WINDOW_SIZE,
+        phonetic_threshold: float = PHONETIC_MATCH_THRESHOLD,
+        use_phonetic: bool = True,
     ) -> None:
         self.reference = [w for w in reference_words]
         self.match_threshold = match_threshold
         self.lookahead = lookahead
         self.window_size = window_size
+        # Phonetic matching (ml.alignment.phonetic): accept a word whose
+        # *sound* matches the reference even when its spelling drifts (ASR
+        # writing س for ص etc.). Character similarity alone over-penalizes
+        # exactly the letter pairs Arabic ASR confuses most.
+        self.phonetic_threshold = phonetic_threshold
+        self.use_phonetic = use_phonetic
         # First reference index not yet resolved. The sliding window is always
         # anchored here, so we never re-scan words the user has already passed.
         self._cursor: int = 0
@@ -148,7 +158,12 @@ class StreamingMatcher:
             return False
         if hyp == ref:
             return True
-        return char_similarity(hyp, ref) >= self.match_threshold
+        if char_similarity(hyp, ref) >= self.match_threshold:
+            return True
+        return (
+            self.use_phonetic
+            and phonetic_similarity(hyp, ref) >= self.phonetic_threshold
+        )
 
     # ------------------------------------------------------------------
     def evaluate(

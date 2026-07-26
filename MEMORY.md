@@ -2249,6 +2249,37 @@ Branch: `claude/memory-latest-session-7pdqik` (remote CC session, not the VPS).
      with `tarteel-ai/everyayah` (HF) + consented user uploads.
    - NOTE: training itself needs a GPU machine; it cannot run on the VPS or
      in the CC sandbox.
+5. **ML system completed to the Tarteel-parity spec (user's 6-feature ask)**:
+   - `ml/ARCHITECTURE.md` — master doc mapping all 6 requested features
+     (streaming, custom ASR, phonetic alignment, error spotting, dataset/
+     training, fast inference) to concrete components + train→deploy flow.
+   - NEW `ml/alignment/phonetic.py` — rule-based Arabic grapheme→phoneme
+     (articulatory features: place/manner/voicing/emphatic) + weighted
+     phoneme edit distance. Wired into `StreamingMatcher._is_match`
+     (char-sim OR phonetic-sim ≥0.86): ص/س, ط/ت, ذ/ز, ق/ك confusions now
+     match (no false red marks) while الرحمن/الرحيم stay apart. Tests:
+     `ml/tests/test_phonetic.py` (12) + all 9 matcher tests pass.
+   - NEW `ml/training/finetune_wav2vec2.py` — Wav2Vec2-CTC fine-tuning,
+     explicit PyTorch loop (AdamW+warmup, AMP, grad-accum, dataset-derived
+     char vocab, per-epoch WER/CER, best-WER checkpoint). Feeds the forced
+     aligner; deploy via NEW env `QARI_ALIGNER_MODEL_DIR`
+     (forced_alignment.py now reads it).
+   - **Live tajweed wired**: `FasterWhisperTranscriber.transcribe_with_timings`
+     (CT2 word timestamps) + `StreamingRecitationSession._run_tajweed_checks`
+     — finalize() now runs the numpy-only TajweedChecker on the full session
+     audio (≤300s, real-transcriber sessions only) and fills `tajweed_score`
+     + `tajweed_issues` in the result (was hardcoded 0.0). Best-effort:
+     failures log and never block the result. Needs recitation-api restart
+     on deploy.
+   - NEW `ml/evaluation/benchmark_latency.py` — p50/p95 window-decode
+     latency gate vs the 1.2s live budget; run on the VPS before shipping
+     any new live model.
+   - Verified here: phonetic+matcher+tajweed tests all green (52 total);
+     streaming_session imports clean. `tests/test_streaming.py` needs the
+     full backend env (hangs in sandbox) — run on VPS.
+   - CI note: first Build APK run failed — Flutter 3.27.4 pin too old
+     (retrofit 4.9.1 needs Dart ≥3.8). Fixed by unpinning to latest stable
+     (f6b1168) and re-triggered.
 
 ## VPS MIGRATION CHECKLIST (do these when NEW_VPS_IP is known)
 Fresh VPS host. Nothing carries over automatically — re-create everything.
