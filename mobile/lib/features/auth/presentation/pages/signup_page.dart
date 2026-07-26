@@ -57,6 +57,10 @@ class _SignupPageState extends ConsumerState<SignupPage> {
       await storage.setAuthToken(result.accessToken);
       await storage.setUserId(result.userId);
       await storage.setIsOnboarded(result.isOnboarded);
+      // Cache the identity locally so Home/Profile can show the name
+      // instantly (and offline) without waiting on a /me round-trip.
+      await storage.setDisplayName(_nameController.text.trim());
+      await storage.setUserEmail(_emailController.text.trim());
       // A brand-new account starts with zero progress — clear any cached
       // progress so the home screen loads a fresh (empty) server object.
       await storage.clearProgressCache();

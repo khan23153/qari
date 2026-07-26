@@ -53,6 +53,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       await storage.setAuthToken(result.accessToken);
       await storage.setUserId(result.userId);
       await storage.setIsOnboarded(result.isOnboarded);
+      // Cache the email and drop the previous account's cached name — the
+      // profile screen shows the email local-part until /me returns the real
+      // display name (which it then re-caches).
+      await storage.setUserEmail(_emailController.text.trim());
+      await storage.setDisplayName(null);
       // Clear any previously cached progress so this user fetches a fresh
       // (zeroed) database object instead of stale data from another account.
       await storage.clearProgressCache();

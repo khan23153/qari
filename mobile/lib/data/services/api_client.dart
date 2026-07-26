@@ -11,6 +11,16 @@ class ApiClient {
   late final Dio _dio;
   final LocalStorageService _storage = LocalStorageService();
 
+  /// Fired ONCE when any authenticated call returns 401 (expired/invalid
+  /// token). main.dart sets this to clear the session and route back to
+  /// Login — without it an expired token left the user on a Home screen
+  /// where every request silently failed with zeros.
+  static void Function()? onUnauthorized;
+  static bool _unauthorizedFired = false;
+
+  /// Re-arms the 401 handler after a fresh login/signup.
+  static void resetUnauthorized() => _unauthorizedFired = false;
+
   ApiClient() {
     _dio = Dio(BaseOptions(
       baseUrl: AppConstants.baseUrl,
@@ -65,11 +75,22 @@ class ApiClient {
 
         handler.next(options);
       },
-      onError: (error, handler) {
+      onError: (error, handler) async {
         // Centralized error logging
         if (kDebugMode) {
           debugPrint('API Error: ${error.response?.statusCode} '
               '${error.requestOptions.path} - ${error.message}');
+        }
+        // Session expiry: a 401 on any non-auth endpoint means the stored
+        // JWT is dead. Clear it and hand control back to the login screen
+        // (once per expiry — not per failed call).
+        final path = error.requestOptions.path;
+        if (error.response?.statusCode == 401 &&
+            !path.contains('/auth/') &&
+            !_unauthorizedFired) {
+          _unauthorizedFired = true;
+          await _storage.setAuthToken(null);
+          onUnauthorized?.call();
         }
         handler.next(error);
       },

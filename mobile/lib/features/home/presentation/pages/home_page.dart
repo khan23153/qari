@@ -4,6 +4,7 @@ import 'package:haptic_feedback/haptic_feedback.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../data/services/local_storage_service.dart';
+import '../../../../data/services/curriculum_service.dart';
 import '../../../../data/repositories/user_repository.dart';
 import '../../../../data/models/user_model.dart';
 import '../../../../data/models/lesson_model.dart';
@@ -176,13 +177,17 @@ class HomeTab extends ConsumerStatefulWidget {
 
 class _HomeTabState extends ConsumerState<HomeTab> {
   String _selectedLanguage = 'en';
+  String _displayName = '';
   HomeResponse? _home;
+  List<PathNode>? _curriculumNodes;
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _loadLanguage();
+    _loadDisplayName();
+    _loadCurriculumPath();
     _loadHome();
   }
 
@@ -194,14 +199,37 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     }
   }
 
+  /// Local-first greeting name: cached display name, else the email
+  /// local-part. Refreshed (and re-cached) whenever /me/home succeeds.
+  Future<void> _loadDisplayName() async {
+    final storage = LocalStorageService();
+    final name = await storage.getDisplayName();
+    final email = await storage.getUserEmail();
+    if (mounted) {
+      setState(() {
+        _displayName = (name?.isNotEmpty == true)
+            ? name!
+            : (email?.split('@').first ?? '');
+      });
+    }
+  }
+
   /// Fetches the home screen data. Any failure leaves [_home] null so the UI
   /// falls back to zero/empty defaults rather than stale or fake values.
+  /// Bounded to 10s so a slow backend can't pin the loading state.
   Future<void> _loadHome() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
     try {
-      final home = await UserRepository().getHomeData();
+      final home = await UserRepository()
+          .getHomeData()
+          .timeout(const Duration(seconds: 10));
       if (mounted) setState(() => _home = home);
+      final freshName = home.user.displayName;
+      if (freshName != null && freshName.isNotEmpty) {
+        await LocalStorageService().setDisplayName(freshName);
+        if (mounted) setState(() => _displayName = freshName);
+      }
     } catch (e) {
       debugPrint('HomeTab: failed to load home data: $e');
       if (mounted) setState(() => _home = null);
@@ -218,11 +246,47 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   int get _flashcardsDue => _home?.flashcardsDue ?? 0;
   int get _dailyGoalProgress => _home?.dailyGoalProgress ?? 0;
   int get _dailyGoal => _home?.dailyGoal ?? 5;
-  List<PathNode>? get _pathNodes => _home?.learningPath;
+
+  /// Server learning path when it has content, else the bundled curriculum
+  /// path (offline-first — the old build showed a static 10-node sample).
+  List<PathNode>? get _pathNodes {
+    final server = _home?.learningPath;
+    if (server != null && server.isNotEmpty) return server;
+    return _curriculumNodes;
+  }
+
+  /// Builds the home path from the local curriculum with real completion
+  /// state: foundation → grammar → vocabulary levels, trimmed a little past
+  /// the learner's frontier so the map stays scannable.
+  Future<void> _loadCurriculumPath() async {
+    final svc = CurriculumService.instance;
+    final all = await svc.allLessons();
+    final done = await svc.completedIds();
+    final nodes = <PathNode>[];
+    var previousDone = true;
+    for (final lesson in all) {
+      final isDone = done.contains('${lesson.lessonId}');
+      final locked = !previousDone && !isDone;
+      nodes.add(PathNode(
+        id: '${lesson.lessonId}',
+        label: lesson.title,
+        type: PathNodeType.lesson,
+        isCompleted: isDone,
+        isCurrent: !isDone && !locked,
+        isLocked: locked,
+        xpReward: lesson.xpReward,
+        lessonId: lesson.lessonId,
+      ));
+      previousDone = isDone;
+      if (nodes.length >= 14 && locked) break;
+    }
+    if (mounted) setState(() => _curriculumNodes = nodes);
+  }
 
   /// Opens the lesson player for either the continue-lesson or a tapped path
-  /// node. Builds a minimal [LessonModel] from the available server data.
-  void _openLesson({LessonProgress? lesson, PathNode? node}) {
+  /// node. Curriculum nodes resolve to their REAL lesson (concepts +
+  /// quizzes); server nodes fall back to a minimal model as before.
+  Future<void> _openLesson({LessonProgress? lesson, PathNode? node}) async {
     if (lesson != null) {
       _navigateToLesson(LessonModel(
         lessonId: lesson.lessonId,
@@ -234,13 +298,17 @@ class _HomeTabState extends ConsumerState<HomeTab> {
       return;
     }
     if (node != null) {
-      // A path node may omit lesson_id (e.g. quiz/checkpoint); fall back to
-      // its string id so the tap always opens something meaningful.
-      final id = node.lessonId ?? int.tryParse(node.id) ?? 1;
+      final id = node.lessonId ?? int.tryParse(node.id);
+      final curriculumLesson =
+          await CurriculumService.instance.findLesson(id);
+      if (curriculumLesson != null) {
+        _navigateToLesson(curriculumLesson);
+        return;
+      }
       _navigateToLesson(LessonModel(
-        lessonId: id,
+        lessonId: id ?? 1,
         moduleNumber: 1,
-        lessonNumber: id,
+        lessonNumber: id ?? 1,
         title: node.label,
         description: '',
       ));
@@ -255,11 +323,17 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     );
   }
 
-  void _navigateToLesson(LessonModel model) {
+  Future<void> _navigateToLesson(LessonModel model) async {
     Haptics.vibrate(HapticsType.medium);
-    Navigator.of(context).push(
+    final completed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => LessonPlayerPage(lesson: model)),
     );
+    // Refresh the curriculum path (and server data) after a completion so
+    // the next node unlocks immediately.
+    if (completed == true) {
+      _loadCurriculumPath();
+      _loadHome();
+    }
   }
 
   @override
@@ -283,12 +357,30 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
                   child: Row(
                     children: [
-                      Text(
-                        isUrdu ? 'السلام علیکم' : 'Assalamu Alaikum',
-                        style: theme.textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isUrdu ? 'السلام علیکم' : 'Assalamu Alaikum',
+                              style: theme.textTheme.headlineMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
+                              textDirection:
+                                  isUrdu ? TextDirection.rtl : TextDirection.ltr,
+                            ),
+                            if (_displayName.isNotEmpty)
+                              Text(
+                                _displayName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                          ],
                         ),
-                        textDirection: isUrdu ? TextDirection.rtl : TextDirection.ltr,
                       ),
                       IconButton(
                         onPressed: () => Navigator.of(context).push(
@@ -302,7 +394,6 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                         ),
                         tooltip: 'Profile',
                       ),
-                      const Spacer(),
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,

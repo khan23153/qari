@@ -148,6 +148,16 @@ class _QariAppState extends ConsumerState<QariApp> {
   @override
   void initState() {
     super.initState();
+    // Expired/invalid JWT anywhere in the app → clear session, back to Login.
+    ApiClient.onUnauthorized = () {
+      if (!mounted) return;
+      _navigatorKey.currentState?.pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => LoginPage(onAuthenticated: _handleAuthenticated),
+        ),
+        (route) => false,
+      );
+    };
     _checkAuthStatus();
   }
 
@@ -184,6 +194,7 @@ class _QariAppState extends ConsumerState<QariApp> {
   /// (rather than being popped back onto the LoginPage root route).
   void _handleAuthenticated(AuthResult result) {
     if (!mounted) return;
+    ApiClient.resetUnauthorized();
     final page = result.isOnboarded
         ? const HomePage()
         : const LanguageSelectPage();

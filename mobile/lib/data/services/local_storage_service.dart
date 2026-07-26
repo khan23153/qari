@@ -59,6 +59,10 @@ class LocalStorageService {
   static const _kDailyGoal = 'daily_goal';
   static const _kStreakCount = 'streak_count';
   static const _kDataVersion = 'backend_data_version';
+  static const _kDisplayName = 'display_name';
+  static const _kUserEmail = 'user_email';
+  static const _kCompletedLessons = 'completed_lessons';
+  static const _kLocalXp = 'local_xp';
 
   // ─── Onboarding ──────────────────────────────────────────────────────────
   Future<bool> isOnboardingComplete() async {
@@ -244,6 +248,60 @@ class LocalStorageService {
     } else {
       await _prefs.remove(_kUserId);
     }
+  }
+
+  // ─── Display name / email (local-first identity) ─────────────────────────
+  // Cached at signup/login and refreshed whenever a /me fetch succeeds, so
+  // the Home greeting and Profile header can show the name INSTANTLY and
+  // offline — never a spinner blocked on the backend.
+  Future<String?> getDisplayName() async {
+    await ensureInitialized();
+    return _prefs.getString(_kDisplayName);
+  }
+
+  Future<void> setDisplayName(String? name) async {
+    await ensureInitialized();
+    if (name != null && name.isNotEmpty) {
+      await _prefs.setString(_kDisplayName, name);
+    } else {
+      await _prefs.remove(_kDisplayName);
+    }
+  }
+
+  Future<String?> getUserEmail() async {
+    await ensureInitialized();
+    return _prefs.getString(_kUserEmail);
+  }
+
+  Future<void> setUserEmail(String? email) async {
+    await ensureInitialized();
+    if (email != null && email.isNotEmpty) {
+      await _prefs.setString(_kUserEmail, email);
+    } else {
+      await _prefs.remove(_kUserEmail);
+    }
+  }
+
+  // ─── Local lesson progress (offline-first curriculum) ────────────────────
+  // The bundled curriculum tracks completion + XP locally so learning works
+  // with an unreachable backend; the backend can sync on top later.
+  Future<Set<String>> getCompletedLessonIds() async {
+    await ensureInitialized();
+    return (_prefs.getStringList(_kCompletedLessons) ?? const []).toSet();
+  }
+
+  Future<void> addCompletedLesson(String lessonId, int xp) async {
+    await ensureInitialized();
+    final done = (_prefs.getStringList(_kCompletedLessons) ?? []).toSet();
+    if (done.add(lessonId)) {
+      await _prefs.setStringList(_kCompletedLessons, done.toList());
+      await _prefs.setInt(_kLocalXp, (_prefs.getInt(_kLocalXp) ?? 0) + xp);
+    }
+  }
+
+  Future<int> getLocalXp() async {
+    await ensureInitialized();
+    return _prefs.getInt(_kLocalXp) ?? 0;
   }
 
   // ─── Daily Goal ──────────────────────────────────────────────────────────

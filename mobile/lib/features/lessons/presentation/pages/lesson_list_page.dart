@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:haptic_feedback/haptic_feedback.dart';
 
 import '../../../../core/constants/app_constants.dart';
-import '../../../../core/theme/app_theme.dart';
 import '../../../../data/models/lesson_model.dart';
-import '../widgets/grammar_card_widget.dart';
-import '../widgets/quiz_widget.dart';
+import '../../../../data/services/curriculum_service.dart';
 import 'lesson_player_page.dart';
 
-/// S4: Lesson list page — shows available lessons in a module.
+/// Learn hub — the full offline curriculum in three tracks:
+///   1. Foundation (read Arabic: letters, harakat, long vowels)
+///   2. Quran Grammar (word types, roots, pronouns, verbs, iḍāfa)
+///   3. Quran Vocabulary (60 levels of the most frequent words — the
+///      subtitle shows the honest cumulative % of the Quran you can
+///      recognise after each level)
+/// Progress + unlocking are local (LocalStorageService), so learning works
+/// entirely offline.
 class LessonListPage extends ConsumerStatefulWidget {
   final int moduleNumber;
 
@@ -20,177 +24,95 @@ class LessonListPage extends ConsumerStatefulWidget {
 }
 
 class _LessonListPageState extends ConsumerState<LessonListPage> {
+  List<LessonModel> _foundation = const [];
+  List<LessonModel> _grammar = const [];
+  List<LessonModel> _vocab = const [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final svc = CurriculumService.instance;
+    final vocab = await svc.vocabLessons();
+    final done = await svc.completedIds();
+    if (!mounted) return;
+    setState(() {
+      _foundation = svc.withProgress(svc.foundationLessons, done);
+      _grammar = svc.withProgress(svc.grammarLessons, done);
+      _vocab = svc.withProgress(vocab, done);
+      _loading = false;
+    });
+  }
+
+  Future<void> _open(LessonModel lesson) async {
+    final completed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => LessonPlayerPage(lesson: lesson)),
+    );
+    if (completed == true) _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Module ${widget.moduleNumber}'),
-      ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _sampleLessons.length,
-        itemBuilder: (context, index) {
-          final lesson = _sampleLessons[index];
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: _LessonTile(
-              lesson: lesson,
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => LessonPlayerPage(lesson: lesson),
-                  ),
-                );
-              },
+      appBar: AppBar(title: const Text('Learn Quran')),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                _sectionHeader(theme, 'Foundation', 'Learn to read Arabic'),
+                ..._foundation.map(_tile),
+                const SizedBox(height: 16),
+                _sectionHeader(theme, 'Quran Grammar',
+                    'Understand how Quran sentences work'),
+                ..._grammar.map(_tile),
+                const SizedBox(height: 16),
+                _sectionHeader(theme, 'Quran Vocabulary',
+                    'The most frequent words first — every level grows the % '
+                    'of the Quran you understand'),
+                ..._vocab.map(_tile),
+                const SizedBox(height: 24),
+              ],
             ),
-          );
-        },
+    );
+  }
+
+  Widget _sectionHeader(ThemeData theme, String title, String subtitle) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10, top: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          Text(
+            subtitle,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+            ),
+          ),
+        ],
       ),
     );
   }
-}
 
-/// Sample lessons for demonstration.
-final _sampleLessons = <LessonModel>[
-  LessonModel(
-    lessonId: 1,
-    moduleNumber: 1,
-    lessonNumber: 1,
-    title: 'Arabic Letters & Sounds',
-    description: 'Learn the 28 Arabic letters and their basic sounds.',
-    xpReward: 10,
-    estimatedMinutes: 5,
-    isCompleted: true,
-    iconName: 'abc',
-    concepts: [
-      LessonConcept(
-        id: 'c1',
-        title: 'The Arabic Alphabet',
-        explanation: 'Arabic has 28 consonant letters. Unlike English, Arabic is written from right to left (RTL). Each letter can appear differently depending on its position in a word.',
-        arabicExample: 'ا ب ت ث ج ح خ',
-        transliteration: 'alif baa taa thaa jeem haa khaa',
-      ),
-    ],
-    quizQuestions: [
-      QuizQuestionModel(
-        id: 'q1',
-        type: QuizType.mcq,
-        question: 'How many letters are in the Arabic alphabet?',
-        options: ['26', '28', '30', '32'],
-        correctAnswer: '28',
-        explanation: 'Arabic has 28 consonant letters.',
-      ),
-    ],
-  ),
-  LessonModel(
-    lessonId: 2,
-    moduleNumber: 1,
-    lessonNumber: 2,
-    title: 'Harakat (Vowel Marks)',
-    description: 'Learn the three short vowels: Fatha, Kasra, Damma.',
-    xpReward: 10,
-    estimatedMinutes: 5,
-    isCompleted: true,
-    iconName: 'spellcheck',
-    concepts: [
-      LessonConcept(
-        id: 'c1',
-        title: 'Fatha (َ)',
-        explanation: 'Fatha is a short "a" sound, written as a diagonal line above the letter.',
-        arabicExample: 'بَ',
-        transliteration: 'ba',
-        posGroup: 'harf',
-      ),
-    ],
-    quizQuestions: [
-      QuizQuestionModel(
-        id: 'q1',
-        type: QuizType.fillBlank,
-        question: 'The vowel mark َ is called ____',
-        blankAnswer: 'Fatha',
-        explanation: 'Fatha produces a short "a" sound.',
-      ),
-    ],
-  ),
-  LessonModel(
-    lessonId: 3,
-    moduleNumber: 1,
-    lessonNumber: 3,
-    title: "Fi'l (Verbs)",
-    description: 'Learn about Arabic verbs — past, present, and imperative.',
-    xpReward: 15,
-    estimatedMinutes: 7,
-    isCompleted: false,
-    isLocked: false,
-    iconName: 'play_arrow',
-    concepts: [
-      LessonConcept(
-        id: 'c1',
-        title: "Fi'l Madi (Past Tense)",
-        explanation: "Fi'l Madi refers to past tense verbs. For example, كَتَبَ (kataba) means 'he wrote'. The pattern is typically Faʿala (فَعَلَ).",
-        arabicExample: 'كَتَبَ',
-        transliteration: 'kataba',
-        translation: 'he wrote',
-        posGroup: 'fiil_madi',
-        grammarNote: "Fi'l are color-coded green with a solid underline.",
-      ),
-      LessonConcept(
-        id: 'c2',
-        title: "Fi'l Mudari' (Present Tense)",
-        explanation: "Fi'l Mudari' refers to present/future tense verbs. For example, يَكْتُبُ (yaktubu) means 'he writes'.",
-        arabicExample: 'يَكْتُبُ',
-        transliteration: 'yaktubu',
-        translation: 'he writes',
-        posGroup: 'fiil_mudari',
-        grammarNote: "Present tense verbs start with one of the letters ي ت ن أ (yaktubu, taktubu, naktubu, aktubu).",
-      ),
-    ],
-    quizQuestions: [
-      QuizQuestionModel(
-        id: 'q1',
-        type: QuizType.mcq,
-        question: 'What does كَتَبَ (kataba) mean?',
-        options: ['he read', 'he wrote', 'he ate', 'he went'],
-        correctAnswer: 'he wrote',
-        explanation: 'Kataba means "he wrote".',
-      ),
-      QuizQuestionModel(
-        id: 'q2',
-        type: QuizType.dragMatch,
-        question: 'Match the verb to its meaning:',
-        matchPairs: [
-          MatchPair(left: 'كَتَبَ', right: 'he wrote'),
-          MatchPair(left: 'قَرَأَ', right: 'he read'),
-          MatchPair(left: 'ذَهَبَ', right: 'he went'),
-        ],
-        correctAnswer: '',
-      ),
-      QuizQuestionModel(
-        id: 'q3',
-        type: QuizType.fillBlank,
-        question: 'The present tense of كَتَبَ is يَكْتُبُ (y____u)',
-        blankAnswer: 'aktub',
-        explanation: 'yaktubu = he writes',
-      ),
-    ],
-  ),
-  LessonModel(
-    lessonId: 4,
-    moduleNumber: 1,
-    lessonNumber: 4,
-    title: 'Ism (Nouns)',
-    description: 'Learn about Arabic nouns and their properties.',
-    xpReward: 10,
-    estimatedMinutes: 5,
-    isCompleted: false,
-    isLocked: true,
-    iconName: 'label',
-    concepts: [],
-    quizQuestions: [],
-  ),
-];
+  Widget _tile(LessonModel lesson) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: _LessonTile(lesson: lesson, onTap: () => _open(lesson)),
+    );
+  }
+}
 
 /// A lesson tile in the list.
 class _LessonTile extends StatelessWidget {
@@ -248,21 +170,27 @@ class _LessonTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Lesson ${lesson.lessonNumber}',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                      ),
-                    ),
-                    Text(
                       lesson.title,
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w600,
                       ),
                     ),
+                    const SizedBox(height: 2),
+                    Text(
+                      lesson.description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
                     Text(
                       '${lesson.estimatedMinutes} min • +${lesson.xpReward} XP',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                        color:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.4),
                       ),
                     ),
                   ],
