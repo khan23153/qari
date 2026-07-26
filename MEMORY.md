@@ -2316,6 +2316,41 @@ User screenshots: profile name = infinite spinner; home greeting nameless.
    `docker compose -f infra/docker-compose.yml up -d` + NSG port 80/443
    check; interim APK link = GitHub raw releases/app-release.apk.
 
+## Session 2026-07-26/27 — app debug + offline learning curriculum (commit 0425fd2)
+User-reported bugs FIXED (all verified by Flutter CI - new flutter-ci.yml):
+1. Profile "name shows only loading" — /me + /me/stats were awaited
+   SEQUENTIALLY with 90s Dio timeouts. Now: display name + email cached at
+   signup/login (LocalStorageService displayName/userEmail keys), shown
+   instantly; network refresh parallel with 10s bound. Home greeting shows
+   the name under "Assalamu Alaikum" (home_page _displayName).
+2. Expired JWT = silently broken app — added ApiClient.onUnauthorized:
+   401 on any non-/auth/ endpoint clears the token once and routes to Login
+   (main.dart wires it via rootNavigatorKey; reset on re-auth).
+NEW OFFLINE LEARNING SYSTEM (no backend needed):
+- CurriculumService (mobile/lib/data/services/curriculum_service.dart):
+  3 tracks — Foundation (3 lessons), Grammar (8 lessons w/ quizzes:
+  ism/fi'l/harf, roots, pronouns, attached pronouns, prefixes, past/present
+  verbs, idafa), Vocabulary (60 auto-generated levels from
+  assets/vocab_curriculum.json — top-600 corpus words, 10/level, meanings +
+  transliteration + frequency + how-to-learn text + MCQ/reverse-MCQ/
+  drag-match quizzes; cumulative coverage shown honestly, 58% at L60).
+  Regenerate asset: scripts/build_vocab_curriculum.py (--top N for more).
+- Local progress: completed lesson ids + local XP in LocalStorageService;
+  sequential unlocking; lesson_player marks completion and pops true.
+- lesson_list_page = 3-track Learn hub; home Learning Path renders the
+  curriculum with real progress when server path is empty; path taps open
+  REAL lessons (CurriculumService.findLesson).
+- Lesson IDs: foundation 100+, grammar 200+, vocab 1000+level (stable keys).
+CI: flutter-ci.yml (analyze + 4 stable test suites) on mobile/** pushes —
+GREEN on 0425fd2. Legacy broken tests (reader_render_test, widget_test
+grammar-colors) intentionally excluded; fix later.
+VPS NOTE (new OCI VPS, same IP): only docker-compose v1 (1.29.2) is
+installed → breaks vs new engine ("KeyError: ContainerConfig"), and the
+whole stack was DOWN (ERR_CONNECTION_REFUSED on OTA). Fix = install
+Compose v2 plugin binary manually, remove v1-named infra_* containers,
+`docker compose up -d`. Also regenerate gitignored CT2 models +
+reference_data on this machine (migration checklist below).
+
 ## VPS MIGRATION CHECKLIST (do these when NEW_VPS_IP is known)
 Fresh VPS host. Nothing carries over automatically — re-create everything.
 
