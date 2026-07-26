@@ -152,6 +152,44 @@ class FasterWhisperTranscriber:
                     confs.append(float(getattr(w, "probability", 1.0) or 1.0))
         return words, confs
 
+    def transcribe_with_timings(
+        self, audio, sample_rate: int = 16000
+    ) -> Tuple[List[str], List[float], List[int], List[int]]:
+        """Like :meth:`transcribe` but also returns per-word
+        ``(starts_ms, ends_ms)`` from the CT2 word timestamps. Used by the
+        live session's finalize pass to feed the tajweed duration/energy
+        checks without needing the (torch-based) forced aligner."""
+        import numpy as np
+
+        self.load()
+        if audio is None or len(audio) == 0:
+            return [], [], [], []
+        samples = np.asarray(audio, dtype=np.float32)
+        segments, _info = self._model.transcribe(
+            samples,
+            language="ar",
+            task="transcribe",
+            beam_size=1,
+            word_timestamps=True,
+            vad_filter=False,
+            temperature=0.0,
+            condition_on_previous_text=False,
+        )
+        words: List[str] = []
+        confs: List[float] = []
+        starts: List[int] = []
+        ends: List[int] = []
+        for seg in segments:
+            for w in getattr(seg, "words", None) or []:
+                text = (getattr(w, "word", None) or "").strip()
+                if not text:
+                    continue
+                words.append(text)
+                confs.append(float(getattr(w, "probability", 1.0) or 1.0))
+                starts.append(int(float(getattr(w, "start", 0.0) or 0.0) * 1000))
+                ends.append(int(float(getattr(w, "end", 0.0) or 0.0) * 1000))
+        return words, confs, starts, ends
+
 
 _transcriber_singleton: Optional[FasterWhisperTranscriber] = None
 _transcriber_lock = threading.Lock()

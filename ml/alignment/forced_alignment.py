@@ -12,6 +12,7 @@ Model: jonatasgrosman/wav2vec2-large-xlsr-53-arabic (or similar Arabic Wav2Vec2)
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -22,7 +23,12 @@ logger = logging.getLogger(__name__)
 
 # ── Model constants ──────────────────────────────────────────────────────────
 
-WAV2VEC2_MODEL_ID = "jonatasgrosman/wav2vec2-large-xlsr-53-arabic"
+# QARI_ALIGNER_MODEL_DIR lets a fine-tuned checkpoint (see
+# ml/training/finetune_wav2vec2.py) replace the stock Arabic XLSR model
+# without a code change — point it at the local output_dir on the VPS.
+WAV2VEC2_MODEL_ID = os.environ.get(
+    "QARI_ALIGNER_MODEL_DIR", "jonatasgrosman/wav2vec2-large-xlsr-53-arabic"
+)
 TARGET_SAMPLE_RATE = 16000
 
 # ── Data structures ──────────────────────────────────────────────────────────

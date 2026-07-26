@@ -112,7 +112,7 @@ Future<void> _reportNativeCrashIfAny() async {
       debugPrint('[NativeCrash] captured:\n$text');
       try {
         await http.post(
-          Uri.parse(AppConstants.tarteelDebugEchoUrl),
+          Uri.parse(AppConstants.debugEchoUrl),
           headers: {'content-type': 'application/json'},
           body: jsonEncode({'native_crash': text}),
         );

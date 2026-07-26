@@ -730,6 +730,48 @@ class StreamingRecitationSession:
             logger.warning("stream.wav_write_failed", session_id=self.session_id, error=str(exc))
             return None
 
+    def _run_tajweed_checks(
+        self, audio
+    ) -> Optional[tuple[float, list[dict]]]:
+        """Timed full-audio transcription → acoustic tajweed checks.
+
+        Runs synchronously (call via ``asyncio.to_thread``). Returns
+        ``(score_0_to_1, surfaced_issue_dicts)`` or ``None`` when nothing
+        could be evaluated. Uses the CT2 word timestamps instead of the
+        torch forced aligner so it works inside the live API container.
+        """
+        from ml.inference.asr import normalize_arabic
+        from ml.inference.faster_whisper_transcriber import get_transcriber
+        from ml.tajweed.checks import TajweedChecker
+
+        words, _confs, starts, ends = get_transcriber().transcribe_with_timings(
+            audio, self.sample_rate
+        )
+        if not words:
+            return None
+        norm = [normalize_arabic(w) for w in words]
+        summary = TajweedChecker(sample_rate=self.sample_rate).check_all(
+            audio, norm, starts, ends
+        )
+        if summary.total_checks == 0:
+            return None
+        issues = [
+            {
+                "rule": r.check_type.value,
+                "word_index": r.word_index,
+                "word": norm[r.word_index]
+                if r.word_index is not None and r.word_index < len(norm)
+                else None,
+                "letter": r.letter,
+                "detail": r.detail,
+                "start_ms": r.start_ms,
+                "end_ms": r.end_ms,
+            }
+            for r in summary.results
+            if r.should_surface
+        ]
+        return summary.tajweed_score / 100.0, issues
+
     async def finalize(self) -> dict:
         """End the session: persist audio + build the final result blob."""
         from ml.alignment.streaming_matcher import WordStatus
@@ -792,13 +834,39 @@ class StreamingRecitationSession:
         # against → low confidence (mobile shows "no red marks", per trust rule).
         confidence = 1.0 if total else 0.0
 
+        # Best-effort tajweed pass (Tarteel-style post-session "mistake
+        # review"): one timed full-audio transcription feeds the acoustic
+        # tajweed checks (ghunnah/qalqalah/madd — numpy only, no torch).
+        # Never blocks the result on failure; stub sessions and very long
+        # sessions skip it.
+        tajweed_score = 0.0
+        tajweed_issues: list[dict] = []
+        if (
+            not self._is_stub
+            and total
+            and self._pcm
+            and self.duration_seconds <= 300
+        ):
+            try:
+                audio = self._decode_float()
+                tj = await asyncio.to_thread(self._run_tajweed_checks, audio)
+                if tj is not None:
+                    tajweed_score, tajweed_issues = tj
+            except Exception as exc:  # pragma: no cover - analysis best-effort
+                logger.warning(
+                    "stream.tajweed_failed",
+                    session_id=self.session_id,
+                    error=str(exc),
+                )
+
         result = {
             "session_id": self.session_id,
             "surah_number": self.surah,
             "ayah_number": self.ayah_from,
             "overall_score": round(accuracy, 4),
             "pronunciation_score": round(accuracy, 4),
-            "tajweed_score": 0.0,
+            "tajweed_score": round(tajweed_score, 4),
+            "tajweed_issues": tajweed_issues,
             "fluency_score": round(accuracy, 4),
             "accuracy_score": round(accuracy, 4),
             "word_verdicts": word_verdicts,
