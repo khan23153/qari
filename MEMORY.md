@@ -4,15 +4,21 @@
 > Read this file first at the start of every session. Update it whenever
 > meaningful work is done. Keep it concise.
 
-## ⚠️ VPS MIGRATION IN PROGRESS (read before any deploy work)
-User is migrating from the OLD VPS **20.197.40.13** to a NEW VPS (IP not yet
-decided — fill `NEW_VPS_IP` below once known). Everything built/served from the
-old host must be re-created on the new host. This is a FULL migration, not a
-restart.
+## ✅ VPS MIGRATION RESOLVED (2026-07-26): same IP kept
+User confirmed the NEW VPS uses the **same public IP `20.197.40.13`** as the
+old one. Consequence: **NO code/config changes are needed for the IP** — every
+hardcoded reference (app_constants.dart, network_security_config.xml,
+nginx.conf, docker-compose.yml, api_client.dart, release_app.sh,
+app_release.json) already points at 20.197.40.13 and stays valid. No IP-driven
+APK rebuild/OTA push is required. What DOES still apply from the checklist at
+the bottom of this file: re-creating the stack on the new host (docker compose
+up, alembic upgrade, CT2 model conversion, reference bundle regeneration) and
+the TLS cert (copy the old self-signed cert/key so the app's pinned trust for
+20.197.40.13 keeps working, or move to Let's Encrypt).
 
-- **OLD VPS**: `20.197.40.13` (HTTPS, self-signed cert at `/etc/nginx/certs/server.crt`).
-  OTA served `https://20.197.40.13/v1/app/download`. This host will be decommissioned.
-- **NEW_VPS_IP**: `___FILL_ME_IN___`  ← replace once the new VPS is provisioned.
+- **VPS (old and new)**: `20.197.40.13` (HTTPS, self-signed cert at `/etc/nginx/certs/server.crt`).
+  OTA served `https://20.197.40.13/v1/app/download`.
+- **NEW_VPS_IP**: `20.197.40.13` (confirmed by user 2026-07-26 — unchanged).
 - Backend is docker-compose (`infra/docker-compose.yml`): services = infra-nginx-1,
   infra-core-api-1, infra-recitation-api-1, infra-inference-worker-1, postgres, redis.
 - Decision: **redeploy the full stack with docker compose** on the new VPS (not a
@@ -2160,6 +2166,49 @@ of Tarteel. Root causes + fixes this session:
 - Backend unchanged (Tarteel is client-side proxy).
 - NEXT suspect if Tarteel STILL rejects audio: the event name. Try
   `--dart-define=TARTEEL_AUDIO_EVENT=AUDIO` (or `AUDIO_FRAME`) — no code change.
+
+## Session 2026-07-26 — IP confirmed (unchanged) + Tarteel audio transport fix + CI builds
+Branch: `claude/memory-latest-session-7pdqik` (remote CC session, not the VPS).
+
+1. **NEW_VPS_IP = 20.197.40.13 (same as old)** — user confirmed the new VPS
+   keeps the old IP. Audited every hardcoded reference (app_constants.dart,
+   network_security_config.xml, nginx.conf, docker-compose.yml,
+   api_client.dart, release_app.sh, app_release.json): all already point at
+   20.197.40.13, so NO code change and NO IP-driven rebuild was needed. The
+   top-of-file migration warning is now marked resolved; the remaining
+   migration work is stack re-creation + TLS cert on the new host (see
+   checklist below).
+2. **Tarteel audio-frame bug FIXED (the v1.0.46+60 "fix" was wrong)** —
+   MEMORY contained contradictory protocol notes. Evidence review: the
+   device-VERIFIED working build (v1.0.44+55) sent audio as **raw BINARY WAV
+   frames**; Tarteel parses TEXT frames as `{event,data}` JSON envelopes,
+   which is why `{"type":3,...}` (TEXT) got "format it using {event…}" and
+   `{"event":"AUDIO",...}` got "event AUDIO is not supported" (audio is not
+   an event). The v1.0.46+60 change to `{"event":"AUDIO_CHUNK","data":b64}`
+   TEXT frames therefore re-broke audio. FIX in
+   `streaming_recitation_service.dart`: `_flushAudio` sends raw binary WAV
+   again (primary); the JSON envelope is kept as a fallback that auto-enables
+   ONCE per session if the server rejects the current format (detects "format
+   it using"/"not valid"/"not supported" in ERROR frames), or can be forced
+   with `--dart-define=TARTEEL_AUDIO_AS_JSON=true`
+   (`AppConstants.tarteelAudioAsJson`). Also corrected the stale handshake
+   docstring (type is INT 1, not a string). Could NOT live-probe
+   wss://voice-v2.tarteel.io from this sandbox (network policy 403) — verify
+   on device: diag should show `tarteelRx: STATES_UPDATE`/`PARTIAL_TRANSCRIPT`
+   and words revealing live.
+3. **APK builds moved to GitHub Actions (user request: stop building on the
+   VPS)** — added `.github/workflows/build-apk.yml`: manual trigger
+   (workflow_dispatch) with inputs use_tarteel_live / bump / commit_release /
+   notes_en. It reuses `scripts/release_app.sh` (same bump + app_release.json
+   logic), pins Flutter 3.27.4 + Java 17, uploads the APK as an artifact, and
+   (by default) commits `releases/app-release.apk` + bumped metadata back to
+   the branch — so the VPS deploy step becomes just `git pull` in the repo dir
+   (releases/ is bind-mounted into core-api; OTA picks it up with no restart).
+   REQUIRED SETUP: add repo secret `TARTEEL_LIVE_TOKEN` (Settings → Secrets →
+   Actions) — the workflow warns if it's missing on a Tarteel build. The
+   Tarteel DRF token must no longer be pasted into shell commands.
+   NOTE: next Tarteel build via CI ships the binary-WAV fix — bump lands on
+   top of v1.0.46+60.
 
 ## VPS MIGRATION CHECKLIST (do these when NEW_VPS_IP is known)
 Fresh VPS host. Nothing carries over automatically — re-create everything.

@@ -1,0 +1,102 @@
+# Builds the release APK in GitHub Actions instead of on the VPS.
+#
+# Trigger it manually from the Actions tab (workflow_dispatch). It reuses
+# scripts/release_app.sh, so the version bump + releases/app_release.json
+# update behave exactly like a VPS build. The built APK is:
+#   1. uploaded as a workflow artifact (always), and
+#   2. committed back to the branch as releases/app-release.apk together with
+#      the bumped pubspec.yaml + app_release.json (when commit_release=true),
+#      so the VPS only needs `git pull` to serve the new OTA build from
+#      /v1/app/download — no Flutter/Android SDK needed on the VPS anymore.
+#
+# Required repo secret (Settings → Secrets and variables → Actions):
+#   TARTEEL_LIVE_TOKEN — the Tarteel DRF token baked into Tarteel-live builds.
+name: Build APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      use_tarteel_live:
+        description: "Route live recitation through Tarteel (false = own VPS backend)"
+        type: choice
+        options: ["true", "false"]
+        default: "true"
+      bump:
+        description: "Bump version_code before building"
+        type: boolean
+        default: true
+      commit_release:
+        description: "Commit APK + metadata back to this branch (VPS then just git-pulls)"
+        type: boolean
+        default: true
+      notes_en:
+        description: "Release notes (English) for app_release.json"
+        type: string
+        default: ""
+
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Pinned to the minimum the project declares (mobile/pubspec.yaml
+      # requires flutter >=3.27.0). Some plugins still use the old Kotlin
+      # Gradle Plugin, so bump this deliberately, not automatically.
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.27.4"
+          channel: stable
+          cache: true
+
+      - name: Build release APK (release_app.sh)
+        env:
+          USE_TARTEEL_LIVE: ${{ inputs.use_tarteel_live }}
+          TARTEEL_LIVE_TOKEN: ${{ secrets.TARTEEL_LIVE_TOKEN }}
+          BUMP: ${{ inputs.bump }}
+          NOTES_EN: ${{ inputs.notes_en }}
+        run: |
+          if [ "$USE_TARTEEL_LIVE" = "true" ] && [ -z "$TARTEEL_LIVE_TOKEN" ]; then
+            echo "::warning::TARTEEL_LIVE_TOKEN secret is empty — Tarteel handshake will be anonymous"
+          fi
+          ARGS=(--use-tarteel-live "$USE_TARTEEL_LIVE")
+          if [ "$BUMP" = "true" ]; then ARGS+=(--bump); fi
+          if [ -n "$NOTES_EN" ]; then ARGS+=(--notes-en "$NOTES_EN"); fi
+          ./scripts/release_app.sh "${ARGS[@]}"
+
+      - name: Read built version
+        id: version
+        run: |
+          VER=$(grep -E '^version:' mobile/pubspec.yaml | sed 's/version: *//')
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "Built version: $VER"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qari-app-release-${{ steps.version.outputs.version }}
+          path: releases/app-release.apk
+          if-no-files-found: error
+
+      - name: Commit APK + metadata back to branch
+        if: ${{ inputs.commit_release }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add releases/app-release.apk releases/app_release.json mobile/pubspec.yaml
+          if git diff --cached --quiet; then
+            echo "Nothing to commit (APK unchanged)."
+            exit 0
+          fi
+          git commit -m "build(release): v${{ steps.version.outputs.version }} via GitHub Actions (tarteel=${{ inputs.use_tarteel_live }})"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
