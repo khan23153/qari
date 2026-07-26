@@ -136,7 +136,13 @@ class _LessonPlayerPageState extends ConsumerState<LessonPlayerPage> {
           onNext: _nextScreen,
         );
       case _ScreenType.quiz:
+        // ValueKey forces a FRESH QuizWidget state per question. Without it
+        // Flutter reuses the previous question's State when advancing, so
+        // question 2 rendered with question 1's selection already applied
+        // ("auto-selected answer") and, being already answered, never
+        // re-armed its advance timer — the player got stuck.
         return QuizWidget(
+          key: ValueKey(screen.quiz!.id),
           question: screen.quiz!,
           onAnswered: _onQuizAnswered,
         );
