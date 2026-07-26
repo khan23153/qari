@@ -17,6 +17,7 @@ import '../../../onboarding/presentation/pages/language_select_page.dart';
 import '../../../auth/presentation/pages/login_page.dart';
 import '../../../home/presentation/pages/home_page.dart';
 import '../../../../data/repositories/user_repository.dart';
+import '../../../../data/models/user_model.dart';
 
 /// S11: Profile/Settings — streak calendar, badges grid, stats,
 /// language switcher, qari picker, font-size slider with live Arabic preview,
@@ -56,18 +57,45 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     _loadProfileAndStats();
   }
 
-  /// Fetches the real profile + stats from the backend so the Profile screen
-  /// shows the same source of truth as Home (zero for brand-new accounts,
-  /// live numbers for returning users). Falls back to zeros on failure.
+  /// Shows the LOCALLY CACHED name instantly, then refreshes profile + stats
+  /// from the backend with a short timeout. The name is never blocked on the
+  /// network (the earlier version awaited /me + /me/stats sequentially with
+  /// the 90s Dio timeout, which left the header spinning for minutes whenever
+  /// the VPS was slow — the "name not showing, only loading" bug).
   Future<void> _loadProfileAndStats() async {
+    // 1) Local-first: cached display name, else the email local-part.
+    final storage = LocalStorageService();
+    final cachedName = await storage.getDisplayName();
+    final cachedEmail = await storage.getUserEmail();
+    if (mounted) {
+      setState(() {
+        _displayName = (cachedName?.isNotEmpty == true)
+            ? cachedName!
+            : (cachedEmail?.split('@').first ?? '');
+      });
+    }
+
+    // 2) Network refresh — parallel, bounded to 10s so the stats spinner can
+    // never hang the screen. Failures keep the zero defaults.
     try {
-      final user = await UserRepository().getProfile();
-      final stats = await UserRepository().getStats();
+      final results = await Future.wait([
+        UserRepository().getProfile(),
+        UserRepository().getStats(),
+      ]).timeout(const Duration(seconds: 10));
+      final user = results[0] as UserModel;
+      final stats = results[1] as StatsModel;
+      final freshName = user.displayName?.isNotEmpty == true
+          ? user.displayName!
+          : (user.email?.split('@').first ?? '');
+      if (freshName.isNotEmpty) {
+        await storage.setDisplayName(freshName);
+      }
+      if (user.email?.isNotEmpty == true) {
+        await storage.setUserEmail(user.email);
+      }
       if (mounted) {
         setState(() {
-          _displayName = user.displayName?.isNotEmpty == true
-              ? user.displayName!
-              : (user.email?.split('@').first ?? '');
+          if (freshName.isNotEmpty) _displayName = freshName;
           _totalXp = stats.totalXp;
           _currentStreak = stats.currentStreak;
           _lessonsCompleted = stats.lessonsCompleted;

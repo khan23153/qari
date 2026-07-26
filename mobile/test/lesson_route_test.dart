@@ -22,14 +22,16 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final harakat = find.text('Harakat (Vowel Marks)');
+    final harakat = find.text('Harakat (Short Vowels)');
     expect(harakat, findsOneWidget);
     await tester.tap(harakat);
     await tester.pumpAndSettle();
 
-    // Advance past concept screen.
-    final cont = find.text('Continue');
-    if (cont.evaluate().isNotEmpty) {
+    // Advance past all concept screens (the lesson has several) until the
+    // first quiz — a fill-blank with a TextField — appears.
+    for (var i = 0; i < 10; i++) {
+      final cont = find.text('Continue');
+      if (cont.evaluate().isEmpty) break;
       await tester.tap(cont.first);
       await tester.pumpAndSettle();
     }

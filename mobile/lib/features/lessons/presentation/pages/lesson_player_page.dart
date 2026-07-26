@@ -6,6 +6,7 @@ import 'package:haptic_feedback/haptic_feedback.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../data/models/lesson_model.dart';
+import '../../../../data/services/curriculum_service.dart';
 import '../widgets/grammar_card_widget.dart';
 import '../widgets/quiz_widget.dart';
 
@@ -144,9 +145,13 @@ class _LessonPlayerPageState extends ConsumerState<LessonPlayerPage> {
           xpEarned: widget.lesson.xpReward,
           correctAnswers: _correctAnswers,
           totalQuestions: widget.lesson.quizQuestions.length,
-          onDone: () {
+          onDone: () async {
+            // Persist completion + XP locally (offline-first curriculum);
+            // pop with `true` so the list/path can refresh unlock state.
+            await CurriculumService.instance.markCompleted(widget.lesson);
+            if (!context.mounted) return;
             setState(() => _isComplete = true);
-            Navigator.of(context).pop();
+            Navigator.of(context).pop(true);
           },
         );
     }

@@ -1,0 +1,40 @@
+# Fast feedback for mobile changes: static analysis + unit/widget tests.
+# The full APK build stays in build-apk.yml (manual); this runs on every push
+# that touches the Flutter app so compile errors surface in ~3 minutes.
+name: Flutter CI
+
+on:
+  push:
+    paths:
+      - "mobile/**"
+      - ".github/workflows/flutter-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Pub get
+        working-directory: mobile
+        run: flutter pub get
+      - name: Analyze (errors only)
+        working-directory: mobile
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Tests
+        working-directory: mobile
+        # Some legacy tests are network/timer bound; run the stable suites.
+        run: |
+          flutter test \
+            test/ayah_widget_visibility_test.dart \
+            test/recitation_screen_test.dart \
+            test/recitation_word_mapping_test.dart \
+            test/live_recitation_test.dart
