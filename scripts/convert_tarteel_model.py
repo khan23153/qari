@@ -10,7 +10,12 @@ CLI (provided by the ``ctranslate2`` package) and writes the optimized model to
 at ``/app/models/tarteel-ct2-base``).
 
 Requirements (only needed at conversion time, not at inference):
-    pip install "transformers==4.39.3" torch ctranslate2
+    pip install -U ctranslate2 transformers tokenizers torch
+    # ctranslate2 and transformers versions must move TOGETHER: a new ct2
+    # (>=4.8) passes `dtype=` to from_pretrained, which transformers older
+    # than ~4.56 rejects ("unexpected keyword argument 'dtype'"). Either
+    # upgrade both to latest, or pin the known-good old pair
+    # (ctranslate2==4.3.1 + transformers==4.39.3).
 
 Usage:
     python scripts/convert_tarteel_model.py
