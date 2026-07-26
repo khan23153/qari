@@ -10,7 +10,7 @@ class AppConstants {
   /// Production backend is hosted on the VPS and reached over HTTPS on :443
   /// using its public IP. The app accepts the self-signed cert (see
   /// ApiClient) so this works without a public CA:
-  ///   https://20.197.40.13/v1  →  /v1/auth/signup
+  ///   https://137.23.42.171/v1  →  /v1/auth/signup
   ///
   /// `api.qari.app` does not currently resolve, so the IP is used directly.
   /// The `/v1` prefix is required (the backend mounts every route under `/v1`).
@@ -21,7 +21,7 @@ class AppConstants {
   static String get baseUrl {
     const env = String.fromEnvironment('API_BASE_URL');
     if (env.isNotEmpty) return env;
-    return 'https://20.197.40.13/v1';
+    return 'https://137.23.42.171/v1';
   }
 
   /// WebSocket base URL for real-time recitation streaming.
@@ -51,7 +51,7 @@ class AppConstants {
 
   /// Host whose self-signed TLS cert the app trusts (see ApiClient / the
   /// streaming service's custom HttpClient). Matches [baseUrl]'s VPS host.
-  static const String trustedSelfSignedHost = '20.197.40.13';
+  static const String trustedSelfSignedHost = '137.23.42.171';
   /// Public Quran audio CDN (everyayah.com) — hosts per-ayah MP3s for many
   /// reciters. The previous `audio.qari.app` host does not resolve (it produced
   /// the "0 source error" / "Audio not available" toast in the reader).
