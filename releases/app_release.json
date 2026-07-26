@@ -1,11 +1,11 @@
 {
   "version": "1.0.46",
-  "version_code": 62,
+  "version_code": 63,
   "min_version": "1.0.0",
   "min_version_code": 1,
   "apk_url": "https://137.23.42.171/v1/app/download",
   "force_update": false,
-  "notes_en": "New: Learn Quran hub with 60 vocabulary levels, grammar course with quizzes, name display fix, faster and more reliable login.",
+  "notes_en": "Server moved to a new address — this update reconnects the app. Also includes the Learn Quran hub and name fixes.",
   "notes_ur": "لائیو تلاوت اب Tarteel کی وائس API استعمال کرتی ہے۔",
   "notes_hi": "लाइव रिकिटेशन अब Tarteel की वॉयस API का उपयोग करता है।",
   "data_version": 1
