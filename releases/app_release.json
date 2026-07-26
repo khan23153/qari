@@ -6,7 +6,7 @@
   "apk_url": "https://137.23.42.171/v1/app/download",
   "force_update": false,
   "notes_en": "Server moved to a new address — this update reconnects the app. Also includes the Learn Quran hub and name fixes.",
-  "notes_ur": "لائیو تلاوت اب Tarteel کی وائس API استعمال کرتی ہے۔",
-  "notes_hi": "लाइव रिकिटेशन अब Tarteel की वॉयस API का उपयोग करता है।",
+  "notes_ur": "سرور نئے پتے پر منتقل ہو گیا — یہ اپڈیٹ ایپ کو دوبارہ جوڑتی ہے۔ نیا \"قرآن سیکھیں\" سیکشن اور نام کی درستگی بھی شامل ہے۔",
+  "notes_hi": "सर्वर नए पते पर चला गया — यह अपडेट ऐप को फिर से जोड़ता है। नया \"क़ुरान सीखें\" सेक्शन और नाम की समस्या का समाधान भी शामिल है।",
   "data_version": 1
 }
