@@ -44,12 +44,10 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      # Pinned to the minimum the project declares (mobile/pubspec.yaml
-      # requires flutter >=3.27.0). Some plugins still use the old Kotlin
-      # Gradle Plugin, so bump this deliberately, not automatically.
+      # Latest stable: the dependency set needs a modern Dart (retrofit 4.9.x
+      # requires Dart >=3.8, i.e. Flutter 3.32+), so an old pin fails pub get.
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.27.4"
           channel: stable
           cache: true
 
