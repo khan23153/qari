@@ -31,12 +31,12 @@ def _get_redis() -> redis.Redis:
     return _redis
 
 
-@router.post("/tarteel_debug_echo")
-async def tarteel_debug_echo(request: Request) -> dict:
-    """DEV-ONLY: logs a raw frame received from Tarteel's live voice API so we
-    can reverse-engineer its (encrypted) protocol without pulling logs off the
-    phone. The Flutter app POSTs every incoming Tarteel WS frame here. Harmless
-    no-op; returns 200. Remove once the word-event schema is mapped.
+@router.post("/debug_echo")
+@router.post("/tarteel_debug_echo")  # legacy path — older APKs in the field
+async def debug_echo(request: Request) -> dict:
+    """DEV-ONLY: logs whatever the app POSTs here (e.g. native crash stacks) so
+    it can be inspected from the server logs without pulling logs off the
+    phone. Harmless no-op; returns 200.
     """
     try:
         body = await request.body()
@@ -44,15 +44,15 @@ async def tarteel_debug_echo(request: Request) -> dict:
         if "application/json" in ctype:
             try:
                 parsed = json.loads(body)
-                logger.info("tarteel_echo.json", size=len(body), payload=parsed)
+                logger.info("debug_echo.json", size=len(body), payload=parsed)
             except Exception:
-                logger.info("tarteel_echo.text", size=len(body), body=body.decode("utf-8", "replace"))
+                logger.info("debug_echo.text", size=len(body), body=body.decode("utf-8", "replace"))
         else:
             # Binary frame — log a hex preview so we can see the structure.
             preview = body[:128].hex()
-            logger.info("tarteel_echo.binary", size=len(body), hex_preview=preview)
+            logger.info("debug_echo.binary", size=len(body), hex_preview=preview)
     except Exception as e:  # never fail the caller
-        logger.warning("tarteel_echo.error", error=str(e))
+        logger.warning("debug_echo.error", error=str(e))
     return {"ok": True}
 
 

@@ -32,7 +32,7 @@ dependencies:
   just_audio: ^0.9.38
   audio_session: ^0.1.18
 
-  # Networking (Tarteel debug echo)
+  # Networking (native-crash debug echo)
   http: ^1.2.0
 
   # Recording

@@ -7,7 +7,6 @@ import 'dart:typed_data';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/constants/app_constants.dart';
@@ -121,31 +120,9 @@ class StreamingRecitationService {
   int get audioOnDataCount => _audioOnDataCount;
   String? _lastFrameType;
   String? get lastFrameType => _lastFrameType;
-  /// Last raw (pre-parse) event type Tarteel sent — surfaced in the diag so a
-  /// rejected/empty auth shows up as `lastRx: <event>` (or `lastRx: <none>`).
-  String? _tarteelLastRx;
-  String? get tarteelLastRx => _tarteelLastRx;
-  /// Full raw payload of the last Tarteel ERROR/unknown frame — surfaced in the
-  /// diag so the user can paste Tarteel's actual rejection reason without us
-  /// needing the (often-failing) VPS echo round-trip.
-  String? _tarteelLastError;
-  String? get tarteelLastError => _tarteelLastError;
-
-  /// Audio transport mode for Tarteel. false = raw binary WAV frames (the
-  /// device-verified protocol, default); true = `{event,data}` JSON envelope
-  /// (fallback). Auto-flips ONCE per session if the server rejects the current
-  /// format (see _onSocketData), so a Tarteel-side transport change degrades
-  /// to a retry instead of a dead session.
-  bool _tarteelSendJsonEnvelope = AppConstants.tarteelAudioAsJson;
-  bool _tarteelFormatSwitched = false;
   String? _audioOnDataError;
   String? get audioOnDataError => _audioOnDataError;
 
-  /// Effective sample rate of the audio we SEND to the server (after the native
-  /// 44.1kHz capture is software-resampled to 16kHz). Always 16000 for the live
-  /// stream — surfaced in the diag as `sentRate` so the user isn't confused by
-  /// the native `rate=44100` capture reading.
-  static const int sentSampleRate = 16000;
 
   /// Result of the Android audio-focus request (via `audio_session`). `null`
   /// until the session is activated; `false` means the OS denied focus, which
@@ -194,8 +171,6 @@ class StreamingRecitationService {
     _audioOnDataCount = 0;
     _lastFrameType = null;
     _audioOnDataError = null;
-    _tarteelLastRx = null;
-    _tarteelLastError = null;
     _micError = null;
     _audioFocusGranted = null;
     _firstChunkAt = null;
@@ -211,18 +186,12 @@ class StreamingRecitationService {
     _audioSession = null;
 
     // --- Connect the WebSocket (trust the VPS self-signed cert) ---
-    final useTarteel = AppConstants.useTarteelLiveApi;
-    final wsUrl = useTarteel
-        ? AppConstants.tarteelLiveWsUrl
-        : AppConstants.recitationStreamWsUrl;
-    // Tarteel runs behind Cloudflare with a valid CA, so we don't need the
-    // self-signed bypass there — but the same permissive client is harmless.
+    final wsUrl = AppConstants.recitationStreamWsUrl;
     final httpClient = HttpClient()
       ..badCertificateCallback =
           (cert, host, port) => host == AppConstants.trustedSelfSignedHost;
     try {
-      debugPrint('[Streaming] connecting to $wsUrl '
-          '(tarteel=$useTarteel)');
+      debugPrint('[Streaming] connecting to $wsUrl');
       _socket = await WebSocket.connect(
         wsUrl,
         customClient: httpClient,
@@ -246,9 +215,6 @@ class StreamingRecitationService {
       },
       onDone: () {
         debugPrint('[Streaming] WS CLOSED (done). state=${_state.name}');
-        if (AppConstants.useTarteelLiveApi) {
-          _tarteelLastRx = 'WS_CLOSED';
-        }
         if (_state != LiveConnectionState.finishing) {
           _setState(LiveConnectionState.closed);
         }
@@ -265,22 +231,17 @@ class StreamingRecitationService {
     final List<List<int>> refs = ayahRefs == null
         ? []
         : ayahRefs.map((r) => [r.$1, r.$2]).toList();
-    if (useTarteel) {
-      await _appVersion();
-      _sendTarteelHandshake(surahNumber, ayahNumber, words);
-    } else {
-      _socket!.add(jsonEncode({
-        'type': 'start',
-        'surah_number': surahNumber,
-        'ayah_number': ayahNumber,
-        'ayah_from': ayahFrom ?? ayahNumber,
-        'ayah_to': ayahTo ?? ayahNumber,
-        if (refs.isNotEmpty) 'ayahs': refs,
-        if (words != null && words.isNotEmpty) 'words': words,
-        'mode': memorizationMode ? 'memorization' : 'tracking',
-        'sample_rate': AppConstants.liveRecitationSampleRate,
-      }));
-    }
+    _socket!.add(jsonEncode({
+      'type': 'start',
+      'surah_number': surahNumber,
+      'ayah_number': ayahNumber,
+      'ayah_from': ayahFrom ?? ayahNumber,
+      'ayah_to': ayahTo ?? ayahNumber,
+      if (refs.isNotEmpty) 'ayahs': refs,
+      if (words != null && words.isNotEmpty) 'words': words,
+      'mode': memorizationMode ? 'memorization' : 'tracking',
+      'sample_rate': AppConstants.liveRecitationSampleRate,
+    }));
     debugPrint('[Streaming] sent start handshake '
         '(surah=$surahNumber, ayah=$ayahNumber, refs=${refs.length}, '
         'clientWords=${(words?.length) ?? 0})');
@@ -352,81 +313,6 @@ class StreamingRecitationService {
       debugPrint('[Streaming] mic foreground service stop failed (non-fatal): $e');
     }
   }
-
-  /// Sends the Tarteel live-voice handshake. Captured + verified schema (the
-  /// client→Tarteel START_STREAM frame):
-  ///   {"type":1,"event":"START_STREAM","data":{ audioConfig, authToken,
-  ///    deviceId, devicePlatform, recitationMode:"FOLLOW_ALONG",
-  ///    isMemorization, isDiacritized, shouldCollectAudio, ... }}
-  /// `type` is the INTEGER 1 (a string "START_STREAM" type makes Tarteel
-  /// reply "server has not been configured"). The DRF token goes in
-  /// `data.authToken`. Audio frames → raw BINARY WAV on the socket (see
-  /// _flushAudio). Server replies → TEXT `{"event":...,"data":{...}}` frames
-  /// (PARTIAL_TRANSCRIPT / STATES_UPDATE events).
-  /// The reference word list is NOT sent to Tarteel (it tracks against its own
-  /// internal mushaf); we keep our local [_words] for the results grid.
-  static String? _cachedAppVersion;
-  static Future<String> _appVersion() async {
-    if (_cachedAppVersion != null) return _cachedAppVersion!;
-    try {
-      final info = await PackageInfo.fromPlatform();
-      _cachedAppVersion = '${info.version}+${info.buildNumber}';
-    } catch (_) {
-      _cachedAppVersion = '1.0.45';
-    }
-    return _cachedAppVersion!;
-  }
-
-  void _sendTarteelHandshake(
-    int surahNumber,
-    int ayahNumber,
-    List<String>? words,
-  ) {
-    final token = AppConstants.tarteelLiveToken;
-    // Tarteel's protocol uses integer `type` codes (audio frame is `type:3`),
-    // so the init/config frame is `type:1`. Send it as such (with the config
-    // under `data`) so the server registers the session before audio arrives.
-    final startFrame = {
-      'type': 1,
-      'event': 'START_STREAM',
-      'data': {
-        'appVersion': _cachedAppVersion ?? '1.0.45',
-        'audioConfig': {
-          'fileFormat': 'WAV',
-          'channels': 1,
-          'sampleRate': AppConstants.liveRecitationSampleRate,
-          'modelName': null,
-          'languageCode': 'ar-BH',
-          'enableInterimResults': true,
-          'enableWordTimeOffsets': true,
-          'maxAlternatives': 1,
-        },
-        if (token.isNotEmpty) 'authToken': token,
-        'deviceId': 'qari-app',
-        'devicePlatform': 'android',
-        'isMemorization': false,
-        'isDiacritized': true,
-        'isDualModel': false,
-        'isInitialTargetRangeStrict': false,
-        'isNewSttServer': true,
-        'isStartPositionStrict': null,
-        'startPosition': null,
-        'endPosition': null,
-        'recitationMode': 'FOLLOW_ALONG',
-        'isEphemeral': null,
-        'shouldCollectAudio': true,
-        'shouldLabelAudio': true,
-        'userId': null,
-        'sessionGroupId': null,
-      },
-    };
-    _socket!.add(jsonEncode(startFrame));
-    debugPrint('[Streaming] sent Tarteel START_STREAM '
-        '(surah=$surahNumber, ayah=$ayahNumber, '
-        'authToken=${token.isNotEmpty ? 'set' : 'empty'})');
-  }
-
-  /// Requests Android audio focus + configures a speech/record audio session so
 
   /// Requests Android audio focus + configures a speech/record audio session so
   /// the OS routes the mic to this app. Non-fatal: if it fails we still try to
@@ -532,36 +418,6 @@ class StreamingRecitationService {
     }
   }
 
-  /// Wraps raw 16-bit PCM mono samples in a minimal WAV container. Tarteel's
-  /// START_STREAM `audioConfig.fileFormat` is "WAV", so it expects WAV bytes
-  /// (not bare PCM16) in the audio frames.
-  static Uint8List _wrapWav(Uint8List pcm16, int sampleRate) {
-    final numChannels = 1;
-    final bytesPerSample = 2;
-    final byteRate = sampleRate * numChannels * bytesPerSample;
-    final blockAlign = numChannels * bytesPerSample;
-    final dataLen = pcm16.length;
-    final header = ByteData(44);
-    final ascii = const AsciiCodec();
-    header.setUint32(0, 0x52494646, Endian.big); // "RIFF"
-    header.setUint32(4, 36 + dataLen, Endian.little);
-    header.setUint32(8, 0x57415645, Endian.big); // "WAVE"
-    header.setUint32(12, 0x666d7420, Endian.big); // "fmt "
-    header.setUint32(16, 16, Endian.little); // PCM fmt chunk size
-    header.setUint16(20, 1, Endian.little); // PCM
-    header.setUint16(22, numChannels, Endian.little);
-    header.setUint32(24, sampleRate, Endian.little);
-    header.setUint32(28, byteRate, Endian.little);
-    header.setUint16(32, blockAlign, Endian.little);
-    header.setUint16(34, 16, Endian.little); // bits/sample
-    header.setUint32(36, 0x64617461, Endian.big); // "data"
-    header.setUint32(40, dataLen, Endian.little);
-    final out = BytesBuilder(copy: false);
-    out.add(header.buffer.asUint8List());
-    out.add(pcm16);
-    return out.toBytes();
-  }
-
   /// Sends any buffered PCM16 audio to the server as a single binary frame.
   /// Flushing on a fixed cadence (not per raw microphone chunk) guarantees the
   /// server receives non-empty, real-duration windows.
@@ -571,38 +427,9 @@ class StreamingRecitationService {
     if (sock != null && sock.readyState == WebSocket.open) {
       final frame = Uint8List.fromList(_audioBuffer.takeBytes());
       _totalSentBytes += frame.length;
-      if (AppConstants.useTarteelLiveApi) {
-        // Tarteel audio transport is RAW BINARY WAV frames on the socket —
-        // this is the device-verified protocol (v1.0.44+55: words tracked
-        // live). TEXT frames are parsed by the server as {event,data} JSON
-        // envelopes, which is exactly why the earlier `{"type":3,...}` TEXT
-        // frame was rejected with "format it using {event: [eventName],
-        // data: [data]}" — the fix is NOT to wrap audio in that envelope
-        // (audio is not an event; `{"event":"AUDIO",...}` gets "event AUDIO
-        // received is not supported"), it is to send binary. The JSON
-        // envelope is kept only as a fallback (auto-enabled at runtime if
-        // the server ever rejects binary, or forced via
-        // --dart-define=TARTEEL_AUDIO_AS_JSON=true).
-        final wav = _wrapWav(frame, AppConstants.liveRecitationSampleRate);
-        if (_tarteelSendJsonEnvelope) {
-          final b64 = base64Encode(wav);
-          sock.add(jsonEncode({
-            'event': AppConstants.tarteelAudioEvent,
-            'data': b64,
-          }));
-          debugPrint('[Tarteel] FLUSH #$_chunkCount -> sent JSON audio frame '
-              '(wav=${wav.length} b64=${b64.length}, totalSent=$_totalSentBytes)');
-        } else {
-          sock.add(wav);
-          debugPrint('[Tarteel] FLUSH #$_chunkCount -> sent BINARY WAV frame '
-              '(${wav.length} bytes, totalSent=$_totalSentBytes)');
-        }
-        _totalSentBytes += wav.length;
-      } else {
-        sock.add(frame);
-        debugPrint('[Streaming] FLUSH #$_chunkCount -> sent ${frame.length} bytes '
-            '(totalSent=$_totalSentBytes)');
-      }
+      sock.add(frame);
+      debugPrint('[Streaming] FLUSH #$_chunkCount -> sent ${frame.length} bytes '
+          '(totalSent=$_totalSentBytes)');
     } else {
       debugPrint('[Streaming] FLUSH skipped: socket not open '
           '(state=${_state.name}, buffered=${_audioBuffer.length})');
@@ -610,102 +437,14 @@ class StreamingRecitationService {
     }
   }
 
-  /// Fire-and-forget echo of a raw Tarteel frame to our VPS debug endpoint so
-  /// we can read the (encrypted) protocol from the server logs. Never blocks or
-  /// throws into the caller. No-op unless we're on the Tarteel live path.
-  /// Uses a self-signed-cert-bypassing HttpClient for our VPS host (the plain
-  /// `http` client would reject the self-signed TLS and the echo would fail
-  /// silently — which is why no frames ever reached the server logs).
-  final HttpClient _echoHttpClient = HttpClient()
-    ..badCertificateCallback =
-        (cert, host, port) => host == AppConstants.trustedSelfSignedHost;
-
-  void _echoTarteelFrame(dynamic frame) {
-    if (!AppConstants.useTarteelLiveApi) return;
-    final url = AppConstants.tarteelDebugEchoUrl;
-    if (url.isEmpty) return;
-    unawaited(() async {
-      try {
-        final uri = Uri.parse(url);
-        final req = await _echoHttpClient.postUrl(uri)
-          ..headers.contentType = frame is String
-              ? ContentType.json
-              : ContentType.binary;
-        if (frame is String) {
-          req.write(frame);
-        } else {
-          final bytes = frame is Uint8List ? frame : Uint8List.fromList(frame as List<int>);
-          req.add(bytes);
-        }
-        await req.close();
-      } catch (e) {
-        debugPrint('[Tarteel] echo failed (non-fatal): $e');
-      }
-    }());
-  }
-
   void _onSocketData(dynamic data) {
-    if (AppConstants.useTarteelLiveApi) {
-      // Store the RAW frame preview (event name + a snippet of the payload) so
-      // the diag can surface Tarteel's actual rejection reason on-screen without
-      // relying on the VPS echo round-trip (which is failing in the field).
-      if (data is String) {
-        try {
-          final j = jsonDecode(data) as Map<String, dynamic>;
-          final ev = j['event']?.toString() ?? j['type']?.toString() ?? 'json';
-          final snippet = data.length > 200 ? data.substring(0, 200) : data;
-          _tarteelLastRx = '$ev · $snippet';
-        } catch (_) {
-          _tarteelLastRx = 'text(${data.length}): ${data.length > 120 ? data.substring(0, 120) : data}';
-        }
-      } else {
-        final len = data is Uint8List ? data.length : (data as List).length;
-        _tarteelLastRx = 'bin($len)';
-      }
-    }
     if (data is! String) {
-      // Tarteel's voice API sends encrypted/proprietary frames (we captured
-      // `uWebSockets v20` but the payloads are not plain JSON). Echo the raw
-      // bytes to our VPS debug endpoint so we can reverse-engineer the protocol
-      // from the server logs (no need to pull logs off the phone). For our own
-      // backend this branch is unexpected and safely ignored.
-      if (AppConstants.useTarteelLiveApi) {
-        final bytes = data is Uint8List ? data : Uint8List.fromList(data as List<int>);
-        debugPrint('[Tarteel] RX binary frame (${bytes.length} bytes): '
-            '${bytes.length > 64 ? bytes.sublist(0, 64) : bytes}');
-        _echoTarteelFrame(bytes);
-      } else {
-        debugPrint('[Streaming] received non-string frame (ignored).');
-      }
+      debugPrint('[Streaming] received non-string frame (ignored).');
       return;
     }
     try {
       final json = jsonDecode(data) as Map<String, dynamic>;
-      if (AppConstants.useTarteelLiveApi) _echoTarteelFrame(data);
-      // Capture Tarteel's rejection reason directly so it can be shown in the
-      // diag without relying on the (often-failing) VPS echo round-trip.
-      final ev = json['event']?.toString() ?? json['type']?.toString();
-      if (AppConstants.useTarteelLiveApi &&
-          (ev == 'ERROR' || ev == 'error' || ev == 'UNKNOWN' || ev == 'FATAL' || ev == null)) {
-        _tarteelLastError = data.length > 300 ? data.substring(0, 300) : data;
-        debugPrint('[Tarteel] RX error/unknown frame: $_tarteelLastError');
-        // Audio-format rejection → switch transport once (binary <-> JSON
-        // envelope) and keep streaming, instead of erroring every flush.
-        final lower = data.toLowerCase();
-        final isFormatError = lower.contains('format it using') ||
-            lower.contains('is not valid') ||
-            lower.contains('is not supported');
-        if (isFormatError && !_tarteelFormatSwitched) {
-          _tarteelFormatSwitched = true;
-          _tarteelSendJsonEnvelope = !_tarteelSendJsonEnvelope;
-          debugPrint('[Tarteel] audio format rejected -> switching transport '
-              'to ${_tarteelSendJsonEnvelope ? 'JSON envelope' : 'binary WAV'}');
-        }
-      }
-      final events = AppConstants.useTarteelLiveApi
-          ? RecitationStreamEvent.fromTarteelJson(json)
-          : [RecitationStreamEvent.fromJson(json)];
-      for (final event in events) {
+      final event = RecitationStreamEvent.fromJson(json);
       if (event.type == RecitationStreamEventType.word) {
         debugPrint('[Streaming] RX word event idx=${event.wordIndex} '
             'status=${event.status.name} expected=${event.expected}');
@@ -721,7 +460,6 @@ class StreamingRecitationService {
       if (event.type == RecitationStreamEventType.finalResult) {
         _finalCompleter?.complete(event);
         _finalCompleter = null;
-      }
       }
     } catch (e) {
       debugPrint('[Streaming] decode error: $e');
@@ -794,19 +532,7 @@ class StreamingRecitationService {
 
     RecitationStreamEvent? finalEvent;
     try {
-      if (AppConstants.useTarteelLiveApi) {
-        // Tarteel's voice API does NOT emit a `final` event in our shape (and
-        // ignores our `type:stop` frame), so blocking on it would hang the
-        // "Finalizing" screen for the full [timeout]. Instead we resolve almost
-        // immediately with null and let the page synthesize a result from the
-        // words revealed live. A short grace period still lets any trailing
-        // word events arrive.
-        await Future.delayed(const Duration(milliseconds: 800));
-        _finalCompleter?.complete(null);
-        finalEvent = null;
-      } else {
-        finalEvent = await _finalCompleter!.future.timeout(timeout);
-      }
+      finalEvent = await _finalCompleter!.future.timeout(timeout);
     } on TimeoutException {
       debugPrint('[Streaming] TIMEOUT waiting for server final result '
           '(server did not respond in ${timeout.inSeconds}s).');

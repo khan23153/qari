@@ -2209,6 +2209,46 @@ Branch: `claude/memory-latest-session-7pdqik` (remote CC session, not the VPS).
    Tarteel DRF token must no longer be pasted into shell commands.
    NOTE: next Tarteel build via CI ships the binary-WAV fix — bump lands on
    top of v1.0.46+60.
+   [SUPERSEDED same day — see item 4: Tarteel was removed entirely; the
+   workflow no longer has Tarteel inputs and no TARTEEL_LIVE_TOKEN secret is
+   needed.]
+4. **TARTEEL REMOVED ENTIRELY (user decision): live tracking = our own
+   backend + train our own model.** The user chose to drop the Tarteel proxy
+   and invest in our own `/ws/recitation/stream` engine.
+   - MOBILE: deleted all Tarteel client code — `AppConstants` Tarteel block
+     (useTarteelLiveApi / tarteelLiveWsUrl / tarteelLiveToken /
+     tarteelAudioEvent / tarteelAudioAsJson / tarteelDebugEchoUrl → replaced
+     by a generic `debugEchoUrl` for the native-crash echo),
+     `_sendTarteelHandshake` + `_wrapWav` + Tarteel branches in
+     `streaming_recitation_service.dart` (connect/flush/RX/stop paths, echo
+     client, tarteelLastRx/-Error diag), `fromTarteelJson` +
+     `_tarteelStateCode` in `recitation_stream_event.dart`, and the Tarteel
+     cursor/branches in `live_recitation_page.dart` (word reveal is again
+     driven by the backend's word_index + `expected` text; backend
+     finalResult/error events navigate normally again).
+   - BACKEND: `/v1/recitations/tarteel_debug_echo` renamed to
+     `/v1/recitations/debug_echo` (old path kept as an alias for fielded
+     APKs). Engine unchanged: live = faster-whisper CT2 tiny @6s window,
+     batch = whisper-base — both initialized from tarteel-ai's OPEN-SOURCE
+     HF checkpoints (that stays; it's our own hosted engine, not their API).
+   - BUILD: `release_app.sh` and `build-apk.yml` no longer take Tarteel
+     flags; no TARTEEL_LIVE_TOKEN secret needed. Every new build streams to
+     our VPS backend.
+   - TRAINING PIPELINE (Tarteel-parity plan): new
+     `scripts/build_training_dataset.py` builds a fine-tuning dataset from
+     everyayah.com (the app's 5 reciters × 6236 ayahs → 16k mono WAV +
+     `manifest.jsonl`) paired with corpus Uthmani text — exactly the format
+     `ml/training/finetune_whisper.py` (already existed) consumes. Full
+     playbook in `ml/training/README.md`: build dataset → fine-tune
+     tiny (live) + base (batch) on a GPU box → convert via
+     `scripts/convert_tarteel_model.py --model /models/qari-whisper-tiny
+     --output .../qari-ct2-tiny` → point
+     `QARI_FASTERWHISPER_MODEL_DIR` at it → evaluate WER + latency before
+     shipping. Key insight: the streaming matcher is fine; live (tiny) ASR
+     accuracy on AMATEUR voices is the gap vs Tarteel — grow the dataset
+     with `tarteel-ai/everyayah` (HF) + consented user uploads.
+   - NOTE: training itself needs a GPU machine; it cannot run on the VPS or
+     in the CC sandbox.
 
 ## VPS MIGRATION CHECKLIST (do these when NEW_VPS_IP is known)
 Fresh VPS host. Nothing carries over automatically — re-create everything.

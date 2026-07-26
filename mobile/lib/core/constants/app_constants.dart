@@ -40,58 +40,13 @@ class AppConstants {
   /// Full endpoint for the live recitation streaming WebSocket.
   static String get recitationStreamWsUrl => '$wsBaseUrl/ws/recitation/stream';
 
-  // ─── Live Recitation provider (temporary Tarteel proxy) ──────────────────
-  /// When true, the live recitation stream connects to Tarteel's public
-  /// real-time voice API (wss://voice-v2.tarteel.io) instead of our own
-  /// /ws/recitation/stream backend. Used as a temporary stand-in while our
-  /// own model is improved; flip to false (or set the dart-define) to revert.
-  static bool get useTarteelLiveApi {
-    const env = bool.fromEnvironment('USE_TARTEEL_LIVE', defaultValue: false);
-    return env;
-  }
-
-  /// Tarteel real-time voice tracking WebSocket (uWebSockets, Cloudflare).
-  /// No `/v1` prefix. Plain WS upgrade; auth is sent in the first frame as a
-  /// DRF token (see StreamingRecitationService._sendTarteelHandshake).
-  static const String tarteelLiveWsUrl = 'wss://voice-v2.tarteel.io';
-
-  /// Tarteel DRF auth token for the live voice API. Override at run time with
-  ///   --dart-define=TARTEEL_LIVE_TOKEN=<hex>
-  /// (left empty by default; the handshake auth frame is skipped when empty).
-  static String get tarteelLiveToken {
-    const env = String.fromEnvironment('TARTEEL_LIVE_TOKEN');
-    return env;
-  }
-
-  /// Tarteel audio-chunk event name — ONLY used for the JSON-envelope fallback
-  /// (see [tarteelAudioAsJson]). The verified transport for audio is RAW BINARY
-  /// WAV frames on the socket; the `{event,data}` text envelope is a fallback.
-  /// Override at build time to try candidates:
-  ///   --dart-define=TARTEEL_AUDIO_EVENT=AUDIO_CHUNK
-  static String get tarteelAudioEvent {
-    const env = String.fromEnvironment('TARTEEL_AUDIO_EVENT');
-    return env.isNotEmpty ? env : 'AUDIO_CHUNK';
-  }
-
-  /// When true, Tarteel audio frames are sent as `{event,data}` JSON TEXT
-  /// frames instead of raw binary WAV. The device-verified protocol
-  /// (v1.0.44+55) is raw binary — the server parses TEXT frames as event
-  /// envelopes, which is where the "format it using {event: [eventName],
-  /// data: [data]}" rejection came from. Keep false unless Tarteel changes
-  /// their transport. Override:
-  ///   --dart-define=TARTEEL_AUDIO_AS_JSON=true
-  static bool get tarteelAudioAsJson {
-    const env = bool.fromEnvironment('TARTEEL_AUDIO_AS_JSON', defaultValue: false);
-    return env;
-  }
-
-  /// DEV-ONLY: the app POSTs every raw Tarteel frame here so we can inspect the
-  /// encrypted protocol from the VPS logs. Points at our recitation-api's
-  /// `/v1/recitations/tarteel_debug_echo` (VPS host). Empty disables echoing.
-  static String get tarteelDebugEchoUrl {
-    const env = String.fromEnvironment('TARTEEL_DEBUG_ECHO_URL');
+  /// DEV-ONLY: native crashes are POSTed here so they can be inspected from
+  /// the VPS logs without pulling device logs. Points at our recitation-api's
+  /// `/v1/recitations/debug_echo` (VPS host). Empty disables echoing.
+  static String get debugEchoUrl {
+    const env = String.fromEnvironment('DEBUG_ECHO_URL');
     if (env.isNotEmpty) return env;
-    return '$baseUrl/recitations/tarteel_debug_echo';
+    return '$baseUrl/recitations/debug_echo';
   }
 
   /// Host whose self-signed TLS cert the app trusts (see ApiClient / the

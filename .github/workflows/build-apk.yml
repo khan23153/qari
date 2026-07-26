@@ -9,18 +9,12 @@
 #      so the VPS only needs `git pull` to serve the new OTA build from
 #      /v1/app/download — no Flutter/Android SDK needed on the VPS anymore.
 #
-# Required repo secret (Settings → Secrets and variables → Actions):
-#   TARTEEL_LIVE_TOKEN — the Tarteel DRF token baked into Tarteel-live builds.
+# Live recitation streams to our own VPS backend (/ws/recitation/stream).
 name: Build APK
 
 on:
   workflow_dispatch:
     inputs:
-      use_tarteel_live:
-        description: "Route live recitation through Tarteel (false = own VPS backend)"
-        type: choice
-        options: ["true", "false"]
-        default: "true"
       bump:
         description: "Bump version_code before building"
         type: boolean
@@ -61,15 +55,10 @@ jobs:
 
       - name: Build release APK (release_app.sh)
         env:
-          USE_TARTEEL_LIVE: ${{ inputs.use_tarteel_live }}
-          TARTEEL_LIVE_TOKEN: ${{ secrets.TARTEEL_LIVE_TOKEN }}
           BUMP: ${{ inputs.bump }}
           NOTES_EN: ${{ inputs.notes_en }}
         run: |
-          if [ "$USE_TARTEEL_LIVE" = "true" ] && [ -z "$TARTEEL_LIVE_TOKEN" ]; then
-            echo "::warning::TARTEEL_LIVE_TOKEN secret is empty — Tarteel handshake will be anonymous"
-          fi
-          ARGS=(--use-tarteel-live "$USE_TARTEEL_LIVE")
+          ARGS=()
           if [ "$BUMP" = "true" ]; then ARGS+=(--bump); fi
           if [ -n "$NOTES_EN" ]; then ARGS+=(--notes-en "$NOTES_EN"); fi
           ./scripts/release_app.sh "${ARGS[@]}"
@@ -97,6 +86,6 @@ jobs:
             echo "Nothing to commit (APK unchanged)."
             exit 0
           fi
-          git commit -m "build(release): v${{ steps.version.outputs.version }} via GitHub Actions (tarteel=${{ inputs.use_tarteel_live }})"
+          git commit -m "build(release): v${{ steps.version.outputs.version }} via GitHub Actions"
           git pull --rebase origin "${GITHUB_REF_NAME}"
           git push origin "HEAD:${GITHUB_REF_NAME}"
