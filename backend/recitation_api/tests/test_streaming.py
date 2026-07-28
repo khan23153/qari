@@ -261,3 +261,26 @@ def test_silence_does_not_auto_complete_ayah(monkeypatch):
 
     asyncio.run(run())
 
+
+def test_missing_production_model_never_falls_back_to_duration_stub(monkeypatch):
+    """A missing production model must fail, not reveal words on elapsed time."""
+    monkeypatch.setattr(
+        ss,
+        "resolve_reference_words_sequence",
+        lambda ayah_refs: (REFERENCE, REFERENCE, "", REFERENCE_ENTRIES, []),
+    )
+    monkeypatch.setattr(ss.settings, "ml_use_stub", False, raising=False)
+
+    from ml.inference import faster_whisper_transcriber as fwt
+
+    class BrokenTranscriber:
+        def load(self):
+            raise RuntimeError("model directory missing")
+
+    monkeypatch.setattr(fwt, "get_transcriber", lambda: BrokenTranscriber())
+
+    sess = ss.StreamingRecitationSession(surah=1, ayah_from=1, ayah_to=1)
+    with pytest.raises(ss.LiveTranscriberUnavailable, match="temporarily unavailable"):
+        sess.load_reference()
+    assert sess._transcriber is None
+    assert sess._is_stub is True  # default flag, but no stub was installed
