@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -27,6 +29,7 @@ class _LessonPlayerPageState extends ConsumerState<LessonPlayerPage> {
   int _currentIndex = 0;
   int _correctAnswers = 0;
   bool _isComplete = false;
+  Timer? _quizAdvanceTimer;
 
   @override
   void initState() {
@@ -66,9 +69,20 @@ class _LessonPlayerPageState extends ConsumerState<LessonPlayerPage> {
       Haptics.vibrate(HapticsType.heavy);
     }
     // Auto-advance after a short delay (the quiz widget shows feedback first)
-    Future.delayed(const Duration(milliseconds: 1200), () {
-      if (mounted) _nextScreen();
+    // Keep only one transition armed and bind it to the question that was
+    // actually answered. A stale delayed callback must never skip a later
+    // question after navigation/rebuild.
+    _quizAdvanceTimer?.cancel();
+    final answeredIndex = _currentIndex;
+    _quizAdvanceTimer = Timer(const Duration(milliseconds: 1200), () {
+      if (mounted && _currentIndex == answeredIndex) _nextScreen();
     });
+  }
+
+  @override
+  void dispose() {
+    _quizAdvanceTimer?.cancel();
+    super.dispose();
   }
 
   @override

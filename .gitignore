@@ -33,6 +33,7 @@ mobile/build/
 mobile/ios/Pods/
 mobile/ios/.symlinks/
 mobile/android/.gradle/
+mobile/android/.kotlin/
 mobile/android/local.properties
 mobile/coverage/
 mobile/.fvm/
