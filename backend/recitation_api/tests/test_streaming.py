@@ -29,8 +29,24 @@ def stub_stream(monkeypatch):
     yield
 
 
-def _pcm_seconds(seconds: float, sr: int = 16000) -> bytes:
-    return b"\x00\x00" * int(seconds * sr)
+def _pcm_seconds(seconds: float, sr: int = 16000, *, silent: bool = False) -> bytes:
+    """Generate PCM16 bytes for `seconds` of audio at `sr` Hz.
+
+    By default produces a low-amplitude but non-silent tone (RMS well above
+    SILENCE_RMS_THRESHOLD) so the stub transcriber's silence gate lets words
+    through. Pass ``silent=True`` for pure-zero PCM (e.g. testing the silence
+    gate itself).
+    """
+    import math
+
+    n = int(seconds * sr)
+    if silent:
+        return b"\x00\x00" * n
+    # A 440 Hz sine at ~0.3 amplitude — well above the silence threshold.
+    samples = [int(0.3 * 32767 * math.sin(2 * math.pi * 440 * i / sr)) for i in range(n)]
+    import struct
+
+    return struct.pack(f"<{n}h", *samples)
 
 
 def test_stream_handshake_sends_ready(stub_stream):
@@ -100,6 +116,43 @@ def test_stream_final_marks_unrecited_skipped(stub_stream):
         assert len(verdicts) == 4
         skipped = [v for v in verdicts if v["error_type"] == "skipped"]
         assert len(skipped) >= 1
+
+
+def test_stream_silence_does_not_auto_complete_ayah(stub_stream):
+    """Pure silence must NOT reveal words or auto-complete the ayah.
+
+    This is the regression test for the bug where the stub transcriber revealed
+    words based on audio duration alone — so room tone / breath accumulated and
+    the ayah completed even though the user said nothing.
+    """
+    client = TestClient(app)
+    with client.websocket_connect("/ws/recitation/stream") as ws:
+        ws.send_json({"type": "start", "surah_number": 1, "ayah_number": 1})
+        ws.receive_json()  # ready
+        # Send 10 seconds of SILENT audio — well past the threshold that would
+        # normally reveal all 4 words via the stub.
+        ws.send_bytes(_pcm_seconds(10.0, silent=True))
+        # No word events should arrive. Drain with a short timeout.
+        word_events = []
+        try:
+            while True:
+                evt = ws.receive_json()
+                if evt.get("type") == "word":
+                    word_events.append(evt)
+                if evt.get("type") == "final":
+                    break
+        except Exception:
+            pass  # no more events (timeout / connection close)
+        assert word_events == [], (
+            f"Silence should not reveal words, got {len(word_events)} events"
+        )
+        ws.send_json({"type": "stop"})
+        final = _recv_until(ws, "final")
+        verdicts = final["result"]["word_verdicts"]
+        assert len(verdicts) == 4
+        # All words should be skipped (none recited).
+        skipped = [v for v in verdicts if v["error_type"] == "skipped"]
+        assert len(skipped) == 4
 
 
 def test_stream_requires_start_first(stub_stream):
