@@ -4,6 +4,16 @@
 > Read this file first at the start of every session. Update it whenever
 > meaningful work is done. Keep it concise.
 
+## Session 2026-07-28 — lesson test async I/O + animation cleanup
+- Follow-up device/Ubuntu test showed bounded fake-time pumps alone did not
+  complete the curriculum asset/plugin futures, so Foundation never rendered.
+  The test now preloads `vocabLessons()` and initializes LocalStorage inside
+  `tester.runAsync` before mounting the page.
+- The quiz reset regression left flutter_animate timers pending because it
+  replaced/disposed feedback immediately after a single pump. Both answer
+  phases now `pumpAndSettle()` their finite feedback animations before changing
+  the question or ending the test.
+
 ## Session 2026-07-28 — lesson-list widget test timeout fixed
 - `module_screen_test` used `pumpAndSettle()` while `LessonListPage` displayed
   an indeterminate `CircularProgressIndicator`; its perpetual animation kept

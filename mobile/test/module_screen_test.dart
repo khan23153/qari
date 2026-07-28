@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../lib/data/models/lesson_model.dart';
+import '../lib/data/services/curriculum_service.dart';
+import '../lib/data/services/local_storage_service.dart';
 import '../lib/features/lessons/presentation/pages/lesson_list_page.dart';
 import '../lib/features/lessons/presentation/pages/lesson_player_page.dart';
 import '../lib/features/lessons/presentation/widgets/quiz_widget.dart';
@@ -40,6 +42,14 @@ void main() {
 
   group('Module screen build smoke (issue 2)', () {
     testWidgets('LessonListPage builds', (tester) async {
+      // Asset and plugin-backed futures perform real asynchronous I/O that is
+      // not advanced merely by moving the widget test's fake clock. Resolve
+      // them outside fake_async first; the page then reads cached curriculum
+      // data and an initialized preferences instance during its bounded pumps.
+      await tester.runAsync(() async {
+        await CurriculumService.instance.vocabLessons();
+        await LocalStorageService.getInstance();
+      });
       await tester.pumpWidget(
         const ProviderScope(child: MaterialApp(home: LessonListPage())),
       );
@@ -130,6 +140,7 @@ void main() {
       ));
 
       await tester.tap(find.text('First correct'));
+      await tester.pumpAndSettle();
       await tester.pump();
       expect(find.text('Correct!'), findsOneWidget);
 
@@ -143,6 +154,7 @@ void main() {
       expect(find.text('Second explanation'), findsNothing);
 
       await tester.tap(find.text('Second correct'));
+      await tester.pumpAndSettle();
       await tester.pump();
       expect(find.text('Correct!'), findsOneWidget);
       expect(find.text('Second explanation'), findsOneWidget);
