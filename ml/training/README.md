@@ -127,6 +127,17 @@ Do a 20-step smoke run before the full run. `--max_samples 300` selects a
 deterministic subset directly from the completed dataset, so no temporary
 manifest, symlink, or extra `QARI_SMOKE_DATA` variable is needed:
 
+On Lightning, the safest entry point is the wrapper below. It resolves the
+repository from its own file location and defaults to sibling `data/` and
+`models/` directories, so it works even when the current directory and old
+`QARI_REPO` value are wrong:
+
+```bash
+bash scripts/run_lightning_smoke.sh
+```
+
+The equivalent manual command is:
+
 ```bash
 export QARI_SMOKE_OUTPUT="$HOME/qari-lightning/models/qari-whisper-tiny-smoke"
 test -s "$QARI_DATA_DIR/manifest.jsonl"
