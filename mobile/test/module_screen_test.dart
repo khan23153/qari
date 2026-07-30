@@ -141,6 +141,7 @@ void main() {
 
       await tester.tap(find.text('First correct'));
       await tester.pumpAndSettle();
+      await tester.pump();
       expect(find.text('Correct!'), findsOneWidget);
 
       rebuild(() {
@@ -154,6 +155,7 @@ void main() {
 
       await tester.tap(find.text('Second correct'));
       await tester.pumpAndSettle();
+      await tester.pump();
       expect(find.text('Correct!'), findsOneWidget);
       expect(find.text('Second explanation'), findsOneWidget);
     });
