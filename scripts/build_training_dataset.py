@@ -145,6 +145,7 @@ def fetch_and_convert(
 
         subprocess.run(
             [ffmpeg, "-y", "-loglevel", "error", "-i", str(mp3_path),
+            ["ffmpeg", "-y", "-loglevel", "error", "-i", str(mp3_path),
              "-ac", "1", "-ar", "16000", "-sample_fmt", "s16",
              str(wav_temp_path)],
             check=True,
