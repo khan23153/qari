@@ -137,6 +137,12 @@ async def recitation_stream(websocket: WebSocket):
         await asyncio.to_thread(session.load_reference)
     except Exception as exc:
         logger.error("ws.stream.load_ref_failed", error=str(exc))
+        await websocket.send_json({
+            "type": "error",
+            "detail": str(exc) or "Live recitation could not be started.",
+        })
+        await _safe_close(websocket, code=1011)
+        return
 
     await websocket.send_json(session.ready_payload())
     logger.info(

@@ -1,5 +1,9 @@
 fastapi==0.111.0
 uvicorn[standard]==0.30.1
+# WebSocket support is a core runtime requirement for live recitation. Keep it
+# explicit rather than relying on Uvicorn's optional `standard` extra so a
+# rebuilt image cannot start successfully while rejecting every WS upgrade.
+websockets==12.0
 redis[hiredis]==5.0.4
 pydantic==2.7.1
 pydantic-settings==2.2.1
