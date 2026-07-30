@@ -34,8 +34,11 @@ import argparse
 import gzip
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
+import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -43,6 +46,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CORPUS_GZ = REPO_ROOT / "mobile" / "assets" / "quran_corpus.json.gz"
 CDN_BASE = "https://everyayah.com/data"
+DOWNLOAD_ATTEMPTS = 3
 
 # Known-good everyayah folders (same reciters offered in the app's Voice picker).
 DEFAULT_RECITERS = [
@@ -52,6 +56,18 @@ DEFAULT_RECITERS = [
     "Husary_64kbps",
     "Alafasy_64kbps",
 ]
+
+
+def require_ffmpeg() -> str:
+    """Resolve FFmpeg once, before any downloads are scheduled."""
+    executable = shutil.which("ffmpeg")
+    if executable is None:
+        raise SystemExit(
+            "ffmpeg is required but was not found on PATH. Install it first "
+            "(Ubuntu/Debian: sudo apt-get update && sudo apt-get install -y "
+            "ffmpeg), then rerun this command. Existing WAV files are reused."
+        )
+    return executable
 
 
 def parse_surah_range(spec: str) -> list[int]:
@@ -79,7 +95,11 @@ def load_corpus_texts() -> dict[tuple[int, int], str]:
 
 
 def fetch_and_convert(
-    reciter: str, surah: int, ayah: int, out_dir: Path
+    reciter: str,
+    surah: int,
+    ayah: int,
+    out_dir: Path,
+    ffmpeg: str = "ffmpeg",
 ) -> Path | None:
     """Download one ayah mp3 and convert to 16k mono WAV. Returns the wav path,
     or None on failure (missing file / network error) — the caller just skips it.
@@ -89,22 +109,59 @@ def fetch_and_convert(
     if wav_path.exists() and wav_path.stat().st_size > 44:
         return wav_path
     url = f"{CDN_BASE}/{reciter}/{stem}.mp3"
-    mp3_path = out_dir / f"{stem}.mp3"
+    # Never use <stem>.mp3 as shared scratch space. Colab can accidentally run
+    # the same cell twice, and two builders would then delete one another's
+    # ffmpeg input. Unique temporary files plus an atomic final rename make
+    # concurrent/restarted builds safe.
+    mp3_path: Path | None = None
+    wav_temp_path: Path | None = None
     try:
-        with urllib.request.urlopen(url, timeout=60) as resp:
-            mp3_path.write_bytes(resp.read())
+        with tempfile.NamedTemporaryFile(
+            prefix=f".{stem}.", suffix=".mp3", dir=out_dir, delete=False
+        ) as mp3_file:
+            mp3_path = Path(mp3_file.name)
+
+        last_error: Exception | None = None
+        for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+            try:
+                with urllib.request.urlopen(url, timeout=60) as resp:
+                    with mp3_path.open("wb") as destination:
+                        shutil.copyfileobj(resp, destination)
+                if mp3_path.stat().st_size == 0:
+                    raise OSError("downloaded an empty MP3")
+                break
+            except Exception as exc:  # noqa: BLE001 — retried below
+                last_error = exc
+                if attempt == DOWNLOAD_ATTEMPTS:
+                    raise
+                time.sleep(attempt)
+        if last_error is not None and not mp3_path.exists():
+            raise last_error
+
+        with tempfile.NamedTemporaryFile(
+            prefix=f".{stem}.", suffix=".wav", dir=out_dir, delete=False
+        ) as wav_file:
+            wav_temp_path = Path(wav_file.name)
+
         subprocess.run(
-            ["ffmpeg", "-y", "-loglevel", "error", "-i", str(mp3_path),
-             "-ac", "1", "-ar", "16000", "-sample_fmt", "s16", str(wav_path)],
+            [ffmpeg, "-y", "-loglevel", "error", "-i", str(mp3_path),
+             "-ac", "1", "-ar", "16000", "-sample_fmt", "s16",
+             str(wav_temp_path)],
             check=True,
         )
+        if wav_temp_path.stat().st_size <= 44:
+            raise OSError("ffmpeg produced an empty or invalid WAV")
+        os.replace(wav_temp_path, wav_path)
         return wav_path
     except Exception as e:  # noqa: BLE001 — skip-and-continue is the contract
         print(f"  ! skip {reciter}/{stem}: {e}", file=sys.stderr)
         wav_path.unlink(missing_ok=True)
         return None
     finally:
-        mp3_path.unlink(missing_ok=True)
+        if mp3_path is not None:
+            mp3_path.unlink(missing_ok=True)
+        if wav_temp_path is not None:
+            wav_temp_path.unlink(missing_ok=True)
 
 
 def main() -> None:
@@ -117,6 +174,9 @@ def main() -> None:
     )
     ap.add_argument("--workers", type=int, default=8, help="Parallel downloads")
     args = ap.parse_args()
+
+    ffmpeg = require_ffmpeg()
+    print(f"Using ffmpeg: {ffmpeg}")
 
     surahs = parse_surah_range(args.surahs)
     out_root = Path(args.out)
@@ -132,7 +192,9 @@ def main() -> None:
         print(f"== {reciter}")
         with ThreadPoolExecutor(max_workers=args.workers) as pool:
             futures = {
-                pool.submit(fetch_and_convert, reciter, s, a, audio_dir): (s, a)
+                pool.submit(
+                    fetch_and_convert, reciter, s, a, audio_dir, ffmpeg
+                ): (s, a)
                 for (s, a) in targets
             }
             done = 0
@@ -154,9 +216,19 @@ def main() -> None:
 
     entries.sort(key=lambda e: (e["reciter"], e["surah"], e["ayah"]))
     manifest = out_root / "manifest.jsonl"
-    with open(manifest, "w", encoding="utf-8") as f:
+    out_root.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        prefix=".manifest.",
+        suffix=".jsonl",
+        dir=out_root,
+        delete=False,
+    ) as f:
+        manifest_temp = Path(f.name)
         for e in entries:
             f.write(json.dumps(e, ensure_ascii=False) + "\n")
+    os.replace(manifest_temp, manifest)
     print(f"Wrote {len(entries)} entries -> {manifest}")
 
 

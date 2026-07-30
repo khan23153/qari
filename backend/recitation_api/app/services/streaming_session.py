@@ -19,9 +19,10 @@ Flow
    mobile-shaped :class:`RecitationAnalysisResult` blob (so history + A/B
    playback keep working) and returns a ``final`` event.
 
-The transcriber is pluggable. When ``QARI_ML_USE_STUB`` is set (or the real
-Whisper model cannot be loaded) a lightweight duration-based stub is used so the
-end-to-end live experience works without GPU / model weights.
+The transcriber is pluggable. A lightweight duration-based stub is available
+only when ``QARI_ML_USE_STUB`` is explicitly set (for tests and demos). A
+missing real model must fail the session rather than awarding words merely as
+time passes.
 """
 
 from __future__ import annotations
@@ -82,6 +83,10 @@ SILENCE_RMS_THRESHOLD = 0.006
 # A transcriber turns a float32 mono 16 kHz signal into (normalized_words,
 # per_word_confidences).
 Transcriber = Callable[["object", int], "tuple[list[str], list[float]]"]
+
+
+class LiveTranscriberUnavailable(RuntimeError):
+    """Raised when production live ASR cannot be loaded safely."""
 
 
 # ---------------------------------------------------------------------------
@@ -467,10 +472,10 @@ class StreamingRecitationSession:
             # Real ASR requested. Probe whether the Faster-Whisper CT2 model is
             # actually loadable in this container (it must be bind-mounted at
             # QARI_FASTERWHISPER_MODEL_DIR). If it is missing/unloadable the real
-            # transcriber would silently return [] on every call → the live
-            # stream shows NO words and finalize reports "0 of N". Fall back to
-            # the duration-based stub so the live flow + a non-empty result still
-            # work (and log loudly) instead of a broken 0/29.
+            # transcriber would silently return [] on every call. Critically,
+            # never fall back to the duration-based demo stub here: that stub
+            # reveals one word every 0.9 seconds without inspecting speech and
+            # therefore auto-completes an ayah when the user says nothing.
             try:
                 from ml.inference.faster_whisper_transcriber import get_transcriber
 
@@ -483,11 +488,13 @@ class StreamingRecitationSession:
                 )
             except Exception as exc:
                 logger.error(
-                    "stream.real_transcriber_unavailable_falling_back_to_stub",
+                    "stream.real_transcriber_unavailable",
                     session_id=self.session_id, error=str(exc),
                 )
-                self._transcriber = _make_stub_transcriber(self.reference_words)
-                self._is_stub = True
+                raise LiveTranscriberUnavailable(
+                    "Live speech recognition is temporarily unavailable. "
+                    "The recitation model could not be loaded."
+                ) from exc
 
     # ------------------------------------------------------------------
     def ready_payload(self) -> dict:
