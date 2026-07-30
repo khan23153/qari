@@ -1,12 +1,12 @@
 {
   "version": "1.0.46",
-  "version_code": 64,
+  "version_code": 67,
   "min_version": "1.0.0",
   "min_version_code": 1,
   "apk_url": "https://137.23.42.171/v1/app/download",
   "force_update": false,
-  "notes_en": "Fixes: quiz no longer gets stuck between questions; smoother and more accurate Qibla compass.",
-  "notes_ur": "سرور نئے پتے پر منتقل ہو گیا — یہ اپڈیٹ ایپ کو دوبارہ جوڑتی ہے۔ نیا \"قرآن سیکھیں\" سیکشن اور نام کی درستگی بھی شامل ہے۔",
-  "notes_hi": "सर्वर नए पते पर चला गया — यह अपडेट ऐप को फिर से जोड़ता है। नया \"क़ुरान सीखें\" सेक्शन और नाम की समस्या का समाधान भी शामिल है।",
+  "notes_en": "Fixed quiz answers carrying into the next question and live recitation completing during silence.",
+  "notes_ur": "کوئز میں اگلے سوال کا جواب خود منتخب ہونے اور خاموشی میں لائیو تلاوت مکمل ہونے کا مسئلہ حل کر دیا گیا۔",
+  "notes_hi": "क्विज़ में अगले सवाल का जवाब अपने-आप चुने जाने और चुप्पी में लाइव तिलावत पूरी होने की समस्या ठीक की गई।",
   "data_version": 1
 }
