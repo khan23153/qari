@@ -65,6 +65,19 @@ python -m ml.training.finetune_whisper \
 The script tracks WER on a held-out split. Judge the live model by WER on
 *amateur* voices — that is where tiny currently loses to Tarteel.
 
+Long cloud runs can resume from the newest saved Trainer checkpoint:
+
+```bash
+python -m ml.training.finetune_whisper \
+    --data_dir /data/quran_train \
+    --output_dir /models/qari-whisper-tiny \
+    --resume_from_checkpoint
+```
+
+The output directory must be on persistent storage. The trainer retains the
+checkpoint's Whisper suppression-token configuration so generated evaluation
+works with current Transformers versions.
+
 ## Step 3 — Convert the live model to CTranslate2
 
 The live engine runs CTranslate2, not PyTorch:
