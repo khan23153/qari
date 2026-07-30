@@ -4,6 +4,45 @@
 > Read this file first at the start of every session. Update it whenever
 > meaningful work is done. Keep it concise.
 
+## Session 2026-07-28 — lesson test async I/O + animation cleanup
+- Follow-up device/Ubuntu test showed bounded fake-time pumps alone did not
+  complete the curriculum asset/plugin futures, so Foundation never rendered.
+  The test now preloads `vocabLessons()` and initializes LocalStorage inside
+  `tester.runAsync` before mounting the page.
+- The quiz reset regression left flutter_animate timers pending because it
+  replaced/disposed feedback immediately after a single pump. Both answer
+  phases now `pumpAndSettle()` their finite feedback animations before changing
+  the question or ending the test.
+
+## Session 2026-07-28 — lesson-list widget test timeout fixed
+- `module_screen_test` used `pumpAndSettle()` while `LessonListPage` displayed
+  an indeterminate `CircularProgressIndicator`; its perpetual animation kept
+  scheduling frames and timed the test out. The test now initializes mocked
+  SharedPreferences, pumps with a bounded retry loop until the bundled
+  curriculum appears, and asserts the real Foundation content rendered.
+
+## Session 2026-07-28 — consecutive quiz answer carry-over fixed
+- The next MCQ could appear already correct and become untappable because the
+  previous `QuizWidget` State (`_isCorrect=true`) survived a question update.
+  Added a defensive `didUpdateWidget` reset for selection, correctness,
+  fill-blank text, and drag-match answers whenever the question ID changes.
+- Replaced the player's untracked delayed advance with a cancellable Timer
+  bound to the answered screen index, preventing stale callbacks from skipping
+  questions. Added a widget regression test that updates an answered QuizWidget
+  to a second question without a key and verifies it starts unanswered.
+
+## Session 2026-07-27 — silent live recitation auto-completion fixed
+- Root cause: when the production Faster-Whisper model failed to load,
+  `StreamingRecitationSession.load_reference()` silently installed the demo
+  duration stub. That stub reveals one reference word every 0.9 seconds without
+  analyzing audio, explaining the device's perfect 29/29 result after ~26s of
+  silence. Production now fails the WebSocket handshake with a clear error when
+  live ASR is unavailable; the duration stub remains available only when
+  `QARI_ML_USE_STUB=true` is explicitly configured for tests/demos.
+- Added regression coverage proving a missing production model never installs
+  the duration stub. The existing RMS silence gate continues to protect a
+  successfully loaded real model from Whisper hallucinations on quiet audio.
+
 ## ✅ VPS MIGRATION RESOLVED (2026-07-27): NEW IP = 137.23.42.171
 CORRECTION: the user initially said the new VPS kept the old IP — that was
 WRONG. The new VPS is an **Oracle Cloud (Mumbai) instance with public IP
@@ -2410,5 +2449,3 @@ The app hardcodes the backend host, so a new IP means a new build + OTA push:
 - Uncommitted working-tree state from old VPS (2026-07-19): MEMORY.md +
   mobile Tarteel changes + app-release.apk + app_release.json. Backend code is
   committed/pushed (last backend commit 0040abf; Tarteel is client-side only).
-
-

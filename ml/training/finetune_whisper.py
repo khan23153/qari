@@ -98,6 +98,15 @@ def parse_args() -> argparse.Namespace:
         help="Maximum training steps (-1 = use epochs)"
     )
     parser.add_argument(
+        "--max_samples",
+        type=int,
+        default=0,
+        help=(
+            "Maximum manifest samples to prepare (0 = all). Useful for a "
+            "smoke run without copying or rewriting the dataset."
+        ),
+    )
+    parser.add_argument(
         "--eval_split", type=float, default=0.1,
         help="Fraction of data to use for evaluation"
     )
@@ -116,6 +125,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--hub_model_id", type=str, default="",
         help="Model ID for pushing to Hugging Face Hub"
+    )
+    parser.add_argument(
+        "--resume_from_checkpoint",
+        nargs="?",
+        const="auto",
+        default=None,
+        help=(
+            "Resume training from a checkpoint path. Pass the flag without a "
+            "value to use the newest checkpoint in --output_dir."
+        ),
     )
     return parser.parse_args()
 
@@ -158,6 +177,7 @@ def create_dataset(
     entries: list[dict],
     data_dir: str,
     eval_split: float = 0.1,
+    max_samples: int = 0,
 ) -> tuple[list[dict], list[dict]]:
     """
     Split entries into train and evaluation sets.
@@ -180,6 +200,14 @@ def create_dataset(
     random.seed(42)
     shuffled = entries.copy()
     random.shuffle(shuffled)
+
+    if max_samples < 0:
+        raise ValueError("max_samples must be 0 or greater")
+    if max_samples:
+        shuffled = shuffled[:max_samples]
+        logger.info("Limited dataset to %d samples", len(shuffled))
+    if len(shuffled) < 2:
+        raise ValueError("At least 2 manifest samples are required")
 
     n_eval = max(1, int(len(shuffled) * eval_split))
     eval_entries = shuffled[:n_eval]
@@ -400,6 +428,43 @@ def prepare_dataset(
     return prepared
 
 
+def resolve_resume_checkpoint(value: str | None, output_dir: str) -> str | None:
+    """Resolve an explicit or automatic Trainer checkpoint."""
+    if value is None:
+        return None
+    if value != "auto":
+        checkpoint = Path(value)
+        if not checkpoint.is_dir():
+            raise FileNotFoundError(f"Checkpoint not found: {checkpoint}")
+        return str(checkpoint)
+
+    candidates: list[tuple[int, Path]] = []
+    for path in Path(output_dir).glob("checkpoint-*"):
+        if not path.is_dir():
+            continue
+        try:
+            step = int(path.name.removeprefix("checkpoint-"))
+        except ValueError:
+            continue
+        candidates.append((step, path))
+    if not candidates:
+        raise FileNotFoundError(
+            f"No checkpoint-* directory found in output directory: {output_dir}"
+        )
+    return str(max(candidates, key=lambda item: item[0])[1])
+
+
+def configure_whisper_model(model: Any, processor: Any, language: str) -> None:
+    """Set the decoder prompt without erasing Whisper token filters."""
+    forced_decoder_ids = processor.get_decoder_prompt_ids(
+        language=language,
+        task=DEFAULT_TASK,
+    )
+    model.config.forced_decoder_ids = forced_decoder_ids
+    if getattr(model, "generation_config", None) is not None:
+        model.generation_config.forced_decoder_ids = forced_decoder_ids
+
+
 def train(args: argparse.Namespace) -> None:
     """
     Main training function.
@@ -421,10 +486,9 @@ def train(args: argparse.Namespace) -> None:
     model = WhisperForConditionalGeneration.from_pretrained(args.model_id)
 
     # Configure model
-    model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(
-        language=args.language, task=DEFAULT_TASK
-    )
-    model.config.suppress_tokens = []
+    # Keep the checkpoint's suppress_tokens. Clearing them makes recent
+    # Transformers releases crash during generated evaluation.
+    configure_whisper_model(model, processor, args.language)
 
     if args.gradient_checkpointing:
         model.config.use_cache = False
@@ -432,7 +496,12 @@ def train(args: argparse.Namespace) -> None:
 
     # ── Load and prepare data ─────────────────────────────────────────────────
     entries = load_manifest(args.data_dir)
-    train_entries, eval_entries = create_dataset(entries, args.data_dir, args.eval_split)
+    train_entries, eval_entries = create_dataset(
+        entries,
+        args.data_dir,
+        args.eval_split,
+        args.max_samples,
+    )
 
     logger.info("Preparing training dataset...")
     train_data = prepare_dataset(train_entries, processor, args.language, DEFAULT_TASK)
@@ -449,7 +518,7 @@ def train(args: argparse.Namespace) -> None:
     training_args = Seq2SeqTrainingArguments(
         output_dir=args.output_dir,
         per_device_train_batch_size=args.batch_size,
-        per_device_eval_batch_size=args.batch_size // 2,
+        per_device_eval_batch_size=max(1, args.batch_size // 2),
         gradient_accumulation_steps=1,
         learning_rate=args.learning_rate,
         warmup_steps=args.warmup_steps,
@@ -480,12 +549,18 @@ def train(args: argparse.Namespace) -> None:
         eval_dataset=eval_data,
         data_collator=data_collator,
         compute_metrics=make_compute_metrics(processor, args.language, DEFAULT_TASK),
-        tokenizer=processor.feature_extractor,
+        processing_class=processor,
     )
 
     # ── Train ─────────────────────────────────────────────────────────────────
     logger.info("Starting training...")
-    train_result = trainer.train()
+    resume_checkpoint = resolve_resume_checkpoint(
+        args.resume_from_checkpoint,
+        args.output_dir,
+    )
+    if resume_checkpoint:
+        logger.info("Resuming from checkpoint: %s", resume_checkpoint)
+    train_result = trainer.train(resume_from_checkpoint=resume_checkpoint)
 
     # ── Save ──────────────────────────────────────────────────────────────────
     logger.info("Saving model to %s", args.output_dir)
