@@ -98,6 +98,15 @@ def parse_args() -> argparse.Namespace:
         help="Maximum training steps (-1 = use epochs)"
     )
     parser.add_argument(
+        "--max_samples",
+        type=int,
+        default=0,
+        help=(
+            "Maximum manifest samples to prepare (0 = all). Useful for a "
+            "smoke run without copying or rewriting the dataset."
+        ),
+    )
+    parser.add_argument(
         "--eval_split", type=float, default=0.1,
         help="Fraction of data to use for evaluation"
     )
@@ -168,6 +177,7 @@ def create_dataset(
     entries: list[dict],
     data_dir: str,
     eval_split: float = 0.1,
+    max_samples: int = 0,
 ) -> tuple[list[dict], list[dict]]:
     """
     Split entries into train and evaluation sets.
@@ -190,6 +200,14 @@ def create_dataset(
     random.seed(42)
     shuffled = entries.copy()
     random.shuffle(shuffled)
+
+    if max_samples < 0:
+        raise ValueError("max_samples must be 0 or greater")
+    if max_samples:
+        shuffled = shuffled[:max_samples]
+        logger.info("Limited dataset to %d samples", len(shuffled))
+    if len(shuffled) < 2:
+        raise ValueError("At least 2 manifest samples are required")
 
     n_eval = max(1, int(len(shuffled) * eval_split))
     eval_entries = shuffled[:n_eval]
@@ -478,7 +496,12 @@ def train(args: argparse.Namespace) -> None:
 
     # ── Load and prepare data ─────────────────────────────────────────────────
     entries = load_manifest(args.data_dir)
-    train_entries, eval_entries = create_dataset(entries, args.data_dir, args.eval_split)
+    train_entries, eval_entries = create_dataset(
+        entries,
+        args.data_dir,
+        args.eval_split,
+        args.max_samples,
+    )
 
     logger.info("Preparing training dataset...")
     train_data = prepare_dataset(train_entries, processor, args.language, DEFAULT_TASK)

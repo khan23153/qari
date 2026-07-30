@@ -21,6 +21,45 @@ engine and Tarteel-level live tracking.
 
 ## Step 1 — Build the training dataset
 
+Run the builder from the repository checkout, not from the Lightning Studio
+workspace root. On Lightning, discover the checkout rather than assuming that
+`QARI_REPO` is already set correctly:
+
+```bash
+QARI_REPO="$(find "$HOME" /teamspace/studios -maxdepth 5 \
+    -type f -path '*/scripts/build_training_dataset.py' \
+    -printf '%h\n' 2>/dev/null | sed 's#/scripts$##' | head -n 1)"
+
+test -n "$QARI_REPO" || {
+    echo "Qari checkout not found; clone it before building the dataset" >&2
+    exit 1
+}
+test -f "$QARI_REPO/scripts/build_training_dataset.py"
+export QARI_REPO
+cd "$QARI_REPO"
+printf 'Using Qari checkout: %s\n' "$QARI_REPO"
+```
+
+If no checkout is found, clone it into persistent storage first:
+
+```bash
+mkdir -p "$HOME/qari-lightning"
+git clone https://github.com/khan23153/qari.git \
+    "$HOME/qari-lightning/qari"
+export QARI_REPO="$HOME/qari-lightning/qari"
+cd "$QARI_REPO"
+```
+
+Confirm that FFmpeg is available before starting downloads:
+
+```bash
+command -v ffmpeg || {
+    sudo apt-get update
+    sudo apt-get install -y ffmpeg
+}
+ffmpeg -version | head -n 1
+```
+
 ```bash
 python scripts/build_training_dataset.py --out /data/quran_train
 ```
@@ -30,6 +69,30 @@ converts them to 16 kHz mono WAV, and pairs each clip with the Uthmani text
 from the bundled corpus. Output is `manifest.jsonl` + `audio/` in exactly the
 format `ml/training/finetune_whisper.py` consumes (~31k clips for the full
 run; use `--surahs 1-2 --reciters Alafasy_64kbps` for a smoke test).
+
+After a cloud dataset build, verify that the manifest and WAV counts agree
+before spending GPU time:
+
+```bash
+QARI_MANIFEST="$(find "$HOME/qari-lightning/data" /teamspace/studios \
+    -type f -path '*/quran_train/manifest.jsonl' -print 2>/dev/null | head -n 1)"
+test -n "$QARI_MANIFEST" || {
+    echo 'Completed quran_train/manifest.jsonl was not found' >&2
+    exit 1
+}
+export QARI_DATA_DIR="$(dirname "$QARI_MANIFEST")"
+printf 'Using dataset: %s\n' "$QARI_DATA_DIR"
+test -s "$QARI_DATA_DIR/manifest.jsonl"
+manifest_rows="$(wc -l < "$QARI_DATA_DIR/manifest.jsonl")"
+wav_files="$(find "$QARI_DATA_DIR/audio" -type f -name '*.wav' | wc -l)"
+printf 'manifest rows: %s\nWAV files: %s\n' "$manifest_rows" "$wav_files"
+test "$manifest_rows" -eq "$wav_files"
+if find "$QARI_DATA_DIR" -type f -name '*.mp3' -print -quit | grep -q .; then
+    echo 'Unexpected temporary MP3 files remain' >&2
+    exit 1
+fi
+du -sh "$QARI_DATA_DIR"
+```
 
 To reach Tarteel-level robustness on *ordinary users* (not just professional
 qaris), extend the manifest over time with:
@@ -43,6 +106,64 @@ qaris), extend the manifest over time with:
 ## Step 2 — Fine-tune
 
 Needs a GPU machine (Colab/Kaggle/rented). CPU training is not practical.
+
+On a managed GPU image such as Lightning, preserve its CUDA-enabled PyTorch
+and install only the missing training packages:
+
+```bash
+python -m pip install \
+    'transformers==4.46.3' 'accelerate==1.1.1' \
+    'datasets==3.1.0' 'evaluate==0.4.3' 'jiwer==3.0.5' \
+    'soundfile>=0.12.1' 'librosa>=0.10.1' 'tensorboard>=2.16'
+
+python - <<'PY'
+import torch
+assert torch.cuda.is_available(), "CUDA GPU is not available"
+print(torch.__version__, torch.cuda.get_device_name(0))
+PY
+```
+
+Do a 20-step smoke run before the full run. `--max_samples 300` selects a
+deterministic subset directly from the completed dataset, so no temporary
+manifest, symlink, or extra `QARI_SMOKE_DATA` variable is needed:
+
+```bash
+export QARI_SMOKE_OUTPUT="$HOME/qari-lightning/models/qari-whisper-tiny-smoke"
+test -s "$QARI_DATA_DIR/manifest.jsonl"
+mkdir -p "$(dirname "$QARI_SMOKE_OUTPUT")"
+rm -rf "$QARI_SMOKE_OUTPUT"
+
+python -m ml.training.finetune_whisper \
+    --model_id tarteel-ai/whisper-tiny-ar-quran \
+    --data_dir "$QARI_DATA_DIR" \
+    --output_dir "$QARI_SMOKE_OUTPUT" \
+    --language ar --epochs 1 --batch_size 4 --learning_rate 1e-5 \
+    --warmup_steps 5 --max_steps 20 --max_samples 300 --eval_split 0.10 \
+    --use_fp16 --gradient_checkpointing
+
+test -s "$QARI_SMOKE_OUTPUT/train_results.json"
+test -s "$QARI_SMOKE_OUTPUT/eval_results.json"
+```
+
+Only after that succeeds, start the persistent full run:
+
+```bash
+export QARI_OUTPUT_DIR="$HOME/qari-lightning/models/qari-whisper-tiny"
+mkdir -p "$(dirname "$QARI_OUTPUT_DIR")"
+
+python -m ml.training.finetune_whisper \
+    --model_id tarteel-ai/whisper-tiny-ar-quran \
+    --data_dir "$QARI_DATA_DIR" \
+    --output_dir "$QARI_OUTPUT_DIR" \
+    --language ar --epochs 3 --batch_size 8 --learning_rate 1e-5 \
+    --warmup_steps 500 --eval_split 0.10 \
+    --use_fp16 --gradient_checkpointing
+```
+
+The current trainer prepares all log-Mel features in system memory before
+training. Monitor both RAM and GPU utilization during the first full run; if
+system RAM is exhausted, train a smaller manifest view rather than rerunning
+the same oversized job.
 
 ```bash
 pip install -r ml/requirements.txt transformers datasets soundfile torchaudio
