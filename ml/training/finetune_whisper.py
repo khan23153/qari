@@ -549,7 +549,7 @@ def train(args: argparse.Namespace) -> None:
         eval_dataset=eval_data,
         data_collator=data_collator,
         compute_metrics=make_compute_metrics(processor, args.language, DEFAULT_TASK),
-        tokenizer=processor.feature_extractor,
+        processing_class=processor,
     )
 
     # ── Train ─────────────────────────────────────────────────────────────────

@@ -159,6 +159,19 @@ test -s "$QARI_SMOKE_OUTPUT/eval_results.json"
 Only after that succeeds, start the persistent full run:
 
 ```bash
+bash scripts/run_lightning_training.sh
+```
+
+If Lightning stops after at least one `checkpoint-*` directory was saved,
+resume the same output directory with:
+
+```bash
+bash scripts/run_lightning_training.sh --resume
+```
+
+The equivalent manual command is:
+
+```bash
 export QARI_OUTPUT_DIR="$HOME/qari-lightning/models/qari-whisper-tiny"
 mkdir -p "$(dirname "$QARI_OUTPUT_DIR")"
 
