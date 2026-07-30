@@ -280,6 +280,11 @@ def _make_stub_transcriber(reference_words: list[str]) -> Transcriber:
     Lets the full live flow be demoed without model weights. It reveals one
     reference word per ``STUB_SECONDS_PER_WORD`` of audio, so words light up
     green sequentially as the user "recites".
+
+    Silence gate: only reveal words when the audio actually contains speech
+    (RMS above ``SILENCE_RMS_THRESHOLD``). Without this, room tone / breath
+    alone would accumulate duration and auto-complete the ayah even though the
+    user said nothing — matching the real-ASR path's behaviour.
     """
 
     def _transcribe(audio, sr: int) -> tuple[list[str], list[float]]:
@@ -287,6 +292,11 @@ def _make_stub_transcriber(reference_words: list[str]) -> Transcriber:
             n = len(audio)
         except TypeError:
             n = 0
+        # Silence gate: if the audio is essentially quiet (the user is not
+        # reciting), reveal nothing — even the stub must not auto-complete the
+        # ayah on room tone / breath alone.
+        if _rms_energy(audio) < SILENCE_RMS_THRESHOLD:
+            return [], []
         seconds = (n / sr) if sr else 0.0
         reveal = min(len(reference_words), int(seconds / STUB_SECONDS_PER_WORD))
         words = list(reference_words[:reveal])
@@ -356,6 +366,17 @@ def stitch_hypothesis(
     merged = list(prefix) + list(window_words[best_k:])
     merged_confs = list(prefix_confs) + list(window_confs[best_k:])
     return merged, merged_confs
+
+
+def _rms_energy(samples: list[float]) -> float:
+    """Root-mean-square energy of a float32 signal in [0, 1].
+
+    Used to detect silence: near-silent mic audio (room tone / the user not
+    reciting) has a very low RMS, while actual recitation is markedly higher.
+    """
+    if not samples:
+        return 0.0
+    return (sum(s * s for s in samples) / len(samples)) ** 0.5
 
 
 # ---------------------------------------------------------------------------
@@ -564,16 +585,6 @@ class StreamingRecitationSession:
     @property
     def duration_seconds(self) -> float:
         return self._total_samples / self.sample_rate if self.sample_rate else 0.0
-
-    def _rms_energy(self, samples: list[float]) -> float:
-        """Root-mean-square energy of a float32 signal in [0, 1].
-
-        Used to detect silence: near-silent mic audio (room tone / the user not
-        reciting) has a very low RMS, while actual recitation is markedly higher.
-        """
-        if not samples:
-            return 0.0
-        return (sum(s * s for s in samples) / len(samples)) ** 0.5
 
     def _decode_float(self, start_sample: int = 0, end_sample: Optional[int] = None):
         # Numpy-free decode: convert the raw PCM16 bytes into a list of float32
