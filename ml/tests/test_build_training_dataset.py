@@ -42,6 +42,8 @@ def test_concurrent_conversion_uses_independent_temporary_files(tmp_path, monkey
     )
 
     def fake_run(command, check):
+        assert all(isinstance(arg, (str, bytes)) for arg in command)
+        assert command.count("ffmpeg") <= 1
         source = Path(command[command.index("-i") + 1])
         destination = Path(command[-1])
         assert source.exists()
@@ -68,7 +70,7 @@ def test_concurrent_conversion_uses_independent_temporary_files(tmp_path, monkey
     assert not list(tmp_path.glob(".*.wav"))
 
 
-def test_conversion_uses_preflight_resolved_ffmpeg(tmp_path, monkeypatch):
+def test_conversion_uses_flat_preflight_ffmpeg_command(tmp_path, monkeypatch):
     monkeypatch.setattr(
         build_training_dataset.urllib.request,
         "urlopen",
@@ -77,6 +79,10 @@ def test_conversion_uses_preflight_resolved_ffmpeg(tmp_path, monkeypatch):
 
     def fake_run(command, check):
         assert command[0] == "/custom/bin/ffmpeg"
+        assert all(isinstance(arg, (str, bytes)) for arg in command)
+        assert command[command.index("-ac") + 1] == "1"
+        assert command[command.index("-ar") + 1] == "16000"
+        assert command[command.index("-sample_fmt") + 1] == "s16"
         Path(command[-1]).write_bytes(b"R" * 45)
 
     monkeypatch.setattr(build_training_dataset.subprocess, "run", fake_run)
