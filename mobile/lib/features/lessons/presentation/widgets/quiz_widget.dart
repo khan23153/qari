@@ -29,6 +29,22 @@ class _QuizWidgetState extends State<QuizWidget> {
   final Map<String, String> _matchAnswers = {};
 
   @override
+  void didUpdateWidget(covariant QuizWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A lesson swaps question data in the same screen slot. Keys normally
+    // create a fresh State, but reset defensively as well so a parent that
+    // updates QuizWidget without a key can never carry an answered question's
+    // `_isCorrect` into the next one (which highlights the next correct answer
+    // automatically and disables all taps).
+    if (oldWidget.question.id != widget.question.id) {
+      _selectedAnswer = null;
+      _isCorrect = null;
+      _fillBlankController.clear();
+      _matchAnswers.clear();
+    }
+  }
+
+  @override
   void dispose() {
     _fillBlankController.dispose();
     super.dispose();
