@@ -1,0 +1,4 @@
+{"audio_path":"phone_raw/affan_ikhlas_full.amr","text":"قُلْ هُوَ اللَّهُ أَحَدٌ اللَّهُ الصَّمَدُ لَمْ يَلِدْ وَلَمْ يُولَدْ وَلَمْ يَكُنْ لَهُ كُفُوًا أَحَدٌ","speaker_id":"affan","split":"test"}
+{"audio_path":"phone_raw/friend01_fatiha_01.wav","text":"الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ","speaker_id":"friend01","split":"train"}
+{"audio_path":"phone_raw/friend02_fatiha_01.wav","text":"الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ","speaker_id":"friend02","split":"eval"}
+{"audio_path":"phone_raw/friend03_ikhlas_01.m4a","text":"قُلْ هُوَ اللَّهُ أَحَدٌ","speaker_id":"friend03","split":"train"}
