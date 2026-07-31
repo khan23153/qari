@@ -144,10 +144,21 @@ def fetch_and_convert(
             wav_temp_path = Path(wav_file.name)
 
         subprocess.run(
-            [ffmpeg, "-y", "-loglevel", "error", "-i", str(mp3_path),
-            ["ffmpeg", "-y", "-loglevel", "error", "-i", str(mp3_path),
-             "-ac", "1", "-ar", "16000", "-sample_fmt", "s16",
-             str(wav_temp_path)],
+            [
+                ffmpeg,
+                "-y",
+                "-loglevel",
+                "error",
+                "-i",
+                str(mp3_path),
+                "-ac",
+                "1",
+                "-ar",
+                "16000",
+                "-sample_fmt",
+                "s16",
+                str(wav_temp_path),
+            ],
             check=True,
         )
         if wav_temp_path.stat().st_size <= 44:
