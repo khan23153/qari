@@ -162,6 +162,14 @@ Only after that succeeds, start the persistent full run:
 bash scripts/run_lightning_training.sh
 ```
 
+The launcher validates and prints the saved files when training finishes.
+Shell variables created inside a launcher cannot modify its parent terminal;
+to inspect an already completed run without relying on `QARI_OUTPUT_DIR`, use:
+
+```bash
+bash scripts/inspect_training_output.sh
+```
+
 If Lightning stops after at least one `checkpoint-*` directory was saved,
 resume the same output directory with:
 
@@ -188,6 +196,27 @@ The current trainer prepares all log-Mel features in system memory before
 training. Monitor both RAM and GPU utilization during the first full run; if
 system RAM is exhausted, train a smaller manifest view rather than rerunning
 the same oversized job.
+
+Back up a completed Hugging Face model as one archive plus a SHA-256 file:
+
+```bash
+bash scripts/package_training_output.sh
+```
+
+This writes `artifacts/qari-whisper-tiny-hf.tar.gz` and its `.sha256` beside
+the repository workspace. Upload both files to Google Drive. The archive
+contains the final model/config/processor/metrics files but intentionally
+excludes large intermediate `checkpoint-*` and TensorBoard directories.
+Verify any downloaded copy before restoring it:
+
+```bash
+sha256sum -c qari-whisper-tiny-hf.tar.gz.sha256
+```
+
+Do not decide to add epochs from training-set loss alone. First evaluate on
+recordings from speakers absent from training, especially ordinary/amateur
+voices and noisy phone microphones. More epochs on the same five professional
+reciters can overfit without improving production accuracy.
 
 ```bash
 pip install -r ml/requirements.txt transformers datasets soundfile torchaudio

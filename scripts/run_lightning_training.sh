@@ -44,3 +44,5 @@ python -m ml.training.finetune_whisper \
     --use_fp16 \
     --gradient_checkpointing \
     "${resume_args[@]}" 2>&1 | tee -a "$LOG_DIR/full-training.log"
+
+"$SCRIPT_DIR/inspect_training_output.sh"

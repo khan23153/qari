@@ -1,12 +1,39 @@
+import logging
 from types import SimpleNamespace
 
 import pytest
 
 from ml.training.finetune_whisper import (
+    _TrainerTokenizerDeprecationFilter,
     configure_whisper_model,
     create_dataset,
     resolve_resume_checkpoint,
 )
+
+
+def test_trainer_warning_filter_only_hides_obsolete_tokenizer_spam():
+    warning_filter = _TrainerTokenizerDeprecationFilter()
+    deprecated = logging.LogRecord(
+        "transformers.trainer",
+        logging.WARNING,
+        __file__,
+        1,
+        "Trainer.tokenizer is now deprecated. Use processing_class instead.",
+        (),
+        None,
+    )
+    useful = logging.LogRecord(
+        "transformers.trainer",
+        logging.WARNING,
+        __file__,
+        1,
+        "A useful training warning",
+        (),
+        None,
+    )
+
+    assert warning_filter.filter(deprecated) is False
+    assert warning_filter.filter(useful) is True
 
 
 def test_auto_resume_selects_highest_numeric_checkpoint(tmp_path):

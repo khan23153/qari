@@ -42,6 +42,23 @@ from typing import Optional, Any
 
 logger = logging.getLogger(__name__)
 
+
+class _TrainerTokenizerDeprecationFilter(logging.Filter):
+    """Hide one noisy warning after adopting its replacement API."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "Trainer.tokenizer is now deprecated" not in record.getMessage()
+
+
+def configure_transformers_logging() -> None:
+    """Keep evaluation progress readable on affected Transformers releases."""
+    trainer_logger = logging.getLogger("transformers.trainer")
+    if not any(
+        isinstance(item, _TrainerTokenizerDeprecationFilter)
+        for item in trainer_logger.filters
+    ):
+        trainer_logger.addFilter(_TrainerTokenizerDeprecationFilter())
+
 # ── Defaults ─────────────────────────────────────────────────────────────────
 
 DEFAULT_MODEL_ID = "tarteel-ai/whisper-base-ar-quran"
@@ -589,6 +606,7 @@ def main() -> None:
         format="%(asctime)s [%(levelname)s] %(message)s",
     )
     args = parse_args()
+    configure_transformers_logging()
     train(args)
 
 
