@@ -43,10 +43,6 @@ class FasterWhisperTranscriber:
     def load(self) -> None:
         if self._model is not None:
             return
-        if not os.path.isdir(self.model_dir):
-            raise FileNotFoundError(
-                f"CTranslate2 model directory does not exist: {self.model_dir}"
-            )
         from faster_whisper import WhisperModel
 
         logger.info(
