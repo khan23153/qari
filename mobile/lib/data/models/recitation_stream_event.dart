@@ -108,10 +108,41 @@ class RecitationStreamEvent {
         );
       case 'final':
         final resultJson = json['result'] as Map<String, dynamic>?;
+        RecitationResult? result;
+        if (resultJson != null) {
+          final normalized = Map<String, dynamic>.from(resultJson);
+          final verdicts = normalized['word_verdicts'];
+          final noSpeech = normalized['no_speech_detected'] == true;
+
+          // The current live page treats an empty verdict list as a missing
+          // backend result and replaces it with a local generic result. Preserve
+          // an explicit no-speech response by carrying a private sentinel
+          // verdict through the existing RecitationResult model. The results UI
+          // recognizes and hides this sentinel; it is never shown as a Quran
+          // word or counted as practice history.
+          if (noSpeech && (verdicts is! List || verdicts.isEmpty)) {
+            normalized['word_verdicts'] = [
+              {
+                'word': '',
+                'word_index': -1,
+                'is_correct': false,
+                'confidence': 0.0,
+                'expected_text': null,
+                'actual_text': null,
+                'error_type': 'no_speech',
+                'error_description': normalized['feedback'],
+                'reference_audio_url': normalized['reference_audio_url'],
+                'user_audio_url': normalized['user_audio_url'],
+                'phoneme_errors': <dynamic>[],
+              }
+            ];
+          }
+          result = RecitationResult.fromJson(normalized);
+        }
         return RecitationStreamEvent(
           type: RecitationStreamEventType.finalResult,
           sessionId: json['session_id'] as String?,
-          result: resultJson != null ? RecitationResult.fromJson(resultJson) : null,
+          result: result,
         );
       case 'error':
         return RecitationStreamEvent(
