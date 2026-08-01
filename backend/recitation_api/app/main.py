@@ -34,6 +34,13 @@ _FINAL_FRAME_SECONDS = 0.03
 _FINAL_MIN_ACTIVE_SECONDS = 0.45
 _FINAL_MIN_CONTIGUOUS_SECONDS = 0.12
 
+# A live tick should only run Whisper when the NEW audio received since the last
+# tick contains sustained activity. Checking the whole overlapping 6-second
+# window lets the same two spoken words keep triggering several later passes
+# after the user becomes silent, and each pass can append new hallucinations.
+_LIVE_MIN_NEW_ACTIVE_SECONDS = 0.12
+_LIVE_MIN_NEW_CONTIGUOUS_SECONDS = 0.06
+
 
 def _speech_activity_seconds(
     samples: list[float],
@@ -65,6 +72,54 @@ def _speech_activity_seconds(
     frame_seconds = frame_size / sample_rate
     return active_frames * frame_seconds, longest_run * frame_seconds
 
+
+_original_stream_maybe_transcribe = (
+    _streaming_session.StreamingRecitationSession.maybe_transcribe
+)
+
+
+async def _maybe_transcribe_with_recent_audio_gate(self, *, force: bool = False):
+    """Do not re-run an overlapping Whisper window after new audio is quiet."""
+    if not self._is_stub and not force and self.sample_rate > 0:
+        total_samples = self._total_samples
+        previous_samples = self._samples_at_last_transcribe
+        new_samples = total_samples - previous_samples
+        cadence_samples = int(
+            _streaming_session.TRANSCRIBE_INTERVAL_SEC * self.sample_rate
+        )
+
+        if new_samples >= cadence_samples:
+            recent_audio = self._decode_float(
+                start_sample=previous_samples,
+                end_sample=total_samples,
+            )
+            active_seconds, longest_active_seconds = _speech_activity_seconds(
+                recent_audio,
+                self.sample_rate,
+            )
+            has_new_speech = (
+                active_seconds >= _LIVE_MIN_NEW_ACTIVE_SECONDS
+                and longest_active_seconds >= _LIVE_MIN_NEW_CONTIGUOUS_SECONDS
+            )
+            if not has_new_speech:
+                # Consume this quiet interval so the next tick examines only
+                # genuinely new samples rather than repeatedly seeing the same
+                # earlier speech in the overlapping ASR window.
+                self._samples_at_last_transcribe = total_samples
+                _streaming_session.logger.debug(
+                    "stream.recent_audio_silent",
+                    session_id=self.session_id,
+                    active_seconds=round(active_seconds, 3),
+                    longest_active_seconds=round(longest_active_seconds, 3),
+                )
+                return []
+
+    return await _original_stream_maybe_transcribe(self, force=force)
+
+
+_streaming_session.StreamingRecitationSession.maybe_transcribe = (
+    _maybe_transcribe_with_recent_audio_gate
+)
 
 _original_stream_finalize = _streaming_session.StreamingRecitationSession.finalize
 
