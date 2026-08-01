@@ -21,10 +21,6 @@ class RecitationRepository {
     required String idempotencyKey,
     void Function(int sent, int total)? onProgress,
   }) async {
-    // ── Payload validation: never send a blank/empty file to the ML backend.
-    // A 0-byte upload is the classic cause of "0 words correct / Duration 0s"
-    // (the server has nothing to transcribe). Surface it as a clear error
-    // instead of silently uploading silence.
     final file = File(filePath);
     if (!file.existsSync()) {
       throw const ApiException(
@@ -57,7 +53,6 @@ class RecitationRepository {
           seconds: AppConstants.recitationApiTimeoutSeconds,
         ),
       );
-      // Log the server's exact JSON response so backend/ML issues are visible.
       debugPrint('RecitationRepository upload response '
           '(${response.statusCode}): ${response.data}');
       final data = response.data as Map<String, dynamic>;
@@ -77,16 +72,28 @@ class RecitationRepository {
 
       final status = data['status'] as String?;
       if (status == 'completed') {
-        return RecitationResult.fromJson(
-            data['result'] as Map<String, dynamic>);
+        final rawResult = data['result'];
+        if (rawResult is! Map<String, dynamic>) {
+          throw const ApiException(
+            message: 'Analysis completed without a valid result.',
+            errorCode: 'INVALID_ANALYSIS_RESULT',
+          );
+        }
+        return RecitationResult.fromJson(rawResult);
       }
       if (status == 'failed') {
+        // The backend poll contract uses `error_message`. Older clients looked
+        // for `error`, which discarded the real worker exception and made every
+        // failure appear as a generic timeout/analysis error.
+        final detail = (data['error_message'] ?? data['error']) as String?;
         throw ApiException(
-          message: data['error'] as String? ?? 'Analysis failed',
+          message: detail?.trim().isNotEmpty == true
+              ? detail!.trim()
+              : 'Analysis failed',
           errorCode: 'ANALYSIS_FAILED',
         );
       }
-      return null; // Still processing
+      return null;
     } on DioException catch (e) {
       throw ApiException.fromDioError(e);
     }
@@ -98,7 +105,9 @@ class RecitationRepository {
     String sessionId, {
     void Function(int attempt, int maxAttempts)? onPolling,
   }) async {
-    for (var attempt = 0; attempt < AppConstants.recitationMaxPollAttempts; attempt++) {
+    for (var attempt = 0;
+        attempt < AppConstants.recitationMaxPollAttempts;
+        attempt++) {
       onPolling?.call(attempt, AppConstants.recitationMaxPollAttempts);
 
       final result = await getRecitationResult(sessionId);
@@ -133,10 +142,7 @@ class RecitationRepository {
     }
   }
 
-  /// Identifies which Quranic verse (surah:ayah) a recited clip corresponds to
-  /// (Tarteel-style "verse lookup"). Uploads a short WAV clip; the backend
-  /// transcribes it with the Quran ASR and matches it against the corpus.
-  /// Returns the parsed response (transcript + ranked candidates).
+  /// Identifies which Quranic verse (surah:ayah) a recited clip corresponds to.
   Future<Map<String, dynamic>> identifyVerse({
     required String filePath,
     int topK = 5,
