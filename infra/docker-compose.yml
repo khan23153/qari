@@ -64,23 +64,12 @@ services:
       QARI_CORE_API_BASE_URL: http://core-api:8000
       QARI_ENVIRONMENT: dev
       QARI_CORS_ORIGINS: '["http://137.23.42.171"]'
-      # Public base URL so the worker can hand the mobile a playable HTTP URL
-      # for the user's uploaded recording (the mobile cannot open the
-      # server-local filesystem path). Must match the mobile API base host.
       QARI_RECITATION_API_PUBLIC_URL: https://137.23.42.171
-      # The real-time streaming pipeline runs INSIDE recitation-api, so it must
-      # be able to import the `ml` package (StreamingMatcher + reference store)
-      # and the ML engine. Mount `ml` and put it on the path. The live stream
-      # uses Faster-Whisper (CTranslate2, INT8) for CPU-efficient real-time ASR.
-      # LIVE tracking uses the `tiny` fine-tune: on this 4-CPU VPS `base` takes
-      # ~6s per 6-10s window (too slow for real-time — user saw "buffering"),
-      # while `tiny` is ~2.2s/window and keeps up with continuous speech. The
-      # heavier `base` model is still used by the batch inference-worker for the
-      # per-ayah upload flow (higher accuracy where latency doesn't matter).
-      # Models are bind-mounted (created by scripts/convert_tarteel_model.py).
       PYTHONPATH: /app
       QARI_ML_USE_STUB: "false"
-      QARI_FASTERWHISPER_MODEL_DIR: /app/models/tarteel-ct2-base
+      # Live inference uses the phase-two robust tiny CT2 artifact. Override the
+      # host model directory with QARI_MODELS_DIR when it is stored elsewhere.
+      QARI_FASTERWHISPER_MODEL_DIR: /app/models/qari-ct2-tiny-robust-v2
       QARI_REFERENCE_DATA_DIR: /app/reference_data
     depends_on:
       redis:
@@ -90,7 +79,10 @@ services:
       - ../backend/recitation_api:/app
       - ../ml:/app/ml
       - ../backend/recitation_api/reference_data:/app/reference_data:ro
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+      - ${QARI_MODELS_DIR:-../models}:/app/models:ro
+    # Do not use --reload for the live WebSocket service: reloads terminate
+    # active recitations and can create duplicate model processes.
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --workers 1
 
   inference-worker:
     build:
