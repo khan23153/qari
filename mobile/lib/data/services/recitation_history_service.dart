@@ -48,6 +48,17 @@ class RecitationHistoryService {
       mistakes: mistakes,
     );
 
+    // A no-speech backend response is carried through the current mobile model
+    // as one private sentinel verdict/mistake. It is a failed capture attempt,
+    // not Quran practice: do not add it to history or advance the streak.
+    final isNoSpeechAttempt = totalCount == 1 &&
+        correctCount == 0 &&
+        mistakes.length == 1 &&
+        mistakes.first.errorType == 'no_speech';
+    if (isNoSpeechAttempt) {
+      return record;
+    }
+
     final all = _readAll();
     all.insert(0, record);
     if (all.length > maxRecords) {
@@ -100,7 +111,7 @@ class RecitationHistoryService {
       if (diff == 1) {
         streak++;
       } else if (diff == 0) {
-        continue; // duplicate day, ignore
+        continue;
       } else {
         break;
       }
@@ -111,7 +122,6 @@ class RecitationHistoryService {
   int getSessionCount() => _readAll().length;
 
   void _updateStreak(DateTime sessionDate) {
-    // Recompute from scratch — cheapest way to stay correct.
     _prefs.setInt(_kStreak, getStreak());
     _prefs.setString(_kLastActiveDate, _dayKey(sessionDate).toIso8601String());
   }
