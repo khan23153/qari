@@ -1,10 +1,4 @@
-"""Unit tests for the Faster-Whisper (CT2) live transcriber.
-
-These exercises run WITHOUT downloading the model: we monkeypatch the underlying
-``faster_whisper.WhisperModel`` so the test asserts the transcriber's shaping
-logic (word extraction, confidence passthrough, normalization hand-off) and the
-singleton loader, not the actual ASR weights.
-"""
+"""Unit tests for the Faster-Whisper live transcriber."""
 
 from __future__ import annotations
 
@@ -18,9 +12,17 @@ from ml.inference.faster_whisper_transcriber import (
 
 
 class _FakeWord:
-    def __init__(self, word: str, probability: float) -> None:
+    def __init__(
+        self,
+        word: str,
+        probability: float | None,
+        start: float = 0.0,
+        end: float = 0.0,
+    ) -> None:
         self.word = word
         self.probability = probability
+        self.start = start
+        self.end = end
 
 
 class _FakeSegment:
@@ -37,7 +39,6 @@ class _FakeModel:
 
 
 def _patch_model(fake: _FakeModel):
-    """Patch the real ``faster_whisper.WhisperModel`` symbol with ``fake``."""
     return patch("faster_whisper.WhisperModel", return_value=fake)
 
 
@@ -56,9 +57,43 @@ def test_transcribe_extracts_words_and_confidences():
     with _patch_model(fake):
         tx.load()
         words, confs = tx.transcribe([0.0] * 1600, 16000)
-    # Raw Arabic tokens are returned verbatim (normalization is the caller's job).
     assert words == ["بِسْمِ", "اللَّهِ", "الرَّحْمَنِ"]
     assert confs == [0.91, 0.88, 0.80]
+
+
+def test_zero_probability_is_not_promoted_to_one():
+    fake = _FakeModel(_FakeSegment([_FakeWord("خطأ", 0.0)]))
+    tx = FasterWhisperTranscriber(model_dir="/tmp/model")
+    with _patch_model(fake):
+        tx.load()
+        words, confs = tx.transcribe([0.1] * 1600, 16000)
+    assert words == ["خطأ"]
+    assert confs == [0.0]
+
+
+def test_missing_probability_defaults_to_one():
+    fake = _FakeModel(_FakeSegment([_FakeWord("بسم", None)]))
+    tx = FasterWhisperTranscriber(model_dir="/tmp/model")
+    with _patch_model(fake):
+        tx.load()
+        _, confs = tx.transcribe([0.1] * 1600, 16000)
+    assert confs == [1.0]
+
+
+def test_transcribe_with_timings_preserves_zero_probability():
+    fake = _FakeModel(
+        _FakeSegment([_FakeWord("بسم", 0.0, start=0.25, end=0.75)])
+    )
+    tx = FasterWhisperTranscriber(model_dir="/tmp/model")
+    with _patch_model(fake):
+        tx.load()
+        words, confs, starts, ends = tx.transcribe_with_timings(
+            [0.1] * 1600, 16000
+        )
+    assert words == ["بسم"]
+    assert confs == [0.0]
+    assert starts == [250]
+    assert ends == [750]
 
 
 def test_transcribe_empty_audio_returns_empty():
@@ -71,11 +106,10 @@ def test_transcribe_empty_audio_returns_empty():
 
 
 def test_singleton_returns_same_instance():
-    # Reset module-level singleton for a clean check.
-    import ml.inference.faster_whisper_transcriber as m
+    import ml.inference.faster_whisper_transcriber as module
 
-    m._transcriber_singleton = None
-    a = get_transcriber()
-    b = get_transcriber()
-    assert a is b
-    m._transcriber_singleton = None
+    module._transcriber_singleton = None
+    first = get_transcriber()
+    second = get_transcriber()
+    assert first is second
+    module._transcriber_singleton = None
