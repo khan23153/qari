@@ -15,7 +15,7 @@ Production scoring is intentionally conservative:
 * ASR-only insertions/hallucinations never increase the displayed word count;
 * the overall score is the reference-word match ratio, not the research
   pipeline's provisional tajweed-weighted score;
-* tajweed is marked unavailable while word timing is estimated.
+* tajweed is reported as unavailable while word timing is estimated.
 """
 
 from __future__ import annotations
@@ -41,8 +41,6 @@ from app.workers.inference_worker import (
 
 logger = get_logger(__name__)
 
-# Leave enough headroom for a cold CT2 model load while still returning a
-# terminal failed status before the mobile's 120-second polling window expires.
 BATCH_ANALYSIS_TIMEOUT_SEC = int(
     os.environ.get("QARI_BATCH_ANALYSIS_TIMEOUT_SEC", "90")
 )
@@ -54,9 +52,10 @@ WORD_CONFIDENCE_THRESHOLD = float(
     os.environ.get("QARI_BATCH_WORD_CONFIDENCE_THRESHOLD", "0.50")
 )
 
-# Negative is a deliberate wire sentinel. The Flutter results widget renders
-# it as N/A instead of inventing a tajweed percentage from estimated timings.
-TAJWEED_UNAVAILABLE_SCORE = -1.0
+# Keep the existing 0..1 wire contract safe for older APKs. The feedback text
+# explicitly says tajweed is unavailable until the mobile model gains a
+# dedicated nullable/availability field.
+TAJWEED_UNAVAILABLE_SCORE = 0.0
 
 
 class FasterWhisperASRAdapter:
@@ -64,7 +63,6 @@ class FasterWhisperASRAdapter:
 
     def __init__(self) -> None:
         from ml.inference.faster_whisper_transcriber import get_transcriber
-
         self._transcriber = get_transcriber()
 
     def transcribe(self, audio, sample_rate: int = 16000):
@@ -72,8 +70,7 @@ class FasterWhisperASRAdapter:
 
         started = time.perf_counter()
         words, confidences, starts, ends = self._transcriber.transcribe_with_timings(
-            audio,
-            sample_rate,
+            audio, sample_rate
         )
 
         tokens: list[ASRToken] = []
@@ -83,17 +80,9 @@ class FasterWhisperASRAdapter:
             normalized = normalize_arabic(raw_word)
             if not normalized:
                 continue
-            confidence = (
-                float(confidences[index])
-                if index < len(confidences)
-                else 1.0
-            )
+            confidence = float(confidences[index]) if index < len(confidences) else 1.0
             start_ms = starts[index] if index < len(starts) else 0
             end_ms = ends[index] if index < len(ends) else start_ms
-
-            # Whisper normally emits one lexical word per timestamp entry, but
-            # normalization can occasionally leave whitespace. Preserve a
-            # one-token-per-normalized-word contract for the aligner.
             for normalized_word in normalized.split():
                 raw_words.append(raw_word.strip())
                 normalized_words.append(normalized_word)
@@ -118,8 +107,6 @@ class FasterWhisperASRAdapter:
 
 
 class EstimatedTimestampsOnly:
-    """Tell ``RecitationPipeline`` to use its cheap timestamp estimator."""
-
     def align(self, *_args, **_kwargs):
         raise RuntimeError("Forced alignment disabled in fast production worker")
 
@@ -153,7 +140,6 @@ def _get_fast_pipeline():
 
 
 def _speech_activity(audio: np.ndarray, sample_rate: int) -> tuple[float, float]:
-    """Return total active seconds and whole-clip RMS using 30 ms frames."""
     samples = np.asarray(audio, dtype=np.float32).reshape(-1)
     if samples.size == 0 or sample_rate <= 0:
         return 0.0, 0.0
@@ -185,12 +171,6 @@ def _reference_only_verdicts(
     reference_audio_url: Optional[str],
     user_audio_url: Optional[str],
 ) -> tuple[list[dict], int, int, list[float]]:
-    """Convert pipeline rows into one verdict per expected Quran word.
-
-    ``WordAligner`` emits ``inserted_extra`` rows with ``reference=None`` for
-    ASR hallucinations. Those rows are useful diagnostics but must never become
-    Quran word cards or alter the denominator shown to the learner.
-    """
     verdicts: list[dict] = []
     correct_count = 0
     confidences: list[float] = []
@@ -216,8 +196,6 @@ def _reference_only_verdicts(
         if is_correct:
             correct_count += 1
 
-        error_type: Optional[str]
-        error_description: Optional[str]
         if is_correct:
             error_type = None
             error_description = None
@@ -252,7 +230,6 @@ def _reference_only_verdicts(
 
 
 async def run_fast_ml_inference(job: dict) -> dict:
-    """Analyze one uploaded recording with the local CT2 model."""
     session_id = job.get("session_id", "")
     surah = int(job.get("surah_number", 1))
     ayah_from = int(job.get("ayah_from", 1))
@@ -301,6 +278,7 @@ async def run_fast_ml_inference(job: dict) -> dict:
     reference_word_count = 0
     result_confidences: list[float] = []
     reference_audio_url: Optional[str] = None
+    ignored_insertions = 0
 
     for ayah in range(ayah_from, ayah_to + 1):
         if not _ensure_reference(surah, ayah, qari_id):
@@ -331,6 +309,7 @@ async def run_fast_ml_inference(job: dict) -> dict:
             ) from exc
 
         evaluated_ayahs += 1
+        ignored_insertions += sum(1 for row in ml_result.words if not row.reference)
         ayah_reference_url = (
             ml_result.reference_audio_url
             or _build_reference_audio_url(surah, ayah)
@@ -338,16 +317,13 @@ async def run_fast_ml_inference(job: dict) -> dict:
         if reference_audio_url is None:
             reference_audio_url = ayah_reference_url
 
-        (
-            ayah_verdicts,
-            global_index,
-            ayah_correct,
-            ayah_confidences,
-        ) = _reference_only_verdicts(
-            ml_result.words,
-            start_index=global_index,
-            reference_audio_url=ayah_reference_url,
-            user_audio_url=user_audio_url,
+        ayah_verdicts, global_index, ayah_correct, ayah_confidences = (
+            _reference_only_verdicts(
+                ml_result.words,
+                start_index=global_index,
+                reference_audio_url=ayah_reference_url,
+                user_audio_url=user_audio_url,
+            )
         )
         word_verdicts.extend(ayah_verdicts)
         correct_reference_words += ayah_correct
@@ -388,9 +364,8 @@ async def run_fast_ml_inference(job: dict) -> dict:
     )
     if uncertain_count:
         feedback = (
-            f"{uncertain_count} word(s) were uncertain and are shown in amber. "
-            "They are not confirmed pronunciation errors. Tajweed scoring is "
-            "not available in fast mode."
+            f"{uncertain_count} word(s) were uncertain. They are not confirmed "
+            "pronunciation errors. Tajweed scoring is not available in fast mode."
         )
     else:
         feedback = (
@@ -403,11 +378,7 @@ async def run_fast_ml_inference(job: dict) -> dict:
         session_id=session_id,
         correct=correct_reference_words,
         reference_words=reference_word_count,
-        ignored_insertions=sum(
-            1
-            for verdict in getattr(ml_result, "words", [])
-            if not verdict.reference
-        ),
+        ignored_insertions=ignored_insertions,
         word_match_score=round(word_match_score, 4),
         average_confidence=round(average_confidence, 4),
     )
@@ -420,8 +391,6 @@ async def run_fast_ml_inference(job: dict) -> dict:
         overall=word_match_score,
         pronunciation=word_match_score,
         tajweed=TAJWEED_UNAVAILABLE_SCORE,
-        # Until a real fluency model is deployed, expose recognition confidence
-        # rather than copying the pronunciation score into another card.
         fluency=average_confidence,
         accuracy=word_match_score,
         word_verdicts=word_verdicts,
