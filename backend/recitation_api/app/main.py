@@ -12,10 +12,21 @@ from app.api.router import api_router
 from app.core.config import settings
 from app.core.logging import get_logger, setup_logging
 
+# Compatibility guard for the live session's silence gate. The RMS helper is a
+# module-level function, while the streaming code calls it through the session
+# instance. Bind it as a static method at import time so production live ASR
+# does not fail every pass with AttributeError. This is deliberately centralized
+# here until the streaming service is split into smaller units.
+from app.services import streaming_session as _streaming_session
+
+if not hasattr(_streaming_session.StreamingRecitationSession, "_rms_energy"):
+    _streaming_session.StreamingRecitationSession._rms_energy = staticmethod(
+        _streaming_session._rms_energy
+    )
+
 setup_logging()
 logger = get_logger(__name__)
 
-# --- Prometheus metrics ---
 REQUEST_COUNT = Counter(
     "qari_recitation_http_requests_total",
     "Total HTTP requests",
@@ -43,31 +54,26 @@ RECITATION_COMPLETED = Counter(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Application lifespan: startup and shutdown hooks."""
     logger.info("app.starting", service=settings.app_name, version=settings.app_version)
-
-    # Ensure audio storage directory exists
     os.makedirs(settings.audio_storage_path, exist_ok=True)
-
     logger.info("app.started")
-
     yield
-
     logger.info("app.stopped")
 
 
 def create_app() -> FastAPI:
-    """Create and configure the recitation FastAPI application."""
     app = FastAPI(
         title="Qari Recitation API",
-        description="Quran Learning App — Recitation API service (audio upload, WebSocket results, Redis Streams inference queue)",
+        description=(
+            "Quran Learning App — Recitation API service "
+            "(audio upload, WebSocket results, Redis Streams inference queue)"
+        ),
         version=settings.app_version,
         lifespan=lifespan,
         docs_url="/docs" if not settings.is_production else None,
         redoc_url="/redoc" if not settings.is_production else None,
     )
 
-    # --- CORS ---
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -75,27 +81,25 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-
-    # --- Routes ---
     app.include_router(api_router)
 
-    # --- Health check ---
     @app.get("/health", tags=["health"])
     async def health_check():
-        """Liveness probe."""
-        return {"status": "ok", "service": settings.app_name, "version": settings.app_version}
+        return {
+            "status": "ok",
+            "service": settings.app_name,
+            "version": settings.app_version,
+        }
 
-    # --- Prometheus metrics endpoint ---
     @app.get("/metrics", tags=["monitoring"])
     async def metrics():
-        """Prometheus metrics endpoint."""
         return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
-    # --- Metrics middleware ---
     @app.middleware("http")
     async def metrics_middleware(request: Request, call_next):
         ACTIVE_REQUESTS.inc()
         import time
+
         start = time.time()
         try:
             response = await call_next(request)
