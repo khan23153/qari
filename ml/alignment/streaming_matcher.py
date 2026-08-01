@@ -58,16 +58,22 @@ def char_similarity(a: str, b: str) -> float:
 
 
 MATCH_SIMILARITY_THRESHOLD = 0.80
+LIVE_MATCH_CONFIDENCE_THRESHOLD = 0.55
 LOOKAHEAD = 3
 WINDOW_SIZE = 15
 
 
 class StreamingMatcher:
-    """Greedily align a cumulative ASR hypothesis to a reference sequence.
+    """Incrementally align a cumulative ASR hypothesis to a Quran reference.
 
-    Resolved live states remain stable for UI purposes. Create a fresh matcher
-    for end-of-session scoring so temporary streaming errors can be corrected by
-    a final full-audio transcription.
+    Live mode is deliberately conservative: it only advances on a confident
+    sequential match. Unmatched ASR tokens are treated as possible insertions or
+    hallucinations and are ignored until final review. This prevents one noisy
+    Whisper window from painting the rest of a page red or skipping ahead while
+    the user is silent.
+
+    Full/final mode retains richer error and skip classification for the review
+    result after recording has stopped.
     """
 
     def __init__(
@@ -75,6 +81,7 @@ class StreamingMatcher:
         reference_words: list[str],
         *,
         match_threshold: float = MATCH_SIMILARITY_THRESHOLD,
+        live_confidence_threshold: float = LIVE_MATCH_CONFIDENCE_THRESHOLD,
         lookahead: int = LOOKAHEAD,
         window_size: int = WINDOW_SIZE,
         phonetic_threshold: float = PHONETIC_MATCH_THRESHOLD,
@@ -82,6 +89,7 @@ class StreamingMatcher:
     ) -> None:
         self.reference = list(reference_words)
         self.match_threshold = match_threshold
+        self.live_confidence_threshold = max(0.0, min(1.0, live_confidence_threshold))
         self.lookahead = max(0, lookahead)
         self.window_size = max(1, window_size)
         self.phonetic_threshold = phonetic_threshold
@@ -124,6 +132,60 @@ class StreamingMatcher:
                 return float(confidences[index])
             return 1.0
 
+        if not full:
+            # Trust-first live tracking: never mark a word wrong or skipped while
+            # audio is still streaming. A noisy/hallucinated token is discarded,
+            # and the reference cursor only moves after a confident match to the
+            # current expected word.
+            while i < window_end and j < hypothesis_count:
+                expected = self.reference[i]
+                spoken = hypothesis_words[j]
+                spoken_confidence = confidence(j)
+
+                if (
+                    spoken_confidence >= self.live_confidence_threshold
+                    and self._is_match(spoken, expected)
+                ):
+                    self._resolved_states.append(
+                        WordState(
+                            i,
+                            expected,
+                            WordStatus.MATCHED,
+                            spoken,
+                            spoken_confidence,
+                        )
+                    )
+                    i += 1
+                    j += 1
+                    continue
+
+                # Search only a very small hypothesis lookahead for the current
+                # expected word. This skips an inserted hallucination without
+                # skipping any Quran reference words.
+                insertion_end = min(hypothesis_count, j + 1 + self.lookahead)
+                insertion_to: Optional[int] = None
+                for candidate in range(j + 1, insertion_end):
+                    if (
+                        confidence(candidate) >= self.live_confidence_threshold
+                        and self._is_match(hypothesis_words[candidate], expected)
+                    ):
+                        insertion_to = candidate
+                        break
+                if insertion_to is not None:
+                    j = insertion_to
+                    continue
+
+                # Consume only the ASR token. The reference word remains active.
+                j += 1
+
+            self._cursor = i
+            self._hyp_cursor = min(j, hypothesis_count)
+            for state in self._resolved_states:
+                self._resolved[state.index] = state.status
+            return list(self._resolved_states)
+
+        # Final review mode: classify substitutions and short skips after the
+        # session has ended. This path is intentionally richer than live mode.
         while i < window_end and j < hypothesis_count:
             spoken = hypothesis_words[j]
             expected = self.reference[i]
@@ -136,7 +198,6 @@ class StreamingMatcher:
                 j += 1
                 continue
 
-            # Never allow one hallucinated token to skip an entire local window.
             skip_search_end = min(window_end, i + 1 + self.lookahead)
             skip_to = self._find_ref(spoken, i + 1, skip_search_end)
             if skip_to is not None:
@@ -157,7 +218,6 @@ class StreamingMatcher:
                 j += 1
                 continue
 
-            # `lookahead` is a count, not an absolute hypothesis index.
             insertion_search_end = j + 1 + self.lookahead
             insertion_to = self._find_hyp(
                 expected,
