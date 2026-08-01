@@ -9,6 +9,13 @@ This worker keeps the same Redis job/result contract but uses the local
 CTranslate2 INT8 model already deployed for live recitation. It also forces the
 network-free RMS VAD path and uses the pipeline's estimated timestamps instead
 of loading the prototype forced-alignment model.
+
+Production scoring is intentionally conservative:
+* only rows backed by an expected Quran reference word are returned;
+* ASR-only insertions/hallucinations never increase the displayed word count;
+* the overall score is the reference-word match ratio, not the research
+  pipeline's provisional tajweed-weighted score;
+* tajweed is marked unavailable while word timing is estimated.
 """
 
 from __future__ import annotations
@@ -16,7 +23,6 @@ from __future__ import annotations
 import asyncio
 import os
 import time
-from datetime import datetime, timezone
 from typing import Optional
 
 import numpy as np
@@ -44,6 +50,13 @@ MIN_SPEECH_RMS = float(os.environ.get("QARI_BATCH_MIN_SPEECH_RMS", "0.006"))
 MIN_ACTIVE_SPEECH_SEC = float(
     os.environ.get("QARI_BATCH_MIN_ACTIVE_SPEECH_SEC", "0.25")
 )
+WORD_CONFIDENCE_THRESHOLD = float(
+    os.environ.get("QARI_BATCH_WORD_CONFIDENCE_THRESHOLD", "0.50")
+)
+
+# Negative is a deliberate wire sentinel. The Flutter results widget renders
+# it as N/A instead of inventing a tajweed percentage from estimated timings.
+TAJWEED_UNAVAILABLE_SCORE = -1.0
 
 
 class FasterWhisperASRAdapter:
@@ -165,6 +178,79 @@ def _public_user_audio_url(session_id: str, fallback: Optional[str]) -> Optional
     return fallback
 
 
+def _reference_only_verdicts(
+    word_results,
+    *,
+    start_index: int,
+    reference_audio_url: Optional[str],
+    user_audio_url: Optional[str],
+) -> tuple[list[dict], int, int, list[float]]:
+    """Convert pipeline rows into one verdict per expected Quran word.
+
+    ``WordAligner`` emits ``inserted_extra`` rows with ``reference=None`` for
+    ASR hallucinations. Those rows are useful diagnostics but must never become
+    Quran word cards or alter the denominator shown to the learner.
+    """
+    verdicts: list[dict] = []
+    correct_count = 0
+    confidences: list[float] = []
+    next_index = start_index
+
+    for word_result in word_results:
+        expected = word_result.reference
+        if not expected:
+            logger.info(
+                "fast_worker.ignore_asr_insertion",
+                hypothesis=word_result.hypothesis,
+                confidence=round(float(word_result.confidence), 3),
+            )
+            continue
+
+        confidence = float(word_result.confidence)
+        confidences.append(confidence)
+        is_uncertain = (
+            word_result.verdict == "low_confidence"
+            or confidence < WORD_CONFIDENCE_THRESHOLD
+        )
+        is_correct = word_result.verdict == "correct" and not is_uncertain
+        if is_correct:
+            correct_count += 1
+
+        error_type: Optional[str]
+        error_description: Optional[str]
+        if is_correct:
+            error_type = None
+            error_description = None
+        elif is_uncertain:
+            error_type = "recognition_uncertain"
+            error_description = (
+                "The speech recognizer was not confident about this word. "
+                "Please retry; this is not a confirmed pronunciation error."
+            )
+        else:
+            error_type = word_result.verdict
+            error_description = _describe_errors(word_result.tajweed_issues)
+
+        verdicts.append(
+            {
+                "word": expected,
+                "word_index": next_index,
+                "is_correct": is_correct,
+                "confidence": confidence,
+                "expected_text": expected,
+                "actual_text": word_result.hypothesis,
+                "error_type": error_type,
+                "error_description": error_description,
+                "reference_audio_url": reference_audio_url,
+                "user_audio_url": user_audio_url,
+                "phoneme_errors": [],
+            }
+        )
+        next_index += 1
+
+    return verdicts, next_index, correct_count, confidences
+
+
 async def run_fast_ml_inference(job: dict) -> dict:
     """Analyze one uploaded recording with the local CT2 model."""
     session_id = job.get("session_id", "")
@@ -195,7 +281,7 @@ async def run_fast_ml_inference(job: dict) -> dict:
             ayah=ayah_from,
             overall=0.0,
             pronunciation=0.0,
-            tajweed=0.0,
+            tajweed=TAJWEED_UNAVAILABLE_SCORE,
             fluency=0.0,
             accuracy=0.0,
             word_verdicts=[],
@@ -210,10 +296,9 @@ async def run_fast_ml_inference(job: dict) -> dict:
     pipeline = _get_fast_pipeline()
     word_verdicts: list[dict] = []
     global_index = 0
-    overall_total = 0.0
-    fluency_total = 0.0
-    tajweed_total = 0.0
     evaluated_ayahs = 0
+    correct_reference_words = 0
+    reference_word_count = 0
     result_confidences: list[float] = []
     reference_audio_url: Optional[str] = None
 
@@ -246,45 +331,30 @@ async def run_fast_ml_inference(job: dict) -> dict:
             ) from exc
 
         evaluated_ayahs += 1
-        overall_total += ml_result.scores.overall
-        fluency_total += ml_result.scores.fluency
-        tajweed_total += ml_result.scores.tajweed
-        if reference_audio_url is None:
-            reference_audio_url = (
-                ml_result.reference_audio_url
-                or _build_reference_audio_url(surah, ayah)
-            )
-
         ayah_reference_url = (
             ml_result.reference_audio_url
             or _build_reference_audio_url(surah, ayah)
         )
-        for word_result in ml_result.words:
-            confidence = float(word_result.confidence)
-            result_confidences.append(confidence)
-            is_correct = word_result.verdict == "correct"
-            word_verdicts.append(
-                {
-                    "word": word_result.word or word_result.reference or "",
-                    "word_index": global_index,
-                    "is_correct": is_correct,
-                    "confidence": confidence,
-                    "expected_text": word_result.reference,
-                    "actual_text": word_result.hypothesis,
-                    "error_type": None if is_correct else word_result.verdict,
-                    "error_description": (
-                        None
-                        if is_correct
-                        else _describe_errors(word_result.tajweed_issues)
-                    ),
-                    "reference_audio_url": ayah_reference_url,
-                    "user_audio_url": user_audio_url,
-                    "phoneme_errors": [],
-                }
-            )
-            global_index += 1
+        if reference_audio_url is None:
+            reference_audio_url = ayah_reference_url
 
-    if evaluated_ayahs == 0:
+        (
+            ayah_verdicts,
+            global_index,
+            ayah_correct,
+            ayah_confidences,
+        ) = _reference_only_verdicts(
+            ml_result.words,
+            start_index=global_index,
+            reference_audio_url=ayah_reference_url,
+            user_audio_url=user_audio_url,
+        )
+        word_verdicts.extend(ayah_verdicts)
+        correct_reference_words += ayah_correct
+        reference_word_count += len(ayah_verdicts)
+        result_confidences.extend(ayah_confidences)
+
+    if evaluated_ayahs == 0 or reference_word_count == 0:
         return _build_result_dict(
             job=job,
             session_id=session_id,
@@ -292,7 +362,7 @@ async def run_fast_ml_inference(job: dict) -> dict:
             ayah=ayah_from,
             overall=0.0,
             pronunciation=0.0,
-            tajweed=0.0,
+            tajweed=TAJWEED_UNAVAILABLE_SCORE,
             fluency=0.0,
             accuracy=0.0,
             word_verdicts=[],
@@ -304,34 +374,60 @@ async def run_fast_ml_inference(job: dict) -> dict:
             confidence=0.0,
         )
 
+    word_match_score = correct_reference_words / reference_word_count
     average_confidence = (
         sum(result_confidences) / len(result_confidences)
         if result_confidences
         else 0.0
     )
-    if average_confidence < 0.5:
-        # Never surface red mistakes from an uncertain transcription.
-        word_verdicts = []
 
-    divisor = float(evaluated_ayahs)
+    uncertain_count = sum(
+        1
+        for verdict in word_verdicts
+        if verdict.get("error_type") == "recognition_uncertain"
+    )
+    if uncertain_count:
+        feedback = (
+            f"{uncertain_count} word(s) were uncertain and are shown in amber. "
+            "They are not confirmed pronunciation errors. Tajweed scoring is "
+            "not available in fast mode."
+        )
+    else:
+        feedback = (
+            "Word matching complete. Tap red words to compare the recognized "
+            "word with the reference. Tajweed scoring is not available in fast mode."
+        )
+
+    logger.info(
+        "fast_worker.reference_scoring",
+        session_id=session_id,
+        correct=correct_reference_words,
+        reference_words=reference_word_count,
+        ignored_insertions=sum(
+            1
+            for verdict in getattr(ml_result, "words", [])
+            if not verdict.reference
+        ),
+        word_match_score=round(word_match_score, 4),
+        average_confidence=round(average_confidence, 4),
+    )
+
     return _build_result_dict(
         job=job,
         session_id=session_id,
         surah=surah,
         ayah=ayah_from,
-        overall=overall_total / divisor / 100.0,
-        pronunciation=fluency_total / divisor / 100.0,
-        tajweed=tajweed_total / divisor / 100.0,
-        fluency=fluency_total / divisor / 100.0,
-        accuracy=fluency_total / divisor / 100.0,
+        overall=word_match_score,
+        pronunciation=word_match_score,
+        tajweed=TAJWEED_UNAVAILABLE_SCORE,
+        # Until a real fluency model is deployed, expose recognition confidence
+        # rather than copying the pronunciation score into another card.
+        fluency=average_confidence,
+        accuracy=word_match_score,
         word_verdicts=word_verdicts,
         reference_audio_url=reference_audio_url,
         user_audio_url=user_audio_url,
-        feedback=(
-            "AI feedback complete. Tap red words to compare your recitation."
-            if word_verdicts
-            else "We couldn't analyse this recitation with enough confidence."
-        ),
+        feedback=feedback,
         feedback_urdu=None,
         duration_seconds=duration_sec,
         confidence=average_confidence,
