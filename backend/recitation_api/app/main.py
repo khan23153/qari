@@ -41,6 +41,12 @@ _FINAL_MIN_CONTIGUOUS_SECONDS = 0.12
 _LIVE_MIN_NEW_ACTIVE_SECONDS = 0.12
 _LIVE_MIN_NEW_CONTIGUOUS_SECONDS = 0.06
 
+# A normal Quran recitation is commonly around two to three words per second.
+# Cap live reveal progress by measured active speech so a language-model
+# continuation cannot reveal an entire page after the user says only a few words.
+_LIVE_MAX_WORDS_PER_ACTIVE_SECOND = 2.4
+_LIVE_MIN_WORD_CONFIDENCE = 0.35
+
 
 def _speech_activity_seconds(
     samples: list[float],
@@ -73,13 +79,104 @@ def _speech_activity_seconds(
     return active_frames * frame_seconds, longest_run * frame_seconds
 
 
+class _ConservativeLiveMatcher:
+    """Trust-first matcher used only for production live UI tracking.
+
+    Live mode advances only when an ASR token matches the *next* expected word.
+    Unmatched tokens are ignored instead of marking Quran words as errors or
+    skipping ahead. Detailed errors are still produced at final review by a
+    fresh standard matcher.
+    """
+
+    def __init__(self, reference_words: list[str]) -> None:
+        from ml.alignment.streaming_matcher import StreamingMatcher
+
+        self.reference = list(reference_words)
+        self.lookahead = 0
+        self.max_live_words = 0
+        self._cursor = 0
+        self._hyp_cursor = 0
+        self._states = []
+        self._delegate = StreamingMatcher(self.reference, lookahead=0)
+
+    def evaluate(self, hypothesis_words, confidences=None, *, full=False):
+        from ml.alignment.streaming_matcher import WordState, WordStatus
+
+        limit = min(len(self.reference), max(0, int(self.max_live_words)))
+        j = min(self._hyp_cursor, len(hypothesis_words))
+
+        while j < len(hypothesis_words) and self._cursor < limit:
+            spoken = hypothesis_words[j]
+            confidence = (
+                float(confidences[j])
+                if confidences is not None and j < len(confidences)
+                else 1.0
+            )
+            expected = self.reference[self._cursor]
+
+            if (
+                confidence >= _LIVE_MIN_WORD_CONFIDENCE
+                and self._delegate._is_match(spoken, expected)
+            ):
+                self._states.append(
+                    WordState(
+                        index=self._cursor,
+                        expected=expected,
+                        status=WordStatus.MATCHED,
+                        spoken=spoken,
+                        confidence=confidence,
+                    )
+                )
+                self._cursor += 1
+            # Consume every current ASR token. A guessed continuation beyond the
+            # speech-duration cap must not become eligible on a later tick merely
+            # because more wall-clock time passed.
+            j += 1
+
+        self._hyp_cursor = len(hypothesis_words)
+        return list(self._states)
+
+    def finalize(self, hypothesis_words, confidences=None):
+        from ml.alignment.streaming_matcher import StreamingMatcher
+
+        # Final review is allowed to report errors/skips. Use a fresh matcher so
+        # conservative live decisions never contaminate the saved result.
+        return StreamingMatcher(self.reference).finalize(
+            hypothesis_words,
+            confidences,
+        )
+
+
+_original_stream_load_reference = (
+    _streaming_session.StreamingRecitationSession.load_reference
+)
+
+
+def _load_reference_with_conservative_live_matcher(self) -> None:
+    _original_stream_load_reference(self)
+    # Keep injected transcribers and the demo stub unchanged so unit tests and
+    # explicit development flows retain their existing matcher semantics.
+    if (
+        self._explicit_transcriber is None
+        and not self._is_stub
+        and self.reference_words
+    ):
+        self._matcher = _ConservativeLiveMatcher(self.reference_words)
+        self._qari_active_speech_seconds = 0.0
+
+
+_streaming_session.StreamingRecitationSession.load_reference = (
+    _load_reference_with_conservative_live_matcher
+)
+
 _original_stream_maybe_transcribe = (
     _streaming_session.StreamingRecitationSession.maybe_transcribe
 )
 
 
 async def _maybe_transcribe_with_recent_audio_gate(self, *, force: bool = False):
-    """Do not re-run an overlapping Whisper window after new audio is quiet."""
+    """Gate repeated windows and cap live progress by actual active speech."""
+    active_seconds = 0.0
     if not self._is_stub and not force and self.sample_rate > 0:
         total_samples = self._total_samples
         previous_samples = self._samples_at_last_transcribe
@@ -114,7 +211,28 @@ async def _maybe_transcribe_with_recent_audio_gate(self, *, force: bool = False)
                 )
                 return []
 
-    return await _original_stream_maybe_transcribe(self, force=force)
+    matcher = self._matcher
+    if isinstance(matcher, _ConservativeLiveMatcher):
+        if active_seconds > 0:
+            self._qari_active_speech_seconds = (
+                getattr(self, "_qari_active_speech_seconds", 0.0)
+                + active_seconds
+            )
+        speech_seconds = getattr(self, "_qari_active_speech_seconds", 0.0)
+        matcher.max_live_words = min(
+            len(self.reference_words),
+            max(
+                0,
+                int(speech_seconds * _LIVE_MAX_WORDS_PER_ACTIVE_SECOND + 0.5),
+            ),
+        )
+
+    events = await _original_stream_maybe_transcribe(self, force=force)
+    if isinstance(matcher, _ConservativeLiveMatcher):
+        # Production live UI reveals confirmed words only. Red mistake markers
+        # belong to final review, where the full recording is considered.
+        return [event for event in events if event.get("status") == "match"]
+    return events
 
 
 _streaming_session.StreamingRecitationSession.maybe_transcribe = (
