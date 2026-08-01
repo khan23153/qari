@@ -2,6 +2,7 @@
 
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import AsyncIterator
 
 from fastapi import FastAPI, Request, Response
@@ -23,6 +24,109 @@ if not hasattr(_streaming_session.StreamingRecitationSession, "_rms_energy"):
     _streaming_session.StreamingRecitationSession._rms_energy = staticmethod(
         _streaming_session._rms_energy
     )
+
+# Final-session silence guard. The live sliding-window path already skips quiet
+# windows, but finalize() previously performed a full-audio Whisper pass whenever
+# no hypothesis existed. That made 20+ seconds of room tone hallucinate Arabic
+# words and produce misleading red-word verdicts. Require sustained activity
+# before any final ASR/tajweed work is allowed.
+_FINAL_FRAME_SECONDS = 0.03
+_FINAL_MIN_ACTIVE_SECONDS = 0.45
+_FINAL_MIN_CONTIGUOUS_SECONDS = 0.12
+
+
+def _speech_activity_seconds(
+    samples: list[float],
+    sample_rate: int,
+    *,
+    threshold: float = _streaming_session.SILENCE_RMS_THRESHOLD,
+) -> tuple[float, float]:
+    """Return total and longest contiguous above-threshold frame duration."""
+    if not samples or sample_rate <= 0:
+        return 0.0, 0.0
+
+    frame_size = max(1, int(sample_rate * _FINAL_FRAME_SECONDS))
+    active_frames = 0
+    current_run = 0
+    longest_run = 0
+
+    for start in range(0, len(samples), frame_size):
+        frame = samples[start : start + frame_size]
+        if len(frame) < max(1, frame_size // 2):
+            continue
+        rms = (sum(value * value for value in frame) / len(frame)) ** 0.5
+        if rms >= threshold:
+            active_frames += 1
+            current_run += 1
+            longest_run = max(longest_run, current_run)
+        else:
+            current_run = 0
+
+    frame_seconds = frame_size / sample_rate
+    return active_frames * frame_seconds, longest_run * frame_seconds
+
+
+_original_stream_finalize = _streaming_session.StreamingRecitationSession.finalize
+
+
+async def _finalize_with_silence_guard(self) -> dict:
+    """Return an explicit no-speech result without invoking Whisper."""
+    if not self._is_stub and self._pcm:
+        audio = self._decode_float()
+        rms = _streaming_session._rms_energy(audio)
+        active_seconds, longest_active_seconds = _speech_activity_seconds(
+            audio, self.sample_rate
+        )
+        has_sustained_speech = (
+            active_seconds >= _FINAL_MIN_ACTIVE_SECONDS
+            and longest_active_seconds >= _FINAL_MIN_CONTIGUOUS_SECONDS
+        )
+
+        if not has_sustained_speech:
+            audio_path = self._write_wav()
+            public_base = settings.recitation_api_public_url.rstrip("/")
+            user_audio_url = (
+                f"{public_base}/v1/recitations/{self.session_id}/audio"
+                if public_base and audio_path
+                else audio_path
+            )
+            result = {
+                "session_id": self.session_id,
+                "surah_number": self.surah,
+                "ayah_number": self.ayah_from,
+                "overall_score": 0.0,
+                "pronunciation_score": 0.0,
+                "tajweed_score": 0.0,
+                "tajweed_issues": [],
+                "fluency_score": 0.0,
+                "accuracy_score": 0.0,
+                "word_verdicts": [],
+                "reference_audio_url": self.reference_audio_url or None,
+                "user_audio_url": user_audio_url,
+                "feedback": (
+                    "No recitation was detected. Move closer to the microphone "
+                    "and try again."
+                ),
+                "feedback_urdu": None,
+                "duration_seconds": int(self.duration_seconds),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "confidence": 0.0,
+                "no_speech_detected": True,
+            }
+            _streaming_session.logger.info(
+                "stream.no_speech_detected",
+                session_id=self.session_id,
+                rms=round(rms, 6),
+                active_seconds=round(active_seconds, 3),
+                longest_active_seconds=round(longest_active_seconds, 3),
+            )
+            await self._persist(result, audio_path)
+            return result
+
+    return await _original_stream_finalize(self)
+
+
+_streaming_session.StreamingRecitationSession.finalize = _finalize_with_silence_guard
 
 setup_logging()
 logger = get_logger(__name__)
