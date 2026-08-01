@@ -1,37 +1,4 @@
-"""Faster-Whisper (CTranslate2, INT8) transcriber for real-time CPU recitation.
-
-This replaces the heavy transformers/PyTorch Whisper on the **live streaming**
-path. ``faster-whisper`` runs the CTranslate2 runtime, which is ~2–4x faster on
-CPU than vanilla PyTorch Whisper and, with **INT8 quantization**, halves memory
-footprint — so the live recitation engine can track a user's voice in near
-real-time on a standard CPU-only VPS (the latency ceiling the default PyTorch
-engine cannot meet).
-
-ASR model
----------
-``tarteel-ai/whisper-{tiny,base}-ar-quran`` — Whisper variants fine-tuned by
-Tarteel specifically on Quranic Arabic recitation (NOT conversational Arabic).
-
-For **live streaming** the ``base`` fine-tune is now used
-(``/app/models/tarteel-ct2-base``) because it transcribes Quranic Arabic far
-more accurately than ``tiny`` — the user-reported "correct words marked wrong"
-was primarily tiny-model noise. On this 4-CPU VPS the sliding 6s window keeps
-base at ~3-4s/pass (real-time-ish); if it ever lags, drop the window or fall
-back to ``tiny``. Both must be **converted to CTranslate2** first:
-
-    ct2-transformers-converter \\
-        --model tarteel-ai/whisper-base-ar-quran \\
-        --output_dir tarteel-ct2-base --quantization int8
-
-See ``scripts/convert_tarteel_model.py`` for a one-command helper. The resulting
-folder is mounted into the container at ``/app/models/tarteel-ct2-base`` and its
-location is overridable via ``QARI_FASTERWHISPER_MODEL_DIR``.
-
-The transcriber returns **raw** Arabic word tokens (not yet normalized). The
-caller (``streaming_session._real_transcriber``) normalizes them with the exact
-same ``_normalize`` used for the reference words so the ``StreamingMatcher`` can
-compare hypothesis ↔ reference consistently.
-"""
+"""Faster-Whisper CTranslate2 transcriber for live Quran recitation."""
 
 from __future__ import annotations
 
@@ -42,19 +9,22 @@ from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-# Default location of the converted CTranslate2 model inside the container.
-# Override with the QARI_FASTERWHISPER_MODEL_DIR environment variable.
-DEFAULT_MODEL_DIR = "/app/models/tarteel-ct2-base"
+DEFAULT_MODEL_DIR = "/app/models/qari-ct2-tiny-robust-v2"
 ENV_MODEL_DIR = "QARI_FASTERWHISPER_MODEL_DIR"
 
 
 def resolve_model_dir(explicit: Optional[str] = None) -> str:
-    """Resolve the CT2 model directory: explicit arg > env > default."""
     return explicit or os.environ.get(ENV_MODEL_DIR, DEFAULT_MODEL_DIR)
 
 
+def _word_probability(word) -> float:
+    """Preserve a genuine 0.0 probability; only missing values default to 1."""
+    value = getattr(word, "probability", None)
+    return 1.0 if value is None else float(value)
+
+
 class FasterWhisperTranscriber:
-    """Thin wrapper around ``faster_whisper.WhisperModel`` (lazy, thread-safe)."""
+    """Thin, lazy and thread-safe wrapper around ``WhisperModel``."""
 
     def __init__(
         self,
@@ -71,13 +41,16 @@ class FasterWhisperTranscriber:
         self._lock = threading.Lock()
 
     def load(self) -> None:
-        """Load the CT2 model into memory (idempotent, thread-safe)."""
         if self._model is not None:
             return
+        if not os.path.isdir(self.model_dir):
+            raise FileNotFoundError(
+                f"CTranslate2 model directory does not exist: {self.model_dir}"
+            )
         from faster_whisper import WhisperModel
 
         logger.info(
-            "Loading Faster-Whisper (CT2 %s, %d threads) from %s",
+            "Loading Faster-Whisper (%s, %d threads) from %s",
             self.compute_type,
             self.cpu_threads,
             self.model_dir,
@@ -90,105 +63,78 @@ class FasterWhisperTranscriber:
                     compute_type=self.compute_type,
                     cpu_threads=self.cpu_threads,
                 )
-        logger.info("Faster-Whisper model loaded.")
+        logger.info("Faster-Whisper model loaded")
 
     def is_loaded(self) -> bool:
         return self._model is not None
 
-    def transcribe(
-        self, audio, sample_rate: int = 16000
-    ) -> Tuple[List[str], List[float]]:
-        """Transcribe a mono float32 signal and return ``(words, confidences)``.
-
-        Words are the **raw** Arabic tokens (whitespace-split from word-level
-        timestamps). Normalization is left to the caller so it can reuse the
-        reference-word normalizer. Returns ``([], [])`` for empty / silent input.
-        """
+    @staticmethod
+    def _prepare_audio(audio, sample_rate: int):
         import numpy as np
 
-        self.load()
         if audio is None or len(audio) == 0:
-            return [], []
-
+            return np.asarray([], dtype=np.float32)
         samples = np.asarray(audio, dtype=np.float32)
-        if samples.dtype != np.float32:
-            samples = samples.astype(np.float32)
-
         if sample_rate != 16000:
-            try:
-                import librosa
+            import librosa
 
-                samples = librosa.resample(
-                    samples, orig_sr=sample_rate, target_sr=16000
-                )
-            except Exception as exc:  # pragma: no cover - resample edge case
-                logger.warning("fw.resample_failed", error=str(exc))
+            samples = librosa.resample(
+                samples, orig_sr=sample_rate, target_sr=16000
+            ).astype(np.float32)
+        return samples
 
-        segments, _info = self._model.transcribe(
+    def _decode(self, samples):
+        return self._model.transcribe(
             samples,
             language="ar",
             task="transcribe",
             beam_size=1,
             word_timestamps=True,
-            # NOTE: VAD is intentionally left OFF. Whisper's VAD (even at a lenient
-            # threshold) strips *quiet* Quranic recitation as non-speech — it removed
-            # 100% of a real 17s recitation in testing. Silence handling is done
-            # instead by the RMS-energy gate in `streaming_session.maybe_transcribe`,
-            # which only suppresses transcription when the window is truly near-
-            # silent (room tone), so the ayah can't auto-complete on phantom tokens
-            # yet real recitation still tracks.
             vad_filter=False,
             temperature=0.0,
             condition_on_previous_text=False,
         )
 
+    def transcribe(
+        self, audio, sample_rate: int = 16000
+    ) -> Tuple[List[str], List[float]]:
+        self.load()
+        samples = self._prepare_audio(audio, sample_rate)
+        if len(samples) == 0:
+            return [], []
+        segments, _info = self._decode(samples)
         words: List[str] = []
-        confs: List[float] = []
-        for seg in segments:
-            for w in getattr(seg, "words", None) or []:
-                text = (getattr(w, "word", None) or "").strip()
+        confidences: List[float] = []
+        for segment in segments:
+            for word in getattr(segment, "words", None) or []:
+                text = (getattr(word, "word", None) or "").strip()
                 if text:
                     words.append(text)
-                    confs.append(float(getattr(w, "probability", 1.0) or 1.0))
-        return words, confs
+                    confidences.append(_word_probability(word))
+        return words, confidences
 
     def transcribe_with_timings(
         self, audio, sample_rate: int = 16000
     ) -> Tuple[List[str], List[float], List[int], List[int]]:
-        """Like :meth:`transcribe` but also returns per-word
-        ``(starts_ms, ends_ms)`` from the CT2 word timestamps. Used by the
-        live session's finalize pass to feed the tajweed duration/energy
-        checks without needing the (torch-based) forced aligner."""
-        import numpy as np
-
         self.load()
-        if audio is None or len(audio) == 0:
+        samples = self._prepare_audio(audio, sample_rate)
+        if len(samples) == 0:
             return [], [], [], []
-        samples = np.asarray(audio, dtype=np.float32)
-        segments, _info = self._model.transcribe(
-            samples,
-            language="ar",
-            task="transcribe",
-            beam_size=1,
-            word_timestamps=True,
-            vad_filter=False,
-            temperature=0.0,
-            condition_on_previous_text=False,
-        )
+        segments, _info = self._decode(samples)
         words: List[str] = []
-        confs: List[float] = []
+        confidences: List[float] = []
         starts: List[int] = []
         ends: List[int] = []
-        for seg in segments:
-            for w in getattr(seg, "words", None) or []:
-                text = (getattr(w, "word", None) or "").strip()
+        for segment in segments:
+            for word in getattr(segment, "words", None) or []:
+                text = (getattr(word, "word", None) or "").strip()
                 if not text:
                     continue
                 words.append(text)
-                confs.append(float(getattr(w, "probability", 1.0) or 1.0))
-                starts.append(int(float(getattr(w, "start", 0.0) or 0.0) * 1000))
-                ends.append(int(float(getattr(w, "end", 0.0) or 0.0) * 1000))
-        return words, confs, starts, ends
+                confidences.append(_word_probability(word))
+                starts.append(int(float(getattr(word, "start", 0.0) or 0.0) * 1000))
+                ends.append(int(float(getattr(word, "end", 0.0) or 0.0) * 1000))
+        return words, confidences, starts, ends
 
 
 _transcriber_singleton: Optional[FasterWhisperTranscriber] = None
@@ -196,7 +142,6 @@ _transcriber_lock = threading.Lock()
 
 
 def get_transcriber() -> FasterWhisperTranscriber:
-    """Process-wide singleton (avoids re-loading the model per session)."""
     global _transcriber_singleton
     if _transcriber_singleton is None:
         with _transcriber_lock:
