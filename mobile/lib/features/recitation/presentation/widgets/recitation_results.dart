@@ -23,29 +23,34 @@ class RecitationResults extends StatelessWidget {
     required this.theme,
   });
 
+  bool get _isNoSpeech =>
+      result.wordVerdicts.length == 1 &&
+      result.wordVerdicts.first.errorType == 'no_speech';
+
   @override
   Widget build(BuildContext context) {
+    if (_isNoSpeech) {
+      return _NoSpeechResult(
+        result: result,
+        onRetry: onRetry,
+        theme: theme,
+      );
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ─── Score Header ──────────────────────────────────────────
           _ScoreHeader(result: result, theme: theme)
               .animate()
               .fadeIn(duration: 400.ms)
               .slideY(begin: 0.05, end: 0),
-
           const SizedBox(height: 20),
-
-          // ─── Sub-scores ────────────────────────────────────────────
           _SubScores(result: result, theme: theme)
               .animate()
               .fadeIn(delay: 200.ms, duration: 400.ms),
-
           const SizedBox(height: 24),
-
-          // ─── Word-by-word display ──────────────────────────────────
           Text(
             'Word by Word',
             style: theme.textTheme.titleMedium?.copyWith(
@@ -53,30 +58,19 @@ class RecitationResults extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-
           _WordByWordDisplay(
             result: result,
             ayahWords: ayahWords,
             onWordTapped: onWordTapped,
             theme: theme,
-          )
-              .animate()
-              .fadeIn(delay: 400.ms, duration: 400.ms),
-
+          ).animate().fadeIn(delay: 400.ms, duration: 400.ms),
           const SizedBox(height: 20),
-
-          // ─── Feedback ──────────────────────────────────────────────
           if (result.feedback != null)
             _FeedbackCard(
               feedback: result.feedback!,
               theme: theme,
-            )
-                .animate()
-                .fadeIn(delay: 600.ms, duration: 400.ms),
-
+            ).animate().fadeIn(delay: 600.ms, duration: 400.ms),
           const SizedBox(height: 24),
-
-          // ─── Actions ───────────────────────────────────────────────
           Row(
             children: [
               Expanded(
@@ -99,10 +93,7 @@ class RecitationResults extends StatelessWidget {
                 ),
               ),
             ],
-          )
-              .animate()
-              .fadeIn(delay: 800.ms, duration: 400.ms),
-
+          ).animate().fadeIn(delay: 800.ms, duration: 400.ms),
           const SizedBox(height: 32),
         ],
       ),
@@ -110,7 +101,79 @@ class RecitationResults extends StatelessWidget {
   }
 }
 
-/// Score header with circular progress and grade.
+class _NoSpeechResult extends StatelessWidget {
+  final RecitationResult result;
+  final VoidCallback onRetry;
+  final ThemeData theme;
+
+  const _NoSpeechResult({
+    required this.result,
+    required this.onRetry,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 52),
+          Icon(
+            Icons.mic_off_rounded,
+            size: 88,
+            color: theme.colorScheme.primary,
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'No Recitation Detected',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            result.feedback ??
+                'Move closer to the microphone and try again.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              height: 1.5,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Recorded duration: ${result.durationSeconds}s',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+            ),
+          ),
+          const SizedBox(height: 36),
+          FilledButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Try Again'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(56),
+            ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: () => Navigator.of(context).pop(),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(52),
+            ),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    ).animate().fadeIn(duration: 350.ms);
+  }
+}
+
 class _ScoreHeader extends StatelessWidget {
   final RecitationResult result;
   final ThemeData theme;
@@ -130,7 +193,6 @@ class _ScoreHeader extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Circular score
           SizedBox(
             width: 80,
             height: 80,
@@ -206,7 +268,6 @@ class _ScoreHeader extends StatelessWidget {
   }
 }
 
-/// Sub-score breakdown.
 class _SubScores extends StatelessWidget {
   final RecitationResult result;
   final ThemeData theme;
@@ -297,7 +358,6 @@ class _SubScoreCard extends StatelessWidget {
   }
 }
 
-/// Word-by-word display with green/red tinting.
 class _WordByWordDisplay extends StatelessWidget {
   final RecitationResult result;
   final List<String> ayahWords;
@@ -368,12 +428,8 @@ class _WordByWordDisplay extends StatelessWidget {
                   ],
                 ),
               ),
-            )
-                .animate()
-                .fadeIn(
-                  delay: Duration(
-                    milliseconds: verdict.wordIndex * 100,
-                  ),
+            ).animate().fadeIn(
+                  delay: Duration(milliseconds: verdict.wordIndex * 100),
                   duration: 300.ms,
                 );
           }).toList(),
@@ -383,7 +439,6 @@ class _WordByWordDisplay extends StatelessWidget {
   }
 }
 
-/// Feedback card.
 class _FeedbackCard extends StatelessWidget {
   final String feedback;
   final ThemeData theme;
