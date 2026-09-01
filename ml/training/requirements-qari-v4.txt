@@ -1,0 +1,12 @@
+# Qari V4 training-only dependencies.
+# Keep the managed CUDA-enabled PyTorch already provided by Kaggle/Lightning.
+# Do NOT install/reinstall torch from this file.
+transformers==4.46.3
+tokenizers==0.20.3
+accelerate==1.1.1
+datasets==3.1.0
+evaluate==0.4.3
+jiwer==3.0.5
+soundfile==0.13.1
+scipy>=1.11,<2
+tensorboard>=2.16
