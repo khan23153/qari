@@ -4,7 +4,7 @@ name: Quran UI APK
 # application id, so it installs next to the real app.
 on:
   push:
-    branches: ["main"]
+    branches: ["codex/ui-preview-de0a2c1"]
     paths:
       - ".github/workflows/build-ui-preview-apk.yml"
       - "mobile/lib/main_ui_preview.dart"
