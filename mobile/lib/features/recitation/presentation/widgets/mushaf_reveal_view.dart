@@ -83,9 +83,13 @@ class MushafRevealView extends StatefulWidget {
   /// Called with the word index when a mistake is tapped (review mode only).
   final ValueChanged<int>? onMistakeTap;
 
-  /// Hifz (memorisation) mode: unspoken words — including the active one —
-  /// are drawn fully transparent with their layout preserved.
+  /// Hifz setup conceals words at and ahead of the cursor. Unresolved words
+  /// behind it remain readable in ghost ink rather than leaving holes.
   final bool hideUnspoken;
+
+  /// Live tracking keeps the complete Hifz page readable in faint ink.
+  /// Recognition changes ink only; it never removes words or moves markers.
+  final bool showUnspokenContext;
 
   /// Full-width blocks (surah banner, Bismillah) inserted on their own line
   /// directly BEFORE the word at the given index, so a page that crosses a
@@ -118,6 +122,7 @@ class MushafRevealView extends StatefulWidget {
     this.reviewMode = false,
     this.onMistakeTap,
     this.hideUnspoken = false,
+    this.showUnspokenContext = false,
     this.blocksBefore = const {},
     this.minimumHeight = 0,
     this.blockHeights = const {},
@@ -427,9 +432,7 @@ class _MushafRevealViewState extends State<MushafRevealView> {
             unit.label != null
                 ? TextSpan(
                     text: text,
-                    style: TextStyle(
-                        color:
-                            w.mushaf.isDark ? w.mushaf.text : w.mushaf.accent),
+                    style: TextStyle(color: _markerInk(unit.index)),
                   )
                 : _wordSpan(
                     unit.index,
@@ -517,20 +520,37 @@ class _MushafRevealViewState extends State<MushafRevealView> {
         child: child,
       );
 
-  /// One word of the paragraph, styled per the Mushaf word-state spec:
-  ///   unspoken  -> plain book ink (ghost ink on the review page)
-  ///   active    -> book ink on the golden listening wash, with a soft glow
-  ///   correct   -> book ink on a soft green wash (live only)
-  ///   mismatch  -> red ink + a red underline (the only red on the page)
-  /// In Hifz, unspoken and active words are transparent but keep their size.
+  /// Conceal only upcoming Hifz text when live context is disabled.
+  bool _concealed(int index) =>
+      !widget.reviewMode &&
+      widget.hideUnspoken &&
+      !widget.showUnspokenContext &&
+      index >= widget.cursor;
+
+  Color _markerInk(int endingIndex) {
+    final w = widget;
+    final ink = w.mushaf.isDark ? w.mushaf.text : w.mushaf.accent;
+    if (_concealed(endingIndex)) return ink.withValues(alpha: 0);
+    if (!w.reviewMode &&
+        w.hideUnspoken &&
+        w.showUnspokenContext &&
+        endingIndex >= w.cursor) {
+      return w.mushaf.ghostInk;
+    }
+    return ink;
+  }
+
+  /// Live Hifz uses ghost ink for unresolved words; setup can conceal future
+  /// words and their markers. Both policies preserve the printed geometry.
   InlineSpan _wordSpan(int i, LiveWordViewState state, Brightness brightness) {
     final w = widget;
     final text = mushafDisplayText(w.words[i]);
     final isMistake = state == LiveWordViewState.mismatch;
     final isActive = state == LiveWordViewState.active;
     final isUnspoken = state == LiveWordViewState.unspoken;
-    final hidden = !w.reviewMode && w.hideUnspoken && (isUnspoken || isActive);
-    final ghost = w.reviewMode && isUnspoken;
+    final hidden = _concealed(i);
+    final ghost = (isUnspoken && (w.reviewMode || w.hideUnspoken)) ||
+        (isActive && w.hideUnspoken && w.showUnspokenContext);
     final isCorrect = !w.reviewMode && state == LiveWordViewState.correct;
 
     // Red is reachable ONLY via [LiveWordViewState.mismatch], which
@@ -543,7 +563,7 @@ class _MushafRevealViewState extends State<MushafRevealView> {
             : ghost
                 ? w.mushaf.ghostInk
                 : w.mushaf.text;
-    final Color? wash = isActive
+    final Color? wash = isActive && !hidden
         ? (w.mushaf.isDark ? null : w.mushaf.activeTint)
         : (isCorrect ? w.mushaf.correctTint : null);
 
@@ -557,7 +577,7 @@ class _MushafRevealViewState extends State<MushafRevealView> {
           isMistake ? w.mushaf.mismatchInk.withValues(alpha: 0.9) : null,
       decorationThickness: isMistake ? 2.0 : null,
       // The glow traces the glyphs, so it is never drawn on a hidden word.
-      shadows: isActive && !hidden
+      shadows: isActive && !hidden && !ghost
           ? [
               Shadow(
                 color: w.mushaf.accent.withValues(alpha: 0.55),

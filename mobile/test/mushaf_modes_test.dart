@@ -99,7 +99,7 @@ void main() {
   });
 
   group('Hifz mode — unsaid words hidden, layout preserved', () {
-    testWidgets('unspoken + active words are transparent; medallions visible',
+    testWidgets('unspoken + active words and their medallions are concealed',
         (tester) async {
       const t = MushafTheme.classic;
       final statuses = List.filled(_words.length, LiveWordStatus.pending);
@@ -125,8 +125,8 @@ void main() {
         expect(spanOf(tester, _words[i])!.style?.shadows, isNull,
             reason: 'a glyph glow would reveal ${_words[i]}');
       }
-      // The ayah medallion stays visible to guide verse position.
-      expect(inkOf(tester, ayahMarkerText('1')), t.accent);
+      // A future medallion must not float beside an invisible verse ending.
+      expect(inkOf(tester, ayahMarkerText('1'))!.a, 0);
     });
 
     testWidgets('revealing a word never moves any word on the page',
@@ -164,12 +164,12 @@ void main() {
       final reveal = find.byType(MushafRevealView);
       final view = tester.widget<MushafRevealView>(reveal);
       expect(view.hideUnspoken, isTrue);
-      // Every Al-Fatiha word is laid out but invisible; medallions are not.
+      // Words and their medallions are concealed together before listening.
       for (final w in view.words) {
         expect(inkOf(tester, w)!.a, 0, reason: w);
       }
       expect(inkOf(tester, ayahMarkerText('7')), isNot(null));
-      expect(inkOf(tester, ayahMarkerText('7'))!.a, greaterThan(0));
+      expect(inkOf(tester, ayahMarkerText('7'))!.a, 0);
 
       // The Hifz entry has no switch into the separate Tilawat section.
       expect(find.byTooltip('Hifz: unsaid words hidden. Tap for Tilawat'),
