@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qari/data/models/recitation_stream_event.dart';
+import 'package:qari/data/models/word_model.dart';
 import 'package:qari/data/repositories/local_corpus_repository.dart';
 import 'package:qari/data/repositories/mushaf_layout_repository.dart';
 import 'package:qari/features/recitation/presentation/mushaf/mushaf_theme.dart';
