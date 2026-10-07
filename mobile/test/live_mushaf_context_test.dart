@@ -37,7 +37,9 @@ void main() {
         final markerLines = <int>[];
         for (final ayah in ayahs) {
           final printed = layout[ayah.reference]!;
-          words.addAll(ayah.words.map((w) => w.text));
+          // The corpus includes a trailing verse-number token. The printed
+          // layout counts only Arabic words; markers are supplied separately.
+          words.addAll(ayah.words.take(printed.words.length).map((w) => w.text));
           lines.addAll(printed.words.map((w) => w.line));
           boundaries.add(words.length - 1);
           labels.add(ayah.ayahNumber.toString());
