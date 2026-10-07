@@ -1,0 +1,38 @@
+# Local edge proxy for the Cloudflare Tunnel (localhost only).
+# cloudflared -> 127.0.0.1:8088 -> core-api (8010) / recitation-api (8001)
+{
+	admin off
+	auto_https off
+}
+
+http://:8088 {
+	bind 127.0.0.1
+
+	request_body {
+		max_size 50MB
+	}
+
+	# Recitation API (upload, polling, audio) — must win over the generic /v1/
+	handle /v1/recitations/* {
+		reverse_proxy 127.0.0.1:8001
+	}
+
+	# Live recitation WebSockets
+	handle /ws/* {
+		reverse_proxy 127.0.0.1:8001 {
+			flush_interval -1
+		}
+	}
+
+	# Core API + health
+	handle /v1/* {
+		reverse_proxy 127.0.0.1:8010
+	}
+	handle /health {
+		reverse_proxy 127.0.0.1:8010
+	}
+
+	handle {
+		respond "Qari API" 200
+	}
+}

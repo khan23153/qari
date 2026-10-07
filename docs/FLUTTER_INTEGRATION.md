@@ -14,8 +14,8 @@ on current hardware** — read §8 before you design around it.
 
 | Purpose | URL |
 |---|---|
-| REST base | `https://qari.pneumetron.com/v1` |
-| WebSocket stream | `wss://qari.pneumetron.com/ws/recitation/stream` |
+| REST base | `https://aiquranic.com/v1` |
+| WebSocket stream | `wss://aiquranic.com/ws/recitation/stream` |
 
 Note the WebSocket route is mounted at `/ws/...` and is **NOT** under `/v1`.
 The Flutter app already derives this correctly in
@@ -37,7 +37,7 @@ flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8001 \
   `ssl_verify_result = 0`. `wss://…/ws/recitation/stream` handshake →
   `type: ready`, 62–67 ms.
 * **Android:** `mobile/android/app/src/main/res/xml/network_security_config.xml`
-  already whitelists `qari.pneumetron.com` on the **default system trust
+  already whitelists `aiquranic.com` on the **default system trust
   store** (no custom CA, no pinning) and permits cleartext **only** for
   `localhost` / `10.0.2.2`. You do **not** need to add a cleartext permission.
 * **iOS:** no ATS exception is present and none is required for HTTPS/WSS.
@@ -346,7 +346,7 @@ the GPU migration lands.
     </domain-config>
 ```
 
-Release builds must use `wss://qari.pneumetron.com` and must **not** carry this
+Release builds must use `wss://aiquranic.com` and must **not** carry this
 block. iOS would additionally need
 `NSAppTransportSecurity → NSAllowsLocalNetworking` for local testing.
 
@@ -354,7 +354,7 @@ block. iOS would additionally need
 
 ## Quick checklist for Akeno
 
-- [ ] Use `wss://qari.pneumetron.com/ws/recitation/stream` (no `http`, no port).
+- [ ] Use `wss://aiquranic.com/ws/recitation/stream` (no `http`, no port).
 - [ ] First message is `{"type":"start", …, "sample_rate":16000}`.
 - [ ] Send **binary** PCM16 mono 16 kHz, 3200-byte frames, sent immediately.
 - [ ] **Never buffer 1–2 s of audio before sending.**
