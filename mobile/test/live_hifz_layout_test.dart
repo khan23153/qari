@@ -16,7 +16,7 @@ const _statuses = [
   LiveWordStatus.pending,
 ];
 
-Widget _page({bool review = false, int cursor = 3}) => MaterialApp(
+Widget _page({bool review = false, bool context = false, int cursor = 3}) => MaterialApp(
       home: Scaffold(
         body: MushafRevealView(
           words: _words,
@@ -24,6 +24,7 @@ Widget _page({bool review = false, int cursor = 3}) => MaterialApp(
           cursor: cursor,
           reviewMode: review,
           hideUnspoken: true,
+          showUnspokenContext: context,
           lineNumbers: const [1, 1, 1, 2, 2, 2],
           ayahBoundaries: const [2, 5],
           ayahLabels: const ['1', '2'],
@@ -36,6 +37,18 @@ Widget _page({bool review = false, int cursor = 3}) => MaterialApp(
     );
 
 void main() {
+  testWidgets('live context shows all pending words without claiming recognition',
+      (tester) async {
+    await tester.pumpWidget(_page(context: true));
+    for (final index in [1, 3, 4, 5]) {
+      expect(inkOf(tester, _words[index]), MushafTheme.classic.ghostInk);
+    }
+    expect(inkOf(tester, _words[2]), MushafTheme.classic.mismatchInk);
+    expect(underlineCount(tester, MushafTheme.classic.mismatchInk), 1);
+    expect(washOf(tester, _words[4]), isNull);
+    expect(inkOf(tester, ayahMarkerText('2')), MushafTheme.classic.ghostInk);
+  });
+
   testWidgets('unrecognised words behind the live cursor leave no invisible hole',
       (tester) async {
     await tester.pumpWidget(_page());
@@ -68,7 +81,7 @@ void main() {
     await tester.pumpWidget(_page(review: true));
     final texts = [..._words, ayahMarkerText('1'), ayahMarkerText('2')];
     final reviewRects = [for (final text in texts) rectOf(tester, text)];
-    await tester.pumpWidget(_page());
+    await tester.pumpWidget(_page(context: true));
     expect([for (final text in texts) rectOf(tester, text)], reviewRects);
     final first = rectOf(tester, _words[0]);
     final second = rectOf(tester, _words[1]);

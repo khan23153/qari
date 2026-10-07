@@ -1034,6 +1034,7 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
     required List<LiveWordStatus> statuses,
     required int cursor,
     bool reviewMode = false,
+    bool showUnspokenContext = false,
     ValueChanged<int>? onMistakeTap,
   }) {
     return LayoutBuilder(
@@ -1099,6 +1100,7 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
                               reviewMode: reviewMode,
                               onMistakeTap: onMistakeTap,
                               hideUnspoken: _mode == RecitationMode.hifz,
+                              showUnspokenContext: showUnspokenContext,
                               blocksBefore: {
                                 for (final e in _surahStarts.entries)
                                   e.key: _surahOpening(mushaf, e.value),
@@ -1308,6 +1310,7 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
                 mushaf,
                 statuses: _revealedStatuses,
                 cursor: _liveCursor,
+                showUnspokenContext: true,
               ),
             ),
           ],
@@ -1425,7 +1428,9 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
       ),
       Expanded(
           child: _buildMushafPage(theme, mushaf,
-              statuses: _revealedStatuses, cursor: _liveCursor)),
+              statuses: _revealedStatuses,
+              cursor: _liveCursor,
+              showUnspokenContext: true)),
     ]);
   }
 
