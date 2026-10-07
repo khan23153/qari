@@ -4,6 +4,23 @@
 > Read this file first at the start of every session. Update it whenever
 > meaningful work is done. Keep it concise.
 
+## Session 2026-10-07 — Live Hifz context and inline marker visibility
+
+- Live holes were visibility defects, not RTL or line reflow: pending words
+  were transparent while verse markers and active background rectangles stayed
+  visible. The user explicitly selected faint full text during live tracking.
+- `MushafRevealView.showUnspokenContext` enables ghost ink for pending, active
+  and unreached Hifz text and markers. Live and finalizing enable it; setup
+  conceals upcoming words and markers together without an empty active wash.
+  Unresolved words behind the cursor remain faintly readable. Canonical rows,
+  font-derived gaps, indices, cursor anchors, review and red-wall guard remain.
+- Fix branch `fix/live-hifz-layout` starts at deploy head `2048dad`, preserving
+  aiquranic.com configuration. Tested code `579a17d`: 167 Flutter tests pass,
+  including all 604 pages and real-font live/review page 1/3 captures in minimal
+  and night themes. Formatting passes; analysis has no errors (existing lints).
+  CI: https://github.com/khan23153/qari/actions/runs/37668143607 . Captures were
+  visually checked. Live microphone/backend recognition remains unverified.
+
 ## Session 2026-10-02 — Madinah fitted lines, readable spacing and CI
 
 Current state: PR [#14](https://github.com/khan23153/qari/pull/14) merged into
