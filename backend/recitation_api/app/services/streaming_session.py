@@ -532,8 +532,13 @@ def stitch_hypothesis(
     of what ``prefix`` already holds. We find the largest ``k`` such that the last
     ``k`` words of ``prefix`` are *similar* to the first ``k`` words of
     ``window_words`` (fuzzy, not exact — see :func:`_words_similar`) and only
-    append the remainder — so the same spoken word is never counted twice and the
-    hypothesis length tracks the user's actual progress instead of exploding.
+    replace that overlap with the latest tokens AND their confidences, then
+    append the remainder. Keeping the first window's low score would cause the
+    live matcher to skip a word even after a clearer decode confirms it. Taking
+    the latest pair also avoids assigning an old token a different token's score
+    or retaining stale high confidence when the new decode is less certain.
+    The same spoken word is never counted twice, so hypothesis length tracks
+    actual progress instead of exploding.
 
     Falls back to appending the whole window when no overlap is found (e.g. the
     user recited fast enough that the window is entirely new). Pure function (no
@@ -553,8 +558,9 @@ def stitch_hypothesis(
         ):
             best_k = k
             break
-    merged = list(prefix) + list(window_words[best_k:])
-    merged_confs = list(prefix_confs) + list(window_confs[best_k:])
+    keep = len(prefix) - best_k
+    merged = list(prefix[:keep]) + list(window_words)
+    merged_confs = list(prefix_confs[:keep]) + list(window_confs)
     return merged, merged_confs
 
 

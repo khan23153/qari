@@ -7,21 +7,20 @@ class AppConstants {
   // ─── API ────────────────────────────────────────────────────────────────
   /// Base URL for the core API.
   ///
-  /// Production backend is hosted on the VPS and reached over HTTPS on :443
-  /// using its public IP. The app accepts the self-signed cert (see
-  /// ApiClient) so this works without a public CA:
-  ///   https://qari.pneumetron.com/v1  →  /v1/auth/signup
+  /// Production backend is hosted on the VPS and reached over HTTPS via a
+  /// Cloudflare Tunnel (publicly-trusted Cloudflare TLS; no custom CA needed):
+  ///   https://aiquranic.com/v1  →  /v1/auth/signup
   ///
-  /// Reached via Cloudflare (publicly-trusted TLS) to the VPS nginx, which
-  /// proxies `/v1` to the core API. The `/v1` prefix is required (the backend
-  /// mounts every route under `/v1`).
+  /// The tunnel lands on the VPS edge proxy, which routes `/v1` to the core
+  /// API. The `/v1` prefix is required (the backend mounts every route under
+  /// `/v1`).
   ///
   /// For local development on an emulator, override at run time, e.g.:
   ///   flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000/v1
   static String get baseUrl {
     const env = String.fromEnvironment('API_BASE_URL');
     if (env.isNotEmpty) return env;
-    return 'https://qari.pneumetron.com/v1';
+    return 'https://aiquranic.com/v1';
   }
 
   /// WebSocket base URL for real-time recitation streaming.

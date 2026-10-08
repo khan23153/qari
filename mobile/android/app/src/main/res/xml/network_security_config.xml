@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- qari.pneumetron.com is reached through Cloudflare. Cloudflare
+    <!-- aiquranic.com is reached through Cloudflare. Cloudflare
          terminates TLS with its own publicly-trusted certificate, so we use
          the default system trust store (no custom CA pin). -->
     <domain-config>
-        <domain includeSubdomains="true">qari.pneumetron.com</domain>
+        <domain includeSubdomains="true">aiquranic.com</domain>
     </domain-config>
 
     <!-- Dev: emulator / local backend over cleartext. -->

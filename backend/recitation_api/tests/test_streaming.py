@@ -238,6 +238,62 @@ def test_stitch_hypothesis_window_fully_contained():
     assert words == ["a", "b", "c"]
 
 
+def test_stitch_hypothesis_refreshes_overlap_confidence():
+    """A clearer overlapping decode must replace the first uncertain score."""
+    words, confs = ss.stitch_hypothesis(
+        ["بسم", "الله"], [0.95, 0.2],
+        ["بسم", "الله", "الرحمن"], [0.9, 0.95, 0.9],
+    )
+    assert words == ["بسم", "الله", "الرحمن"]
+    assert confs == [0.9, 0.95, 0.9]
+
+
+def test_stitch_hypothesis_keeps_latest_token_and_its_confidence_together():
+    """Fuzzy deduplication must not attach a new score to an old token."""
+    words, confs = ss.stitch_hypothesis(
+        ["بسم", "الله", "الرحمن"], [0.95, 0.95, 0.9],
+        ["الله", "الرحمان"], [0.8, 0.2],
+    )
+    assert words == ["بسم", "الله", "الرحمان"]
+    assert confs == [0.95, 0.8, 0.2]
+
+
+@pytest.mark.asyncio
+async def test_production_live_reveals_word_when_overlap_confidence_improves(monkeypatch):
+    """Real production gates/stitching must not skip a now-confirmed word."""
+    from types import SimpleNamespace
+    from ml.inference import faster_whisper_transcriber
+
+    monkeypatch.setattr(
+        ss, "resolve_reference_words_sequence",
+        lambda refs: (REFERENCE, REFERENCE, "https://example/ref.mp3", REFERENCE_ENTRIES, []),
+    )
+    monkeypatch.setattr(ss.settings, "ml_use_stub", False)
+    monkeypatch.setattr(ss, "EVIDENCE_POLICY", "tier2")
+    monkeypatch.setattr(
+        faster_whisper_transcriber, "get_transcriber",
+        lambda: SimpleNamespace(load=lambda: None),
+    )
+    # Only the model decode is simulated. Session, production speech budget,
+    # confidence threshold, alignment and outgoing word events remain real.
+    decodes = iter([
+        (["بسم", "الله"], [0.95, 0.2]),
+        (["بسم", "الله", "الرحمن", "الرحيم"], [0.95] * 4),
+    ])
+    monkeypatch.setattr(ss, "_independent_transcriber", lambda audio, sr: next(decodes))
+    session = ss.StreamingRecitationSession(surah=1, ayah_from=1, ayah_to=1)
+    session.load_reference()
+    session.add_audio(_pcm_seconds(1.5))
+    first_events = await session.maybe_transcribe()
+    assert [(e["word_index"], e["status"]) for e in first_events] == [(0, "match")]
+
+    session.add_audio(_pcm_seconds(1.5))
+    next_events = await session.maybe_transcribe()
+    assert [(e["word_index"], e["status"]) for e in next_events] == [
+        (1, "match"), (2, "match"), (3, "match"),
+    ]
+
+
 def test_real_transcriber_uses_bounded_window(monkeypatch):
     """The real (non-stub) path transcribes only the recent window, and the
     stitched cumulative hypothesis grows across passes without double-counting."""
