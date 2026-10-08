@@ -99,7 +99,7 @@ void main() {
   });
 
   group('Hifz mode — unsaid words hidden, layout preserved', () {
-    testWidgets('unspoken + active words and their medallions are concealed',
+    testWidgets('only confirmed words appear while medallions remain visible',
         (tester) async {
       const t = MushafTheme.classic;
       final statuses = List.filled(_words.length, LiveWordStatus.pending);
@@ -115,9 +115,9 @@ void main() {
       // Confirmed word: solid ink with the green wash.
       expect(inkOf(tester, _words[0]), t.text);
       expect(washes(tester), contains(t.correctTint));
-      // Skipped word: revealed in red with an underline.
-      expect(inkOf(tester, _words[1]), t.mismatchInk);
-      expect(underlineCount(tester, t.mismatchInk), 1);
+      // Missing words appear only in the summary, not during Hifz.
+      expect(inkOf(tester, _words[1])!.a, 0);
+      expect(underlineCount(tester, t.mismatchInk), 0);
       // Active and upcoming words: fully transparent, and nothing (glow,
       // tajweed colour) traces their glyphs.
       for (var i = 2; i < _words.length; i++) {
@@ -125,8 +125,8 @@ void main() {
         expect(spanOf(tester, _words[i])!.style?.shadows, isNull,
             reason: 'a glyph glow would reveal ${_words[i]}');
       }
-      // A future medallion must not float beside an invisible verse ending.
-      expect(inkOf(tester, ayahMarkerText('1'))!.a, 0);
+      // Medallions remain printed even before a verse is recited.
+      expect(inkOf(tester, ayahMarkerText('1')), t.accent);
     });
 
     testWidgets('revealing a word never moves any word on the page',
@@ -164,12 +164,12 @@ void main() {
       final reveal = find.byType(MushafRevealView);
       final view = tester.widget<MushafRevealView>(reveal);
       expect(view.hideUnspoken, isTrue);
-      // Words and their medallions are concealed together before listening.
+      // Words are hidden before listening; medallions remain visible.
       for (final w in view.words) {
         expect(inkOf(tester, w)!.a, 0, reason: w);
       }
       expect(inkOf(tester, ayahMarkerText('7')), isNot(null));
-      expect(inkOf(tester, ayahMarkerText('7'))!.a, 0);
+      expect(inkOf(tester, ayahMarkerText('7'))!.a, 1);
 
       // The Hifz entry has no switch into the separate Tilawat section.
       expect(find.byTooltip('Hifz: unsaid words hidden. Tap for Tilawat'),

@@ -83,13 +83,9 @@ class MushafRevealView extends StatefulWidget {
   /// Called with the word index when a mistake is tapped (review mode only).
   final ValueChanged<int>? onMistakeTap;
 
-  /// Hifz setup conceals words at and ahead of the cursor. Unresolved words
-  /// behind it remain readable in ghost ink rather than leaving holes.
+  /// Hifz reveals only confirmed words before review. Hidden glyphs retain
+  /// their printed positions; ayah medallions remain visible in every phase.
   final bool hideUnspoken;
-
-  /// Live tracking keeps the complete Hifz page readable in faint ink.
-  /// Recognition changes ink only; it never removes words or moves markers.
-  final bool showUnspokenContext;
 
   /// Full-width blocks (surah banner, Bismillah) inserted on their own line
   /// directly BEFORE the word at the given index, so a page that crosses a
@@ -122,7 +118,6 @@ class MushafRevealView extends StatefulWidget {
     this.reviewMode = false,
     this.onMistakeTap,
     this.hideUnspoken = false,
-    this.showUnspokenContext = false,
     this.blocksBefore = const {},
     this.minimumHeight = 0,
     this.blockHeights = const {},
@@ -432,7 +427,7 @@ class _MushafRevealViewState extends State<MushafRevealView> {
             unit.label != null
                 ? TextSpan(
                     text: text,
-                    style: TextStyle(color: _markerInk(unit.index)),
+                    style: TextStyle(color: _markerInk),
                   )
                 : _wordSpan(
                     unit.index,
@@ -520,37 +515,20 @@ class _MushafRevealViewState extends State<MushafRevealView> {
         child: child,
       );
 
-  /// Conceal only upcoming Hifz text when live context is disabled.
-  bool _concealed(int index) =>
-      !widget.reviewMode &&
-      widget.hideUnspoken &&
-      !widget.showUnspokenContext &&
-      index >= widget.cursor;
+  Color get _markerInk =>
+      widget.mushaf.isDark ? widget.mushaf.text : widget.mushaf.accent;
 
-  Color _markerInk(int endingIndex) {
-    final w = widget;
-    final ink = w.mushaf.isDark ? w.mushaf.text : w.mushaf.accent;
-    if (_concealed(endingIndex)) return ink.withValues(alpha: 0);
-    if (!w.reviewMode &&
-        w.hideUnspoken &&
-        w.showUnspokenContext &&
-        endingIndex >= w.cursor) {
-      return w.mushaf.ghostInk;
-    }
-    return ink;
-  }
-
-  /// Live Hifz uses ghost ink for unresolved words; setup can conceal future
-  /// words and their markers. Both policies preserve the printed geometry.
+  /// Live Hifz reveals confirmed words only. Review shows missed words and
+  /// mistakes; both phases retain exactly the same printed geometry.
   InlineSpan _wordSpan(int i, LiveWordViewState state, Brightness brightness) {
     final w = widget;
     final text = mushafDisplayText(w.words[i]);
-    final isMistake = state == LiveWordViewState.mismatch;
+    final hidden =
+        !w.reviewMode && w.hideUnspoken && state != LiveWordViewState.correct;
+    final isMistake = !hidden && state == LiveWordViewState.mismatch;
     final isActive = state == LiveWordViewState.active;
     final isUnspoken = state == LiveWordViewState.unspoken;
-    final hidden = _concealed(i);
-    final ghost = (isUnspoken && (w.reviewMode || w.hideUnspoken)) ||
-        (isActive && w.hideUnspoken && w.showUnspokenContext);
+    final ghost = w.reviewMode && isUnspoken;
     final isCorrect = !w.reviewMode && state == LiveWordViewState.correct;
 
     // Red is reachable ONLY via [LiveWordViewState.mismatch], which

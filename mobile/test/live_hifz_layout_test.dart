@@ -16,7 +16,7 @@ const _statuses = [
   LiveWordStatus.pending,
 ];
 
-Widget _page({bool review = false, bool context = false, int cursor = 3}) => MaterialApp(
+Widget _page({bool review = false, int cursor = 3}) => MaterialApp(
       home: Scaffold(
         body: MushafRevealView(
           words: _words,
@@ -24,7 +24,6 @@ Widget _page({bool review = false, bool context = false, int cursor = 3}) => Mat
           cursor: cursor,
           reviewMode: review,
           hideUnspoken: true,
-          showUnspokenContext: context,
           lineNumbers: const [1, 1, 1, 2, 2, 2],
           ayahBoundaries: const [2, 5],
           ayahLabels: const ['1', '2'],
@@ -37,16 +36,16 @@ Widget _page({bool review = false, bool context = false, int cursor = 3}) => Mat
     );
 
 void main() {
-  testWidgets('live context shows all pending words without claiming recognition',
+  testWidgets('live Hifz reveals only confirmed words and keeps markers visible',
       (tester) async {
-    await tester.pumpWidget(_page(context: true));
-    for (final index in [1, 3, 4, 5]) {
-      expect(inkOf(tester, _words[index]), MushafTheme.classic.ghostInk);
+    await tester.pumpWidget(_page());
+    for (final index in [1, 2, 3, 4, 5]) {
+      expect(inkOf(tester, _words[index])!.a, 0);
     }
-    expect(inkOf(tester, _words[2]), MushafTheme.classic.mismatchInk);
-    expect(underlineCount(tester, MushafTheme.classic.mismatchInk), 1);
+    expect(inkOf(tester, _words[2])!.a, 0);
+    expect(underlineCount(tester, MushafTheme.classic.mismatchInk), 0);
     expect(washOf(tester, _words[4]), isNull);
-    expect(inkOf(tester, ayahMarkerText('2')), MushafTheme.classic.ghostInk);
+    expect(inkOf(tester, ayahMarkerText('2')), MushafTheme.classic.accent);
   });
 
   testWidgets('unrecognised words stay hidden even behind the live cursor',
@@ -54,9 +53,9 @@ void main() {
     await tester.pumpWidget(_page());
     expect(inkOf(tester, _words[0]), MushafTheme.classic.text);
     expect(inkOf(tester, _words[1])!.a, 0);
-    expect(inkOf(tester, _words[2]), MushafTheme.classic.mismatchInk);
+    expect(inkOf(tester, _words[2])!.a, 0);
     expect(washOf(tester, _words[1]), isNull);
-    expect(underlineCount(tester, MushafTheme.classic.mismatchInk), 1);
+    expect(underlineCount(tester, MushafTheme.classic.mismatchInk), 0);
     // A stale skipped verdict ahead of the cursor must not reveal a future word.
     expect(inkOf(tester, _words[4])!.a, 0);
   });
@@ -68,7 +67,11 @@ void main() {
     expect(inkOf(tester, ayahMarkerText('2')), MushafTheme.classic.accent);
     expect(washOf(tester, _words[3]), isNull,
         reason: 'a concealed listening word must not paint an empty rectangle');
+    await tester.pumpWidget(_page(cursor: 0));
+    expect(inkOf(tester, ayahMarkerText('1')), MushafTheme.classic.accent);
+    expect(inkOf(tester, ayahMarkerText('2')), MushafTheme.classic.accent);
     await tester.pumpWidget(_page(cursor: 6));
+    expect(inkOf(tester, _words[4])!.a, 0);
     expect(inkOf(tester, _words[5])!.a, 0);
     expect(inkOf(tester, ayahMarkerText('2'))!.a, greaterThan(0));
   });
@@ -81,7 +84,7 @@ void main() {
     await tester.pumpWidget(_page(review: true));
     final texts = [..._words, ayahMarkerText('1'), ayahMarkerText('2')];
     final reviewRects = [for (final text in texts) rectOf(tester, text)];
-    await tester.pumpWidget(_page(context: true));
+    await tester.pumpWidget(_page());
     expect([for (final text in texts) rectOf(tester, text)], reviewRects);
     final first = rectOf(tester, _words[0]);
     final second = rectOf(tester, _words[1]);

@@ -4,6 +4,22 @@
 > Read this file first at the start of every session. Update it whenever
 > meaningful work is done. Keep it concise.
 
+## Session 2026-10-08 — Hifz visibility corrected to white reference
+
+- The user superseded the October 7 faint-live-text preference: live Hifz
+  reveals confirmed words only. Pending, active and missed words stay fully
+  hidden until summary; all ornate numbered ayah medallions stay visible even
+  before recording. Review retains ghost unreached text and red mistakes.
+- Remove showUnspokenContext from the shared renderer and live/finalizing
+  calls. Visibility changes ink only: canonical line data, marker positions,
+  cursor anchors, fitted rows, font spacing and Tilawat remain intact.
+- Base deployment commit: 4e99e1a1740f64080b51c23b64176879295d7dc4.
+  Regression CI 37739202730 reproduced pending-word alpha 0.32 instead of 0
+  and hidden future markers. Add real-font light/night page 8 coverage alongside
+  pages 1 and 3; keep summary geometry and visibility checks.
+- Build the complete production main.dart APK with aiquranic.com backend and
+  code 74 or higher; build 73 predates these visibility changes.
+
 ## Session 2026-10-07 — Live Hifz context and inline marker visibility
 
 - Live holes were visibility defects, not RTL or line reflow: pending words
