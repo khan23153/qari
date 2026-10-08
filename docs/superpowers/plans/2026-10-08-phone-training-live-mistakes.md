@@ -15,7 +15,7 @@
 - [x] Make the minimal renderer change; verify relevant widget, cursor, and review tests.
 - [x] Add failing data-preflight tests for label/audio pairing and split leakage.
 - [x] Implement the Kaggle pilot wrapper using existing trainer and guards; validate the package locally.
-- [ ] Upload only the explicit private training package/fixtures, then launch the private GPU notebook.
+- [x] Upload only the explicit private training package/fixtures, then launch the private GPU notebook.
 - [ ] Verify notebook status and training startup; record its URL and input/source revisions.
 - [ ] Run required repository checks, commit/push reviewed changes, and build the updated APK.
 - [ ] Report training status separately from recognition accuracy; retain current production weights until the candidate qualifies.
@@ -23,3 +23,11 @@
 Review: low-confidence recognition gaps remain neutral via explicit evidence confirmation; only a bounded, high-confidence spoken substitution is red. RED→GREEN and full suites verified.
 
 Ruling: keep existing TLOG rows training-only while reporting their unknown speaker identities; do not claim full speaker-disjointness. Known RetaSy evaluation speakers remain separate. Cost if wrong: unknown sources could overlap evaluation speakers, so fresh phone tests and the VPS benchmark are still mandatory and automatic model promotion is disabled.
+
+Private pilot submitted on 2026-10-08: https://www.kaggle.com/code/telethonfool/qari-v52-phone-encoder-pilot-2026-10-08 (version 1, initially queued). Kaggle derived the notebook slug from its title; metadata now uses the actual ID for subsequent updates.
+
+Private source/fixture input: `telethonfool/qari-phone-pilot-code-20261008`, created from source revision `5b89508d6644cac8b1166855924bdbf4ae940061`. Source hashes are recorded in the private package metadata. Offline Al-Fatihah and Al-Ikhlas references were generated from the bundled Quran corpus at that revision, using the existing reference-generation script (29 and 15 words respectively). Private phone audio is a release fixture, excluded from gradient training. No tokens are included in the dataset, notebook, or repository.
+
+Backend source revision `5b89508d6644cac8b1166855924bdbf4ae940061` rebuilt and deployed through existing Docker Compose configuration; running source hashes match. Public authenticated WebSocket returned 29 reference words and emitted no word events for silence. Existing model paths and tier2 policy retained. Fresh isolated checks: recitation API 76 passed; ML plus legacy API 176 passed. Full Flutter suite: 172 passed.
+
+Updated APK build: https://github.com/khan23153/qari/actions/runs/37816960278 (in progress at submission). Training startup, final APK publication, and deployed real-audio results remain to be checked.
