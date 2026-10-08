@@ -1,11 +1,11 @@
 {
   "version": "1.0.49",
-  "version_code": 73,
+  "version_code": 74,
   "min_version": "1.0.0",
   "min_version_code": 1,
   "apk_url": "https://qari.pneumetron.com/v1/app/download",
   "force_update": false,
-  "notes_en": "Fixed the in-app update prompt not appearing, plus the mic sensitivity fix (VOICE_RECOGNITION input + gain boost) so live recitation no longer treats your voice as silence.",
+  "notes_en": "Confirmed spoken mistakes turn red during live recitation; uncertain and unreached words stay hidden.",
   "notes_ur": "ان ایپ اپ ڈیٹ پرامٹ ظاہر نہ ہونے کا مسئلہ حل، اور مائیک کی حساسیت کا حل (VOICE_RECOGNITION ان پٹ + گین بوسٹ) تاکہ لائیو تلاوت آپ کی آواز خاموشی نہ سمجھے۔",
   "notes_hi": "इन-ऐप अपडेट प्रॉम्प्ट न दिखने की समस्या ठीक, और माइक सेंसिटिविटी फिक्स (VOICE_RECOGNITION इनपुट + गेन बूस्ट) ताकि लाइव तिलावत आपकी आवाज़ खामोशी न समझे।",
   "data_version": 1
