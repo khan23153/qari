@@ -37,6 +37,8 @@ def _read_rows(
                     "audio_path": str(path.relative_to(root)),
                     "duration_seconds": info.duration,
                     "reason": "outside_supported_training_duration",
+                    "clip_id": row.get("clip_id"), "source": row.get("source"),
+                    "is_augmented": _augmented(row),
                 })
                 continue
             raise ValueError(f"Unsupported audio duration: {path.name}: {info.duration}")
@@ -47,6 +49,8 @@ def _read_rows(
                     "audio_path": str(path.relative_to(root)),
                     "duration_seconds": info.duration,
                     "reason": "non_finite_audio" if not np.isfinite(audio).all() else "silent_audio",
+                    "clip_id": row.get("clip_id"), "source": row.get("source"),
+                    "is_augmented": _augmented(row),
                 })
                 continue
             raise ValueError(f"Silent/non-finite audio cannot have a speech label: {path.name}")
@@ -54,6 +58,7 @@ def _read_rows(
         row["audio_path"] = str(path)
         row["text"] = text
         row["_audio_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        row["_duration_seconds"] = info.duration
         rows.append(row)
     if not rows:
         raise ValueError(f"Empty manifest: {name}")
@@ -86,6 +91,26 @@ def prepare_pilot_data(
     quality_exclusions = []
     train = _read_rows(root, "train_manifest.jsonl", quality_exclusions=quality_exclusions)
     evaluation = _read_rows(root, "eval_manifest.jsonl")
+    invalid_origins = {
+        (str(r.get("source") or "").split("_", 1)[0], str(r["clip_id"]))
+        for r in quality_exclusions if r.get("clip_id") and not r["is_augmented"]
+    }
+    valid_train = []
+    invalid_origin_augmentations = 0
+    for row in train:
+        origin = (str(row.get("source") or "").split("_", 1)[0], str(row.get("clip_id") or ""))
+        if _augmented(row) and origin in invalid_origins:
+            quality_exclusions.append({
+                "audio_path": str(Path(row["audio_path"]).relative_to(root)),
+                "duration_seconds": row["_duration_seconds"],
+                "reason": "augmentation_of_unusable_origin",
+                "clip_id": row.get("clip_id"), "source": row.get("source"),
+                "is_augmented": True,
+            })
+            invalid_origin_augmentations += 1
+        else:
+            valid_train.append(row)
+    train = valid_train
     train_speakers = {_speaker(r) for r in train} - {""}
     eval_speakers = {_speaker(r) for r in evaluation} - {""}
     if any(not _speaker(r) for r in evaluation) or len(eval_speakers) < min_eval_speakers:
@@ -138,6 +163,7 @@ def prepare_pilot_data(
         "excluded_augmentations": excluded_augmentations,
         "excluded_transcript_cap": len(selected) - len(balanced),
         "excluded_training_quality_rows": len(quality_exclusions),
+        "excluded_invalid_origin_augmentations": invalid_origin_augmentations,
         "training_quality_exclusions": quality_exclusions,
         "excluded_training_duration_rows": sum(
             r["reason"] == "outside_supported_training_duration" for r in quality_exclusions

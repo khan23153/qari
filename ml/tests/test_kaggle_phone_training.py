@@ -145,3 +145,31 @@ def test_silent_evaluation_audio_still_fails_closed(tmp_path):
            [_row(_audio(tmp_path, 'eval.wav', 0), 'eval')])
     with pytest.raises(ValueError, match='Silent/non-finite'):
         prepare_pilot_data(tmp_path, tmp_path / 'prepared')
+
+
+def test_noisy_augmentation_of_silent_origin_cannot_become_speech_training(tmp_path):
+    from ml.training.kaggle_phone_training import prepare_pilot_data
+    _write(tmp_path, [
+        _row(_audio(tmp_path, 'valid.wav'), 'train'),
+        _row(_audio(tmp_path, 'silent.wav', 0), 'train',
+             source='tlog_clean_bucket', clip_id='bad-origin'),
+        _row(_audio(tmp_path, 'noise.wav', 1500), 'train',
+             source='tlog_phase3_aug', clip_id='bad-origin', augmentation=['noise']),
+    ], [_row(_audio(tmp_path, 'eval.wav', 2000), 'eval')])
+    report = prepare_pilot_data(tmp_path, tmp_path / 'prepared')
+    assert report['train_rows'] == 1
+    assert report['excluded_invalid_origin_augmentations'] == 1
+    assert report['training_quality_exclusions'][-1]['reason'] == 'augmentation_of_unusable_origin'
+
+
+def test_overlong_augmentation_does_not_discard_its_valid_clean_origin(tmp_path):
+    from ml.training.kaggle_phone_training import prepare_pilot_data
+    _write(tmp_path, [
+        _row(_audio(tmp_path, 'valid.wav'), 'train',
+             source='tlog_clean_bucket', clip_id='good-origin'),
+        _row(_audio(tmp_path, 'long-aug.wav', 1500, seconds=30.16), 'train',
+             source='tlog_phase3_aug', clip_id='good-origin', augmentation=['noise']),
+    ], [_row(_audio(tmp_path, 'eval.wav', 2000), 'eval')])
+    report = prepare_pilot_data(tmp_path, tmp_path / 'prepared')
+    assert report['train_rows'] == 1
+    assert report['excluded_invalid_origin_augmentations'] == 0
