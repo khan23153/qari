@@ -73,7 +73,8 @@ def main():
         target.write_bytes(payload)
     sys.path.insert(0, str(source))
     env = dict(os.environ, PYTHONPATH=str(source), HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
-    stage("install_training_dependencies", python=sys.version)
+    stage("install_training_dependencies", python=sys.version,
+          source_revision=package_metadata["source_revision"])
     run("-m", "pip", "install", "--quiet", "-r",
         source / "ml/training/requirements-kaggle-pilot.txt")
     run(source / "backend/recitation_api/fix_execstack.py")

@@ -8,7 +8,7 @@
   "enable_gpu": true,
   "enable_internet": true,
   "dataset_sources": [
-    "telethonfool/qari-phone-pilot-py313-20261008",
+    "telethonfool/qari-phone-pilot-audited-20261008",
     "telethonfool/qari-phase3-balanced-v1"
   ],
   "kernel_sources": ["telethonfool/qari-phase3-historical46-eval-v1"],

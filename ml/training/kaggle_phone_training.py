@@ -14,7 +14,9 @@ import soundfile as sf
 from ml.training.finetune_whisper_robust import normalize_arabic
 
 
-def _read_rows(root: Path, name: str) -> list[dict]:
+def _read_rows(
+    root: Path, name: str, *, quality_exclusions: list[dict] | None = None,
+) -> list[dict]:
     rows = []
     for line in (root / name).read_text(encoding="utf-8").splitlines():
         if not line.strip():
@@ -30,9 +32,23 @@ def _read_rows(root: Path, name: str) -> list[dict]:
             raise FileNotFoundError(f"Missing audio: {path}")
         info = sf.info(path)
         if not 0.6 <= info.duration <= 30.0:
+            if quality_exclusions is not None:
+                quality_exclusions.append({
+                    "audio_path": str(path.relative_to(root)),
+                    "duration_seconds": info.duration,
+                    "reason": "outside_supported_training_duration",
+                })
+                continue
             raise ValueError(f"Unsupported audio duration: {path.name}: {info.duration}")
         audio, _ = sf.read(path, dtype="float32")
         if not np.isfinite(audio).all() or not np.any(np.abs(audio) > 1e-5):
+            if quality_exclusions is not None:
+                quality_exclusions.append({
+                    "audio_path": str(path.relative_to(root)),
+                    "duration_seconds": info.duration,
+                    "reason": "non_finite_audio" if not np.isfinite(audio).all() else "silent_audio",
+                })
+                continue
             raise ValueError(f"Silent/non-finite audio cannot have a speech label: {path.name}")
         row = dict(row)
         row["audio_path"] = str(path)
@@ -67,7 +83,8 @@ def prepare_pilot_data(
     """Keep actual labels, cap augmentation, and reject train/eval leakage."""
     root = Path(dataset_root).resolve()
     output = Path(output_dir)
-    train = _read_rows(root, "train_manifest.jsonl")
+    quality_exclusions = []
+    train = _read_rows(root, "train_manifest.jsonl", quality_exclusions=quality_exclusions)
     evaluation = _read_rows(root, "eval_manifest.jsonl")
     train_speakers = {_speaker(r) for r in train} - {""}
     eval_speakers = {_speaker(r) for r in evaluation} - {""}
@@ -120,6 +137,13 @@ def prepare_pilot_data(
         "train_rows": len(balanced), "eval_rows": len(evaluation),
         "excluded_augmentations": excluded_augmentations,
         "excluded_transcript_cap": len(selected) - len(balanced),
+        "excluded_training_quality_rows": len(quality_exclusions),
+        "training_quality_exclusions": quality_exclusions,
+        "excluded_training_duration_rows": sum(
+            r["reason"] == "outside_supported_training_duration" for r in quality_exclusions
+        ),
+        "training_duration_exclusions": [r for r in quality_exclusions
+            if r["reason"] == "outside_supported_training_duration"],
         "max_augmented_per_parent": max_augmented_per_parent,
         "max_per_text": max_per_text, "eval_speakers": len(eval_speakers),
         "train_sources": dict(Counter(r.get("source", "unknown") for r in balanced)),

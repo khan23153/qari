@@ -6,14 +6,14 @@ from pathlib import Path
 import pytest
 
 
-def _audio(root, name, value=1000):
+def _audio(root, name, value=1000, *, seconds=1):
     path = root / name
     path.parent.mkdir(parents=True, exist_ok=True)
     with wave.open(str(path), 'wb') as f:
         f.setnchannels(1)
         f.setsampwidth(2)
         f.setframerate(16000)
-        f.writeframes(value.to_bytes(2, 'little', signed=True) * 16000)
+        f.writeframes(value.to_bytes(2, 'little', signed=True) * int(16000 * seconds))
     return name
 
 
@@ -92,3 +92,56 @@ def test_unknown_training_speakers_are_reported_without_disjoint_claim(tmp_path)
     report = prepare_pilot_data(tmp_path, tmp_path / 'prepared')
     assert report['unknown_train_speaker_rows'] == 1
     assert report['full_speaker_disjoint_verified'] is False
+
+
+def test_overlong_training_audio_is_excluded_and_audited_without_truncation(tmp_path):
+    from ml.training.kaggle_phone_training import prepare_pilot_data
+    valid = _audio(tmp_path, 'valid.wav')
+    overlong = _audio(tmp_path, 'overlong.wav', 1100, seconds=30.16)
+    original = (tmp_path / overlong).read_bytes()
+    _write(tmp_path, [_row(valid, 'train'), _row(overlong, 'train')],
+           [_row(_audio(tmp_path, 'eval.wav', 2000), 'eval')])
+    report = prepare_pilot_data(tmp_path, tmp_path / 'prepared')
+    rows = [json.loads(line) for line in
+            (tmp_path / 'prepared/train_manifest.jsonl').read_text().splitlines()]
+    assert [Path(row['audio_path']).name for row in rows] == ['valid.wav']
+    assert report['excluded_training_duration_rows'] == 1
+    assert report['training_duration_exclusions'][0]['audio_path'] == 'overlong.wav'
+    assert report['training_duration_exclusions'][0]['duration_seconds'] == 30.16
+    assert (tmp_path / overlong).read_bytes() == original
+
+
+def test_overlong_evaluation_audio_is_rejected_without_changing_holdout(tmp_path):
+    from ml.training.kaggle_phone_training import prepare_pilot_data
+    _write(tmp_path, [_row(_audio(tmp_path, 'train.wav'), 'train')],
+           [_row(_audio(tmp_path, 'eval.wav', 2000, seconds=30.16), 'eval')])
+    with pytest.raises(ValueError, match='Unsupported audio duration'):
+        prepare_pilot_data(tmp_path, tmp_path / 'prepared')
+
+
+def test_filtering_every_training_clip_still_rejects_empty_training(tmp_path):
+    from ml.training.kaggle_phone_training import prepare_pilot_data
+    _write(tmp_path, [_row(_audio(tmp_path, 'train.wav', seconds=30.16), 'train')],
+           [_row(_audio(tmp_path, 'eval.wav', 2000), 'eval')])
+    with pytest.raises(ValueError, match='Empty manifest'):
+        prepare_pilot_data(tmp_path, tmp_path / 'prepared')
+
+
+def test_silent_training_audio_is_excluded_and_audited(tmp_path):
+    from ml.training.kaggle_phone_training import prepare_pilot_data
+    _write(tmp_path, [_row(_audio(tmp_path, 'valid.wav'), 'train'),
+                      _row(_audio(tmp_path, 'silent.wav', 0), 'train')],
+           [_row(_audio(tmp_path, 'eval.wav', 2000), 'eval')])
+    report = prepare_pilot_data(tmp_path, tmp_path / 'prepared')
+    assert report['train_rows'] == 1
+    assert report['excluded_training_quality_rows'] == 1
+    assert report['training_quality_exclusions'][0]['audio_path'] == 'silent.wav'
+    assert report['training_quality_exclusions'][0]['reason'] == 'silent_audio'
+
+
+def test_silent_evaluation_audio_still_fails_closed(tmp_path):
+    from ml.training.kaggle_phone_training import prepare_pilot_data
+    _write(tmp_path, [_row(_audio(tmp_path, 'train.wav'), 'train')],
+           [_row(_audio(tmp_path, 'eval.wav', 0), 'eval')])
+    with pytest.raises(ValueError, match='Silent/non-finite'):
+        prepare_pilot_data(tmp_path, tmp_path / 'prepared')
