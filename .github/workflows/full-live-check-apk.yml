@@ -1,0 +1,64 @@
+name: Full Qari Hifz marker checking APK
+on:
+  push:
+    branches: ["build/hifz-marker-check-20261008"]
+    paths: [".github/workflows/full-live-check-apk.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: full-live-check-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        working-directory: mobile
+        run: flutter pub get
+      - name: Full Flutter tests
+        working-directory: mobile
+        run: flutter test
+      - name: Set checking build metadata
+        run: |
+          python3 - <<'PY'
+          import pathlib, re, json, os
+          spec = pathlib.Path("mobile/pubspec.yaml").read_text()
+          match = re.search(r"^version:\s*([\d.]+)\+(\d+)", spec, re.M)
+          release = json.loads(pathlib.Path("releases/app_release.json").read_text())
+          code = max(int(match.group(2)), int(release["version_code"]), 73) + 1
+          with open(os.environ["GITHUB_ENV"], "a") as output:
+              output.write(f"CHECK_VERSION={match.group(1)}\nCHECK_CODE={code}\n")
+          PY
+      - name: Build complete release APK with live backend
+        working-directory: mobile
+        run: flutter build apk --release --target lib/main.dart --build-name "$CHECK_VERSION" --build-number "$CHECK_CODE"
+      - name: Verify package and signature
+        run: |
+          mkdir -p build-full-check
+          CHECK_APK="build-full-check/Qari-Full-v${CHECK_VERSION}-build${CHECK_CODE}.apk"
+          cp mobile/build/app/outputs/flutter-apk/app-release.apk "$CHECK_APK"
+          BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)
+          "$BUILD_TOOLS/aapt" dump badging "$CHECK_APK" | tee build-full-check/package.txt
+          grep -q "package: name='com.qari.app'" build-full-check/package.txt
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$CHECK_APK" | tee build-full-check/signature.txt
+          printf 'Source commit: %s\nBuild commit: %s\nEntry: lib/main.dart\nBackend: https://aiquranic.com/v1\nWebSocket: wss://aiquranic.com/ws/recitation/stream\n' '43fdb6dc039cb4870cfa3b22400b2cafdf03959d' "$GITHUB_SHA" | tee build-full-check/source.txt
+          sha256sum "$CHECK_APK" | tee build-full-check/SHA256SUMS.txt
+          stat -c "APK size: %s bytes" "$CHECK_APK"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qari-full-live-check-v${{ env.CHECK_CODE }}
+          path: build-full-check/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 30
