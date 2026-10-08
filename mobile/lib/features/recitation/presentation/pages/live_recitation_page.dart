@@ -484,7 +484,7 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
             (idx != null && idx >= 0 && idx < _wordTajweedSpans.length)
                 ? _wordTajweedSpans[idx]
                 : null;
-        _applyVerdict(text, idx, event.status, spans);
+        _applyVerdict(text, idx, event.liveStatus, spans);
         break;
       case RecitationStreamEventType.finalResult:
         _finishWith(event.result);

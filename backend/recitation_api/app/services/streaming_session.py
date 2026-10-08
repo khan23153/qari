@@ -1211,6 +1211,10 @@ class StreamingRecitationSession:
             blueprint_status = (
                 "match" if st.status.value == "matched" else "error_skipped"
             )
+            evidence_confirmed = blueprint_status == "match" or (
+                st.status.value == "error" and bool(st.spoken) and
+                st.confidence >= getattr(self._matcher, "live_confidence_threshold", 0.55)
+            )
             events.append({
                 "type": "word",
                 "session_id": self.session_id,
@@ -1220,6 +1224,7 @@ class StreamingRecitationSession:
                 "expected": st.expected,
                 "spoken": st.spoken,
                 "confidence": round(st.confidence, 3),
+                "evidence_confirmed": evidence_confirmed,
                 "timestamp_ms": int(self.duration_seconds * 1000),
             })
         return events

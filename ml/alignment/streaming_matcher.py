@@ -412,6 +412,28 @@ class StreamingMatcher:
             self._stall_passes += 1
             return list(self._resolved_states)
 
+        # Only a one-word substitution bounded by a later confident match can
+        # identify a spoken mistake. A missing or uncertain ASR token remains
+        # unconfirmed even though the cursor can follow the later word.
+        substitutions = {}
+        gap_reference = []
+        gap_hypothesis = []
+        for kind, ii, jj in ops:
+            if kind == "pair" and paired(ii, jj):
+                if len(gap_reference) == len(gap_hypothesis) == 1:
+                    ri, hj = gap_reference[0], gap_hypothesis[0]
+                    if confidence(hj) >= self.live_confidence_threshold and not self._is_match(
+                        hyp[hj], ref_win[ri]
+                    ):
+                        substitutions[ri] = hj
+                gap_reference = []
+                gap_hypothesis = []
+            else:
+                if ii >= 0:
+                    gap_reference.append(ii)
+                if jj >= 0:
+                    gap_hypothesis.append(jj)
+
         for kind, ii, jj in ops:
             if ii < 0 or ii > last_match_i:
                 continue
@@ -428,12 +450,16 @@ class StreamingMatcher:
                         confidence(jj),
                     )
                 )
+            elif ii in substitutions:
+                hj = substitutions[ii]
+                self._resolved_states.append(
+                    WordState(index, reference[index], WordStatus.ERROR,
+                              hyp[hj], confidence(hj))
+                )
             else:
-                # Reference word the reciter moved past without a confident
-                # match — skipped / mispronounced. Reported live so it can be
-                # tinted red (real-time mistake signal). The final review
-                # re-scores the whole audio, so a noisy live call cannot corrupt
-                # the summary verdict.
+                # An unconfirmed recognition gap is distinct from a spoken
+                # substitution. Clients keep it neutral while the cursor can
+                # follow the later confirmed word; review is scored separately.
                 self._resolved_states.append(
                     WordState(index, reference[index], WordStatus.SKIPPED, "", 0.0)
                 )

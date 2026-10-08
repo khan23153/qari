@@ -14,6 +14,18 @@ REFERENCE_ENTRIES = [
 ]
 
 
+def test_uncertain_middle_word_is_not_confirmed_mistake_event():
+    from ml.alignment.streaming_matcher import StreamingMatcher
+    session = ss.StreamingRecitationSession()
+    session._matcher = StreamingMatcher(REFERENCE)
+    states = session._matcher.evaluate(REFERENCE[:3], [.95, .2, .95])
+    events = session._diff_events(states)
+    middle = next(e for e in events if e['word_index'] == 1)
+    assert middle['evidence_confirmed'] is False
+    assert session._matcher._cursor == 3
+    assert next(e for e in events if e['word_index'] == 2)['status'] == 'match'
+
+
 @pytest.fixture
 def stub_stream(monkeypatch):
     """Force stub transcriber + a fixed reference so the WS is model-free."""

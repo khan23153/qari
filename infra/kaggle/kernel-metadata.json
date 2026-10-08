@@ -1,0 +1,16 @@
+{
+  "id": "telethonfool/qari-phone-encoder-v52-20261008",
+  "title": "Qari V52 phone encoder pilot 2026-10-08",
+  "code_file": "phone_asr_pilot.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [
+    "telethonfool/qari-phone-pilot-code-20261008",
+    "telethonfool/qari-phase3-balanced-v1"
+  ],
+  "kernel_sources": ["telethonfool/qari-phase3-historical46-eval-v1"],
+  "model_sources": []
+}

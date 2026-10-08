@@ -6,7 +6,14 @@ import 'package:qari/features/recitation/presentation/widgets/mushaf_reveal_view
 
 import 'mushaf_text_helpers.dart';
 
-const _words = ['بِسْمِ', 'اللَّهِ', 'الرَّحْمَٰنِ', 'الرَّحِيمِ', 'الْحَمْدُ', 'رَبِّ'];
+const _words = [
+  'بِسْمِ',
+  'اللَّهِ',
+  'الرَّحْمَٰنِ',
+  'الرَّحِيمِ',
+  'الْحَمْدُ',
+  'رَبِّ'
+];
 const _statuses = [
   LiveWordStatus.matched,
   LiveWordStatus.pending,
@@ -36,14 +43,15 @@ Widget _page({bool review = false, int cursor = 3}) => MaterialApp(
     );
 
 void main() {
-  testWidgets('live Hifz reveals only confirmed words and keeps markers visible',
+  testWidgets(
+      'live Hifz reveals confirmed words and mistakes with visible markers',
       (tester) async {
     await tester.pumpWidget(_page());
-    for (final index in [1, 2, 3, 4, 5]) {
+    for (final index in [1, 3, 4, 5]) {
       expect(inkOf(tester, _words[index])!.a, 0);
     }
-    expect(inkOf(tester, _words[2])!.a, 0);
-    expect(underlineCount(tester, MushafTheme.classic.mismatchInk), 0);
+    expect(inkOf(tester, _words[2]), MushafTheme.classic.mismatchInk);
+    expect(underlineCount(tester, MushafTheme.classic.mismatchInk), 1);
     expect(washOf(tester, _words[4]), isNull);
     expect(inkOf(tester, ayahMarkerText('2')), MushafTheme.classic.accent);
   });
@@ -53,9 +61,9 @@ void main() {
     await tester.pumpWidget(_page());
     expect(inkOf(tester, _words[0]), MushafTheme.classic.text);
     expect(inkOf(tester, _words[1])!.a, 0);
-    expect(inkOf(tester, _words[2])!.a, 0);
+    expect(inkOf(tester, _words[2]), MushafTheme.classic.mismatchInk);
     expect(washOf(tester, _words[1]), isNull);
-    expect(underlineCount(tester, MushafTheme.classic.mismatchInk), 0);
+    expect(underlineCount(tester, MushafTheme.classic.mismatchInk), 1);
     // A stale skipped verdict ahead of the cursor must not reveal a future word.
     expect(inkOf(tester, _words[4])!.a, 0);
   });
@@ -71,12 +79,13 @@ void main() {
     expect(inkOf(tester, ayahMarkerText('1')), MushafTheme.classic.accent);
     expect(inkOf(tester, ayahMarkerText('2')), MushafTheme.classic.accent);
     await tester.pumpWidget(_page(cursor: 6));
-    expect(inkOf(tester, _words[4])!.a, 0);
+    expect(inkOf(tester, _words[4]), MushafTheme.classic.mismatchInk);
     expect(inkOf(tester, _words[5])!.a, 0);
     expect(inkOf(tester, ayahMarkerText('2'))!.a, greaterThan(0));
   });
 
-  testWidgets('live and review retain identical RTL words and inline marker geometry',
+  testWidgets(
+      'live and review retain identical RTL words and inline marker geometry',
       (tester) async {
     tester.view.physicalSize = const Size(360, 740);
     tester.view.devicePixelRatio = 1;

@@ -71,6 +71,21 @@ def test_live_does_not_jam_when_a_word_is_missing():
     assert st[4] == WordStatus.MATCHED
 
 
+def test_confident_spoken_substitution_is_red_and_tracking_continues():
+    matcher = StreamingMatcher(BISMILLAH)
+    states = matcher.evaluate(['بسم', 'الناس', 'الرحمن', 'الرحيم'], [.95] * 4)
+    by_index = {state.index: state for state in states}
+    assert by_index[1].status == WordStatus.ERROR
+    assert by_index[1].spoken == 'الناس'
+    assert by_index[1].confidence == .95
+    assert by_index[2].status == WordStatus.MATCHED
+    # Retain the existing bounded search reach; a following pass resolves the tail.
+    states = matcher.evaluate(['بسم', 'الناس', 'الرحمن', 'الرحيم'], [.95] * 4)
+    by_index = {state.index: state for state in states}
+    assert by_index[3].status == WordStatus.MATCHED
+    assert matcher._cursor == 4
+
+
 def test_pending_words_are_not_returned():
     """Words ahead of the recitation stay unresolved (masked)."""
     m = StreamingMatcher(BISMILLAH)

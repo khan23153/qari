@@ -99,7 +99,8 @@ void main() {
   });
 
   group('Hifz mode — unsaid words hidden, layout preserved', () {
-    testWidgets('only confirmed words appear while medallions remain visible',
+    testWidgets(
+        'confirmed words and mistakes appear while medallions remain visible',
         (tester) async {
       const t = MushafTheme.classic;
       final statuses = List.filled(_words.length, LiveWordStatus.pending);
@@ -115,9 +116,9 @@ void main() {
       // Confirmed word: solid ink with the green wash.
       expect(inkOf(tester, _words[0]), t.text);
       expect(washes(tester), contains(t.correctTint));
-      // Missing words appear only in the summary, not during Hifz.
-      expect(inkOf(tester, _words[1])!.a, 0);
-      expect(underlineCount(tester, t.mismatchInk), 0);
+      // A confirmed mistake stays visible while recitation continues.
+      expect(inkOf(tester, _words[1]), t.mismatchInk);
+      expect(underlineCount(tester, t.mismatchInk), 1);
       // Active and upcoming words: fully transparent, and nothing (glow,
       // tajweed colour) traces their glyphs.
       for (var i = 2; i < _words.length; i++) {
