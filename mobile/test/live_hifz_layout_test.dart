@@ -49,11 +49,11 @@ void main() {
     expect(inkOf(tester, ayahMarkerText('2')), MushafTheme.classic.ghostInk);
   });
 
-  testWidgets('unrecognised words behind the live cursor leave no invisible hole',
+  testWidgets('unrecognised words stay hidden even behind the live cursor',
       (tester) async {
     await tester.pumpWidget(_page());
     expect(inkOf(tester, _words[0]), MushafTheme.classic.text);
-    expect(inkOf(tester, _words[1]), MushafTheme.classic.ghostInk);
+    expect(inkOf(tester, _words[1])!.a, 0);
     expect(inkOf(tester, _words[2]), MushafTheme.classic.mismatchInk);
     expect(washOf(tester, _words[1]), isNull);
     expect(underlineCount(tester, MushafTheme.classic.mismatchInk), 1);
@@ -61,15 +61,15 @@ void main() {
     expect(inkOf(tester, _words[4])!.a, 0);
   });
 
-  testWidgets('Hifz markers do not float without their unreached verse ending',
+  testWidgets('Hifz markers stay visible before their verse is recited',
       (tester) async {
     await tester.pumpWidget(_page());
     expect(inkOf(tester, ayahMarkerText('1'))!.a, greaterThan(0));
-    expect(inkOf(tester, ayahMarkerText('2'))!.a, 0);
+    expect(inkOf(tester, ayahMarkerText('2')), MushafTheme.classic.accent);
     expect(washOf(tester, _words[3]), isNull,
         reason: 'a concealed listening word must not paint an empty rectangle');
     await tester.pumpWidget(_page(cursor: 6));
-    expect(inkOf(tester, _words[5]), MushafTheme.classic.ghostInk);
+    expect(inkOf(tester, _words[5])!.a, 0);
     expect(inkOf(tester, ayahMarkerText('2'))!.a, greaterThan(0));
   });
 
