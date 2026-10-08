@@ -6,8 +6,8 @@ import '../../../data/models/recitation_stream_event.dart';
 /// The wire can say "this word was skipped", but the UI is only allowed to paint
 /// that red under one condition — see [resolveWordViewState].
 enum LiveWordViewState {
-  /// Not said yet: faint ghost ink (readable guidance, visibly not
-  /// "recognised"). Never red, never a squiggle.
+  /// Not said yet: hidden in live Hifz, ghost ink in review.
+  /// Never red, never a squiggle.
   unspoken,
 
   /// The listening cursor — the word expected right now.

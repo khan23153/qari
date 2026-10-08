@@ -21,9 +21,9 @@ void main() {
         .load();
   });
 
-  for (final page in [1, 3]) {
+  for (final page in [1, 3, 8]) {
     for (final theme in [MushafTheme.minimal, MushafTheme.night]) {
-      testWidgets('live page $page in ${theme.id} retains review geometry and pending text',
+      testWidgets('live page $page in ${theme.id} hides unreached words and retains review geometry',
           (tester) async {
         tester.view.physicalSize = const Size(360, 740);
         tester.view.devicePixelRatio = 1;
@@ -56,6 +56,7 @@ void main() {
         Widget view(bool review) => RepaintBoundary(
               key: preview,
               child: MaterialApp(
+                debugShowCheckedModeBanner: false,
                 theme: theme.toThemeData(),
                 home: Scaffold(
                   body: Padding(
@@ -66,7 +67,6 @@ void main() {
                       cursor: 6,
                       mushaf: theme,
                       hideUnspoken: true,
-                      showUnspokenContext: true,
                       reviewMode: review,
                       lineNumbers: lines,
                       ayahBoundaries: boundaries,
@@ -86,10 +86,21 @@ void main() {
         for (final review in [true, false]) {
           await tester.pumpWidget(view(review));
           expect([for (final text in texts) rectOf(tester, text)], reviewRects);
-          expect(inkOf(tester, words[2]), theme.ghostInk);
-          expect(inkOf(tester, words.last, last: true), theme.ghostInk);
-          expect(underlineCount(tester, theme.mismatchInk), 1);
-          expect(mushafUnits(tester).every((s) => s.style!.color!.a > 0), isTrue);
+          if (review) {
+            expect(inkOf(tester, words[2]), theme.ghostInk);
+            expect(inkOf(tester, words.last, last: true), theme.ghostInk);
+            expect(inkOf(tester, words[5]), theme.mismatchInk);
+            expect(underlineCount(tester, theme.mismatchInk), 1);
+            expect(mushafUnits(tester).every((s) => s.style!.color!.a > 0), isTrue);
+          } else {
+            expect(inkOf(tester, words[2])!.a, 0);
+            expect(inkOf(tester, words[5])!.a, 0);
+            expect(inkOf(tester, words.last, last: true)!.a, 0);
+            expect(underlineCount(tester, theme.mismatchInk), 0);
+          }
+          for (final label in labels) {
+            expect(inkOf(tester, ayahMarkerText(label))!.a, 1);
+          }
           expect(tester.takeException(), isNull);
           if (const bool.fromEnvironment('CAPTURE_QURAN_UI')) {
             final boundary = preview.currentContext!.findRenderObject()!
