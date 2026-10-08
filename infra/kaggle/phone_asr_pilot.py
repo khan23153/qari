@@ -73,17 +73,15 @@ def main():
         target.write_bytes(payload)
     sys.path.insert(0, str(source))
     env = dict(os.environ, PYTHONPATH=str(source), HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
-    stage("install_training_dependencies")
+    stage("install_training_dependencies", python=sys.version)
     run("-m", "pip", "install", "--quiet", "-r",
-        source / "ml/training/requirements-qari-v4.txt", "-r",
-        source / "backend/recitation_api/requirements.txt",
-        "faster-whisper==1.0.3", "ctranslate2==4.4.0")
+        source / "ml/training/requirements-kaggle-pilot.txt")
     run(source / "backend/recitation_api/fix_execstack.py")
     os.environ.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
     import torch
     if not torch.cuda.is_available():
         raise RuntimeError("Kaggle GPU is required; CPU training is disabled")
-    stage("dataset_preflight", gpu=torch.cuda.get_device_name(0))
+    stage("dataset_preflight", gpu=torch.cuda.get_device_name(0), torch=torch.__version__)
     from ml.training.kaggle_phone_training import prepare_pilot_data
     data = unique_parent("train_manifest.jsonl")
     prepared = WORK / "prepared"
@@ -134,6 +132,7 @@ def main():
     result["recognition_checks_pass"] = all(result["checks"].values())
     result["pass"] = False  # The real VPS latency benchmark is still mandatory.
     result["automatic_deployment"] = False
+    result["production_runtime_verified"] = False
     result["source_revision"] = json.loads((package / "qari-pilot-package.json").read_text())["source_revision"]
     gate.write_text(json.dumps(result, indent=2))
     stage("complete", recognition_checks_pass=result["recognition_checks_pass"],

@@ -1,0 +1,11 @@
+# Kaggle's current Python 3.13 image needs inference wheels newer than the
+# deployed Python 3.12 API. Training policy and production pins stay separate.
+# Reuse Kaggle's managed CUDA PyTorch; do not replace it.
+-r requirements-qari-v4.txt
+faster-whisper==1.2.1
+ctranslate2==4.8.2
+av==16.1.0
+pydantic==2.11.7
+pydantic-settings==2.10.1
+structlog==24.2.0
+prometheus-client==0.20.0
