@@ -34,6 +34,15 @@ def run(*args, env=None):
 def convert(hf, target):
     from ctranslate2.converters import TransformersConverter
     from faster_whisper import WhisperModel
+    if not (hf / "tokenizer.json").is_file():
+        # WhisperProcessor saves the slow tokenizer's vocab/merges sidecars.
+        # Build the fast tokenizer artifact from this checkpoint's own files.
+        from transformers import WhisperTokenizer, WhisperTokenizerFast
+        slow = WhisperTokenizer.from_pretrained(str(hf), local_files_only=True)
+        fast = WhisperTokenizerFast.from_pretrained(str(hf), local_files_only=True)
+        if slow.get_vocab() != fast.get_vocab():
+            raise RuntimeError("Fast tokenizer reconstruction changed vocabulary IDs")
+        fast.backend_tokenizer.save(str(hf / "tokenizer.json"))
     TransformersConverter(str(hf), copy_files=["tokenizer.json", "preprocessor_config.json"]).convert(
         str(target), quantization="int8")
     p = target / "tokenizer.json"

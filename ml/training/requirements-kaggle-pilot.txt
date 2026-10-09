@@ -3,7 +3,8 @@
 # Reuse Kaggle's managed CUDA PyTorch; do not replace it.
 -r requirements-qari-v4.txt
 faster-whisper==1.2.1
-ctranslate2==4.8.2
+# 4.6.0 has Python 3.13 wheels and uses Transformers 4.46's torch_dtype API.
+ctranslate2==4.6.0
 av==16.1.0
 pydantic==2.11.7
 pydantic-settings==2.10.1
