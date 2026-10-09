@@ -18,6 +18,31 @@ permissions:
   contents: read
 
 jobs:
+  native-audio-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Pub get
+        working-directory: mobile
+        run: flutter pub get
+      - name: Native microphone waveform tests
+        working-directory: mobile/android
+        run: ./gradlew :app:testDebugUnitTest --no-daemon
+      - name: Native audio test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-audio-test-results
+          path: mobile/build/app/test-results/testDebugUnitTest/*.xml
   analyze-test:
     runs-on: ubuntu-latest
     timeout-minutes: 20
