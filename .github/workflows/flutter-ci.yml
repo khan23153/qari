@@ -34,9 +34,12 @@ jobs:
       - name: Pub get
         working-directory: mobile
         run: flutter pub get
+      - name: Initialize Android build and wrapper
+        working-directory: mobile
+        run: flutter build apk --debug --no-pub
       - name: Native microphone waveform tests
         working-directory: mobile/android
-        run: ./gradlew :app:testDebugUnitTest --no-daemon
+        run: bash ./gradlew :app:testDebugUnitTest --no-daemon
       - name: Native audio test results
         if: always()
         uses: actions/upload-artifact@v4
