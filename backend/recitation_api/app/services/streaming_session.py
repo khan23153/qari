@@ -196,7 +196,7 @@ class LiveTranscriberUnavailable(RuntimeError):
 # Reference resolution (expected normalized words for an ayah)
 # ---------------------------------------------------------------------------
 
-# Inlined Arabic normalizer (mirrors ml.inference.asr.normalize_arabic) so the
+# Lightweight live normalizer; dagger alef retains its spoken long vowel. The
 # streaming reference resolution does NOT import the heavy ASR module (torch /
 # numpy). The live stream only needs lightweight normalization + the pure-Python
 # StreamingMatcher; the full ASR engine is only used by the real transcriber.
@@ -218,6 +218,7 @@ _MULTI_SPACE = _re.compile(r"\s+")
 def _normalize(text: str) -> str:
     if not text:
         return ""
+    text = text.replace("ٰ", "ا")
     text = _HARAKAT.sub("", text)
     text = _TATWEEL.sub("", text)
     for variant, canonical in _ALEF.items():
@@ -275,6 +276,39 @@ def _get_reference_store():
     return _reference_store_cache
 
 
+_live_error_vocab_cache: Optional[tuple[object, frozenset[str]]] = None
+
+
+def _get_live_error_vocabulary() -> frozenset[str]:
+    """Known words across the immutable corpus, used only to confirm errors.
+
+    Garbled ASR strings are recognition gaps, not proof of a spoken mistake.
+    This vocabulary never enters recognition or supplies words to the matcher.
+    """
+    global _live_error_vocab_cache
+    try:
+        store = _get_reference_store()
+        if _live_error_vocab_cache is not None and _live_error_vocab_cache[0] is store:
+            return _live_error_vocab_cache[1]
+        vocabulary: set[str] = set()
+        for key in store.list_ayahs():
+            ref = store.get(*key)
+            if ref is None:
+                continue
+            for word in ref.words:
+                vocabulary.add(_normalize(word.word))
+                text = word.text_with_tashkeel or ""
+                if "ٰ" in text:
+                    vocabulary.add(_normalize(text.replace("ٰ", "ا")))
+        vocabulary.discard("")
+        frozen = frozenset(vocabulary)
+        _live_error_vocab_cache = (store, frozen)
+        return frozen
+    except Exception as exc:
+        logger.debug("stream.error_vocab_unavailable", error=type(exc).__name__)
+        return frozenset()
+
+
 def resolve_reference_words(surah: int, ayah: int) -> tuple[list[str], list[str], str, list[dict]]:
     """Resolve the expected (reference) word list for a single ayah.
 
@@ -294,7 +328,7 @@ def resolve_reference_words(surah: int, ayah: int) -> tuple[list[str], list[str]
         if store.has(surah, ayah):
             ref = store.get(surah, ayah)
             display = [w.text_with_tashkeel or w.word for w in ref.words]
-            norm = [_normalize(w.word) for w in ref.words]
+            norm = [_normalize(text) for text in display]
             entries, display, norm = _pack_entries(display, norm)
             return display, norm, ref.reference_audio_url or "", entries
     except Exception as exc:  # pragma: no cover - ml deps optional
@@ -699,6 +733,7 @@ class StreamingRecitationSession:
         self._matcher = StreamingMatcher(
             self.reference_words,
             ayah_boundaries=self.ayah_boundaries,
+            known_error_words=_get_live_error_vocabulary(),
         )
 
         if self._explicit_transcriber is not None:

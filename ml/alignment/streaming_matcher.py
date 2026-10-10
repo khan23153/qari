@@ -1,10 +1,9 @@
 """Incremental word alignment for live Quran recitation tracking.
 
-Live tracking follows the approach Tarteel documented for its own app: ASR text
-is compared to the Quranic reference with *fuzzy string matching* (never
-waveform DTW), the individual words are aligned with a Needleman-Wunsch (DP)
-sequence alignment, and the search is anchored to the last known position,
-widening only when the tracker loses confidence.
+Qari compares ASR text with the Quranic reference using fuzzy string matching,
+aligns words with a local Needleman-Wunsch (DP) sequence alignment, and anchors
+the search to the last known position. This describes Qari's implementation;
+Tarteel's current proprietary matcher is not established by its public notes.
 
 The previous implementation used a one-way greedy cursor: it walked the
 hypothesis token stream once and never re-scanned it, consuming every
@@ -21,7 +20,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from typing import Iterable, Optional
 
 from .phonetic import PHONETIC_MATCH_THRESHOLD, phonetic_similarity
 
@@ -78,6 +77,9 @@ def char_similarity(a: str, b: str) -> float:
 # genuinely distinct words collide (e.g. 'الذي' / 'الذين'), whereas an extra
 # alef is a systematic Quranic recitation/ASR confusion, not a different word.
 _ALEF_VARIANTS = frozenset("اٱآأإٰ")
+# Only emphasis pairs may combine with spelling normalization. A broad
+# phonetic comparison of stripped stems would merge distinct words.
+_EMPHATIC_PAIRS = frozenset(frozenset(pair) for pair in ("صس", "طت", "ضد", "ظذ"))
 
 
 def _equal_modulo_one_alef(a: str, b: str) -> bool:
@@ -173,8 +175,12 @@ class StreamingMatcher:
         use_phonetic: bool = True,
         ayah_boundaries: Optional[list[dict]] = None,
         ayah_lookahead: int = AYAH_LOOKAHEAD,
+        known_error_words: Optional[Iterable[str]] = None,
     ) -> None:
         self.reference = list(reference_words)
+        self._known_error_words = (
+            frozenset(known_error_words) if known_error_words is not None else None
+        )
         self.match_threshold = match_threshold
         self.live_confidence_threshold = max(0.0, min(1.0, live_confidence_threshold))
         self.lookahead = max(0, lookahead)
@@ -254,9 +260,34 @@ class StreamingMatcher:
         # alef it is the same word.
         if _equal_modulo_one_alef(hypothesis, reference):
             return True
-        return self.use_phonetic and (
+        if self.use_phonetic and (
             phonetic_similarity(hypothesis, reference) >= self.phonetic_threshold
-        )
+        ):
+            return True
+        # Compose spelling variants with a narrow emphasis check, without
+        # admitting unrelated stems (e.g. musta'in versus mustaqim).
+        stems = [(self._strip_article(hypothesis), self._strip_article(reference))]
+        if (len(reference) > 4 and reference.startswith("ال")
+                and len(hypothesis) > 4 and hypothesis.startswith("ل")):
+            # The article's initial wasla may disappear in connected ASR text.
+            stems.append((hypothesis[1:], reference[2:]))
+        for heard, expected in stems:
+            if heard == expected:
+                return True
+            if not self.use_phonetic:
+                continue
+            # A real, different Quran word must not become a spelling alias
+            # through composed emphasis (e.g. سور versus الصور).
+            if (self._known_error_words is not None
+                    and (not self._known_error_words
+                         or hypothesis in self._known_error_words)):
+                continue
+            if (len(heard) == len(expected)
+                    and all(a == b or frozenset((a, b)) in _EMPHATIC_PAIRS
+                            for a, b in zip(heard, expected))
+                    and phonetic_similarity(heard, expected) >= self.phonetic_threshold):
+                return True
+        return False
 
     @staticmethod
     def _strip_article(word: str) -> str:
@@ -441,9 +472,10 @@ class StreamingMatcher:
             if kind == "pair" and paired(ii, jj):
                 if len(gap_reference) == len(gap_hypothesis) == 1:
                     ri, hj = gap_reference[0], gap_hypothesis[0]
-                    if confidence(hj) >= self.live_confidence_threshold and not self._is_match(
-                        hyp[hj], ref_win[ri]
-                    ):
+                    if (confidence(hj) >= self.live_confidence_threshold
+                            and not self._is_match(hyp[hj], ref_win[ri])
+                            and (self._known_error_words is None
+                                 or hyp[hj] in self._known_error_words)):
                         substitutions[ri] = hj
                 gap_reference = []
                 gap_hypothesis = []

@@ -367,3 +367,118 @@ def test_fuzzy_reference_variants_do_not_turn_one_repeated_word_into_start():
     matcher = StreamingMatcher(['ابتداء', 'الله', 'بالله'])
     assert matcher.evaluate(['الله', 'الله'], [.95, .95]) == []
     assert matcher._cursor == 0
+
+
+@pytest.mark.parametrize('heard,expected', [
+    ('لعالمين', 'العالمين'),
+    ('لرحمان', 'الرحمان'),
+    ('السرات', 'صراط'),
+    ('سرات', 'صراط'),
+])
+def test_article_alef_and_emphatic_variants_compose(heard, expected):
+    matcher = StreamingMatcher([expected])
+    assert matcher._is_match(heard, expected)
+    assert matcher.evaluate([heard], [.2]) == []
+    assert matcher.evaluate([heard], [.95])[0].status == WordStatus.MATCHED
+
+
+@pytest.mark.parametrize('heard,expected', [
+    ('مستعين', 'المستقيم'),
+    ('لعاملين', 'العلمين'),
+    ('لرحيم', 'الرحمن'),
+])
+def test_normalization_does_not_merge_different_word_stems(heard, expected):
+    assert not StreamingMatcher([expected])._is_match(heard, expected)
+
+
+def test_composed_emphatic_matching_respects_disabled_phonetic_policy():
+    matcher = StreamingMatcher(['صرط'], use_phonetic=False)
+    assert not matcher._is_match('السرات', 'صرط')
+    # The spelling-only transformation does not depend on phonetic matching.
+    assert matcher._is_match('لعالمين', 'العالمين')
+
+
+def test_unknown_asr_text_remains_unconfirmed_while_cursor_follows_next_word():
+    matcher = StreamingMatcher(BISMILLAH, known_error_words={'الناس'})
+    states = matcher.evaluate(['بسم', 'اسقباعه', 'الرحمن'], [.95] * 3)
+    by_index = {state.index: state for state in states}
+    assert by_index[1].status == WordStatus.SKIPPED
+    assert by_index[1].spoken == ''
+    assert by_index[1].confidence == 0
+    assert by_index[2].status == WordStatus.MATCHED
+    assert matcher._cursor == 3
+    final = matcher.finalize(['بسم', 'اسقباعه', 'الرحمن', 'الرحيم'], [.95] * 4)
+    assert {s.index: s for s in final}[1].status == WordStatus.ERROR
+
+
+def test_known_wrong_word_is_still_red_and_confidence_guard_still_applies():
+    matcher = StreamingMatcher(BISMILLAH, known_error_words={'الناس'})
+    states = matcher.evaluate(['بسم', 'الناس', 'الرحمن'], [.95] * 3)
+    assert {s.index: s for s in states}[1].status == WordStatus.ERROR
+    uncertain = StreamingMatcher(BISMILLAH, known_error_words={'الناس'})
+    states = uncertain.evaluate(['بسم', 'الناس', 'الرحمن'], [.95, .2, .95])
+    assert {s.index: s for s in states}[1].status == WordStatus.SKIPPED
+
+
+def test_empty_or_external_mutation_of_error_vocabulary_cannot_confirm_garbage():
+    for words in (set(), {'الناس'}):
+        matcher = StreamingMatcher(BISMILLAH, known_error_words=words)
+        words.add('اسقباعه')
+        states = matcher.evaluate(['بسم', 'اسقباعه', 'الرحمن'], [.95] * 3)
+        assert {s.index: s for s in states}[1].status == WordStatus.SKIPPED
+
+
+@pytest.mark.parametrize('heard,expected', [
+    ('اتبع', 'طبع'), ('اراد', 'ارض'),
+    ('اصبحوا', 'سبحوا'), ('اصحاب', 'سحاب'),
+])
+def test_composition_does_not_delete_meaningful_alef_from_other_words(heard, expected):
+    matcher = StreamingMatcher([expected], known_error_words={heard})
+    assert not matcher._is_match(heard, expected)
+    assert matcher.evaluate([heard], [.95]) == []
+    assert matcher.finalize([heard], [.95])[0].status == WordStatus.ERROR
+
+
+@pytest.mark.parametrize('heard,expected', [
+    ('بحر', 'البحار'), ('اسم', 'الاسما'), ('احمل', 'الاحمال'),
+])
+def test_article_handling_does_not_turn_singular_or_verb_into_other_word(heard, expected):
+    matcher = StreamingMatcher([expected], known_error_words={heard})
+    assert not matcher._is_match(heard, expected)
+    assert matcher.evaluate([heard], [.95]) == []
+    assert matcher.finalize([heard], [.95])[0].status == WordStatus.ERROR
+
+
+@pytest.mark.parametrize('heard,expected', [
+    ('سور', 'الصور'), ('سخر', 'الصخر'), ('محصنين', 'المحسنين'),
+])
+def test_known_distinct_word_cannot_become_match_by_article_and_emphasis(heard, expected):
+    matcher = StreamingMatcher([expected], known_error_words={heard})
+    assert not matcher._is_match(heard, expected)
+    assert matcher.evaluate([heard], [.95]) == []
+    assert matcher.finalize([heard], [.95])[0].status == WordStatus.ERROR
+
+
+@pytest.mark.parametrize('heard,expected', [
+    ('سور', 'الصور'), ('سخر', 'الصخر'), ('محصنين', 'المحسنين'),
+])
+def test_known_interior_substitution_stays_red_and_cursor_continues(heard, expected):
+    reference = ['في', expected, 'عالم']
+    hypothesis = ['في', heard, 'عالم']
+    matcher = StreamingMatcher(reference, known_error_words={heard})
+    states = matcher.evaluate(hypothesis, [.95] * 3)
+    assert [s.status for s in states] == [WordStatus.MATCHED, WordStatus.ERROR, WordStatus.MATCHED]
+    assert matcher._cursor == 3
+    assert [s.status for s in matcher.finalize(hypothesis, [.95] * 3)] == [
+        WordStatus.MATCHED, WordStatus.ERROR, WordStatus.MATCHED,
+    ]
+
+
+@pytest.mark.parametrize('heard,expected', [
+    ('سور', 'الصور'), ('سخر', 'الصخر'), ('محصنين', 'المحسنين'),
+])
+def test_missing_production_vocabulary_cannot_enable_new_semantic_matches(heard, expected):
+    matcher = StreamingMatcher(['في', expected, 'عالم'], known_error_words=set())
+    assert not matcher._is_match(heard, expected)
+    states = matcher.evaluate(['في', heard, 'عالم'], [.95] * 3)
+    assert [s.status for s in states] == [WordStatus.MATCHED, WordStatus.SKIPPED, WordStatus.MATCHED]
