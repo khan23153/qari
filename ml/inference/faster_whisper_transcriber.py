@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import copy
 import logging
+import math
 import os
 import threading
 from typing import List, Optional, Tuple
@@ -32,6 +34,11 @@ DEFAULT_VERIFY_DIRNAME = "qari-ct2-base"
 # generous safety cap so a loop can never stall the live loop.
 PROMPTED_MAX_NEW_TOKENS = 96
 UNPROMPTED_MAX_NEW_TOKENS = 64
+
+# Shorter encoder padding changed words and introduced false live mistakes in
+# recorded-phone checks. A 15s floor retained baseline recognition and reduced
+# CPU decode time; this changes encoder padding, not the live audio window.
+LIVE_MIN_ENCODER_CHUNK_SECONDS = 15
 
 
 def resolve_model_dir(explicit: Optional[str] = None) -> str:
@@ -156,7 +163,19 @@ class FasterWhisperTranscriber:
         if len(samples) == 0:
             return [], []
         model = self._model_verify_for()
-        segments, _info = model.transcribe(
+        # The default extractor pads even a 2s live window to 30s. Use the
+        # supported chunk_length option with the validated acoustic padding floor.
+        # That option mutates the extractor, so each call needs its own view;
+        # the native model/weights stay shared and timestamped review stays full.
+        live_model = copy.copy(model)
+        live_model.feature_extractor = copy.copy(model.feature_extractor)
+        extractor = live_model.feature_extractor
+        chunk_length = min(
+            max(LIVE_MIN_ENCODER_CHUNK_SECONDS,
+                math.ceil(len(samples) / extractor.sampling_rate + 0.5)),
+            extractor.n_samples // extractor.sampling_rate,
+        )
+        segments, _info = live_model.transcribe(
             samples,
             language="ar",
             task="transcribe",
@@ -167,6 +186,7 @@ class FasterWhisperTranscriber:
             condition_on_previous_text=False,
             initial_prompt=None,
             max_new_tokens=UNPROMPTED_MAX_NEW_TOKENS,
+            chunk_length=chunk_length,
         )
         words: List[str] = []
         confidences: List[float] = []
