@@ -41,9 +41,9 @@ PUBLISHED=0
 cleanup() {
   local exit_code=$?
   if [[ -n "$PUBSPEC_BACKUP" ]]; then
-    if [[ "$PUBLISHED" -eq 0 ]]; then
+    if [[ "$PUBLISHED" -eq 0 || "$MIC_PILOT" -eq 1 ]]; then
       cp -f "$PUBSPEC_BACKUP" "$MOBILE/pubspec.yaml"
-      echo "Build did not publish; restored the original pubspec version." >&2
+      echo "Restored the original pubspec version." >&2
     fi
     rm -f "$PUBSPEC_BACKUP"
   fi
@@ -96,6 +96,7 @@ PY
 }
 
 [[ "$BUMP" -eq 1 ]] && bump_pubspec
+if [[ "$MIC_PILOT" -eq 1 ]]; then APK_DST="$RELEASES/app-mic-pilot.apk"; fi
 
 # ── Build the release APK ──────────────────────────────────────────────────
 # A capture experiment installs alongside Qari and preserves its local data.
@@ -113,6 +114,25 @@ fi
 mkdir -p "$RELEASES"
 cp -f "$APK_OUT" "$APK_DST"
 echo "==> APK copied to $APK_DST ($(du -h "$APK_DST" | cut -f1))"
+
+# Pilot publication is separate from the normal OTA APK and metadata.
+if [[ "$MIC_PILOT" -eq 1 ]]; then
+  python3 - "$MOBILE/pubspec.yaml" "$RELEASES/app_mic_pilot.json" <<'PYMETA'
+import json, re, sys
+match = re.search(r'^version:\s*(\d+\.\d+\.\d+)\+(\d+)\s*$', open(sys.argv[1]).read(), re.M)
+if not match:
+    raise SystemExit("Could not parse pilot version")
+metadata = {"version": match.group(1), "version_code": int(match.group(2)),
+            "package_id": "com.qari.app.micpilot", "pilot": True,
+            "apk_url": "https://aiquranic.com/v1/app/download?file=app-mic-pilot.apk"}
+with open(sys.argv[2], "w") as output:
+    json.dump(metadata, output, indent=2)
+    output.write("\n")
+PYMETA
+  PUBLISHED=1
+  echo "Pilot ready at $APK_DST; normal OTA release is preserved."
+  exit 0
+fi
 
 # ── Update releases/app_release.json ───────────────────────────────────────
 python3 - "$RELEASE_JSON" <<PY
