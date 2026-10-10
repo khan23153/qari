@@ -24,6 +24,12 @@ http://:8088 {
 		}
 	}
 
+	# Fixed versioned link for the separate microphone test APK.
+	handle /qari-mic-test-v76.apk {
+		rewrite * /v1/app/download?file=qari-mic-test-v76.apk
+		reverse_proxy 127.0.0.1:8010
+	}
+
 	# Core API + health
 	handle /v1/* {
 		reverse_proxy 127.0.0.1:8010
