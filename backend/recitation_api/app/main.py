@@ -2,6 +2,7 @@
 
 import os
 import threading
+from copy import deepcopy
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import AsyncIterator
@@ -87,8 +88,9 @@ class _ConservativeLiveMatcher:
     voice:
 
     * **Alignment** delegates to ``StreamingMatcher``'s live DP aligner (anchor +
-      local window, Needleman-Wunsch — the approach Tarteel documents for its own
-      app). The previous implementation here walked ASR tokens one at a time with
+      local window, Needleman-Wunsch). This describes Qari's implementation;
+      Tarteel's current proprietary matcher is not established by public notes.
+      The previous implementation here walked ASR tokens one at a time with
       ``lookahead=0``, consuming every unmatched token as noise: as soon as the
       expected word's own token was missing (window-cut fragment, mangled
       article, a swallowed word) it ate everything after it and NEVER advanced
@@ -100,10 +102,11 @@ class _ConservativeLiveMatcher:
       could have been spoken in the measured active-speech time, so an ASR
       continuation can never highlight text the user has not recited yet.
 
-    Detailed errors are still produced at final review by a fresh matcher.
+    Supported substitutions may be reported live; uncertain gaps stay hidden.
+    Final review uses an independent copy of the configured matcher.
     """
 
-    def __init__(self, reference_words: list[str]) -> None:
+    def __init__(self, reference_words: list[str], *, delegate=None) -> None:
         from ml.alignment.streaming_matcher import StreamingMatcher
 
         self.reference = list(reference_words)
@@ -112,7 +115,14 @@ class _ConservativeLiveMatcher:
         self._cursor = 0
         self._hyp_cursor = 0
         self._states = []
-        self._delegate = StreamingMatcher(self.reference)
+        # load_reference has already configured ayah limits and the Quran
+        # error vocabulary. Replacing that matcher with default settings would
+        # silently remove both guards in the production-only wrapper.
+        self._delegate = delegate if delegate is not None else StreamingMatcher(self.reference)
+
+    @property
+    def live_confidence_threshold(self) -> float:
+        return self._delegate.live_confidence_threshold
 
     @property
     def _stall_passes(self) -> int:
@@ -140,11 +150,9 @@ class _ConservativeLiveMatcher:
         return list(self._states)
 
     def finalize(self, hypothesis_words, confidences=None):
-        from ml.alignment.streaming_matcher import StreamingMatcher
-
-        # Final review is allowed to report errors/skips. Use a fresh matcher so
-        # conservative live decisions never contaminate the saved result.
-        return StreamingMatcher(self.reference).finalize(
+        # finalize resets alignment state. Copy the configured delegate so
+        # review retains all guards without mutating the live cursor/state.
+        return deepcopy(self._delegate).finalize(
             hypothesis_words,
             confidences,
         )
@@ -164,7 +172,9 @@ def _load_reference_with_conservative_live_matcher(self) -> None:
         and not self._is_stub
         and self.reference_words
     ):
-        self._matcher = _ConservativeLiveMatcher(self.reference_words)
+        self._matcher = _ConservativeLiveMatcher(
+            self.reference_words, delegate=self._matcher,
+        )
         self._qari_active_speech_seconds = 0.0
 
 
@@ -232,9 +242,15 @@ async def _maybe_transcribe_with_recent_audio_gate(self, *, force: bool = False)
 
     events = await _original_stream_maybe_transcribe(self, force=force)
     if isinstance(matcher, _ConservativeLiveMatcher):
-        # Production live UI reveals confirmed words only. Red mistake markers
-        # belong to final review, where the full recording is considered.
-        return [event for event in events if event.get("status") == "match"]
+        # Confirmed correct words reveal; a supported spoken substitution may
+        # mark its word red while tracking continues. Missing/uncertain tokens
+        # never become live mistake markers.
+        return [
+            event for event in events
+            if event.get("status") == "match"
+            or (event.get("status") == "error_skipped"
+                and event.get("evidence_confirmed") is True)
+        ]
     return events
 
 
