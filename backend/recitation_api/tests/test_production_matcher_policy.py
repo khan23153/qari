@@ -61,6 +61,7 @@ def test_final_wrapper_retains_distinct_word_guard(production_session):
     delegate = production_session._matcher._delegate
     delegate.reference = ["الصور"]
     production_session._matcher.reference = ["الصور"]
+    production_session._matcher.max_live_words = 1
     states = production_session._matcher.finalize(["سور"], [.95])
     assert states[0].status == WordStatus.ERROR
 
@@ -130,3 +131,44 @@ async def test_speech_budget_bounds_a_long_hallucinated_decode(production_sessio
     events = await production_session.maybe_transcribe()
     assert [e["word_index"] for e in events] == [0]
     assert production_session._matcher._cursor == 1
+
+
+@pytest.mark.asyncio
+async def test_forced_first_tick_measures_new_speech_budget(production_session, monkeypatch):
+    monkeypatch.setattr(ss, "_independent_transcriber", lambda audio, sr: (WORDS, [.95] * 4))
+    production_session.add_audio(pcm(.48) + b"\0\0" * 12800)
+    events = await production_session.maybe_transcribe(force=True)
+    assert production_session._matcher.max_live_words == 1
+    assert [e["word_index"] for e in events] == [0]
+
+
+@pytest.mark.asyncio
+async def test_forced_tick_without_new_speech_does_not_repeat_decode(production_session, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        ss, "_independent_transcriber",
+        lambda audio, sr: (calls.append(len(audio)) or WORDS, [.95] * 4),
+    )
+    production_session.add_audio(pcm(1.5))
+    await production_session.maybe_transcribe()
+    before = len(calls)
+    assert await production_session.maybe_transcribe(force=True) == []
+    assert len(calls) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("live_tick", [True, False])
+async def test_final_cannot_complete_reference_beyond_speech_budget(
+    production_session, monkeypatch, live_tick,
+):
+    monkeypatch.setattr(ss, "_independent_transcriber", lambda audio, sr: (WORDS, [.95] * 4))
+    async def persist(*args):
+        pass
+    monkeypatch.setattr(production_session, "_persist", persist)
+    monkeypatch.setattr(production_session, "_run_tajweed_checks", lambda *args: None)
+    production_session.add_audio(pcm(.48) + b"\0\0" * 12800)
+    if live_tick:
+        await production_session.maybe_transcribe()
+    result = await production_session.finalize()
+    assert [v["word_index"] for v in result["word_verdicts"]] == [0]
+    assert production_session._matcher.max_live_words == 1

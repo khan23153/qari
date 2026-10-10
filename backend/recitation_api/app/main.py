@@ -152,7 +152,11 @@ class _ConservativeLiveMatcher:
     def finalize(self, hypothesis_words, confidences=None):
         # finalize resets alignment state. Copy the configured delegate so
         # review retains all guards without mutating the live cursor/state.
-        return deepcopy(self._delegate).finalize(
+        # The final pass must respect the same measured-speech budget as live.
+        delegate = deepcopy(self._delegate)
+        limit = min(len(self.reference), max(0, int(self.max_live_words)))
+        delegate.reference = self.reference[:limit]
+        return delegate.finalize(
             hypothesis_words,
             confidences,
         )
@@ -190,7 +194,7 @@ _original_stream_maybe_transcribe = (
 async def _maybe_transcribe_with_recent_audio_gate(self, *, force: bool = False):
     """Gate repeated windows and cap live progress by actual active speech."""
     active_seconds = 0.0
-    if not self._is_stub and not force and self.sample_rate > 0:
+    if not self._is_stub and self.sample_rate > 0:
         total_samples = self._total_samples
         previous_samples = self._samples_at_last_transcribe
         new_samples = total_samples - previous_samples
@@ -198,7 +202,7 @@ async def _maybe_transcribe_with_recent_audio_gate(self, *, force: bool = False)
             _streaming_session.TRANSCRIBE_INTERVAL_SEC * self.sample_rate
         )
 
-        if new_samples >= cadence_samples:
+        if force or new_samples >= cadence_samples:
             recent_audio = self._decode_float(
                 start_sample=previous_samples,
                 end_sample=total_samples,
@@ -314,6 +318,17 @@ async def _finalize_with_silence_guard(self) -> dict:
             )
             await self._persist(result, audio_path)
             return result
+
+        matcher = self._matcher
+        if isinstance(matcher, _ConservativeLiveMatcher):
+            # Stop can arrive before the first scheduled tick, or with a short
+            # trailing interval. Recompute once from saved PCM so final review
+            # neither loses real speech nor escapes the live duration limit.
+            self._qari_active_speech_seconds = active_seconds
+            matcher.max_live_words = min(
+                len(self.reference_words),
+                max(0, int(active_seconds * _LIVE_MAX_WORDS_PER_ACTIVE_SECOND + 0.5)),
+            )
 
     return await _original_stream_finalize(self)
 
