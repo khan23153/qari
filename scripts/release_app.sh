@@ -7,6 +7,7 @@
 # Usage:
 #   ./scripts/release_app.sh                         # build + publish as-is
 #   ./scripts/release_app.sh --bump                  # bump version_code (patch)
+#   ./scripts/release_app.sh --bump --mic-pilot      # separate capture test app
 #   ./scripts/release_app.sh --bump --data-version   # also bump backend data_version
 #   ./scripts/release_app.sh --notes-en "Bug fixes" --notes-ur "..."
 #
@@ -29,6 +30,7 @@ ANDROID_HOME="${ANDROID_HOME:-/home/Innocent/Android}"
 export ANDROID_HOME
 
 BUMP=0
+MIC_PILOT=0
 BUMP_DATA=0
 NOTES_EN=""
 NOTES_UR=""
@@ -52,6 +54,7 @@ trap cleanup EXIT
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --bump) BUMP=1 ;;
+    --mic-pilot) MIC_PILOT=1 ;;
     --data-version) BUMP_DATA=1 ;;
     --notes-en) NOTES_EN="$2"; shift ;;
     --notes-ur) NOTES_UR="$2"; shift ;;
@@ -95,6 +98,10 @@ PY
 [[ "$BUMP" -eq 1 ]] && bump_pubspec
 
 # ── Build the release APK ──────────────────────────────────────────────────
+# A capture experiment installs alongside Qari and preserves its local data.
+if [[ "$MIC_PILOT" -eq 1 ]]; then
+  export ORG_GRADLE_PROJECT_qariMicPilot=true
+fi
 echo "==> Building release APK..."
 ( cd "$MOBILE" && flutter pub get && flutter build apk --release )
 

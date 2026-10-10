@@ -3,14 +3,14 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'capture_diagnostics.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../models/recitation_stream_event.dart';
@@ -72,6 +72,9 @@ class StreamingRecitationService {
   /// Latest native capture status string (e.g. "capture started: rate=16000",
   /// "capture error: ..."). Surfaced live in the diag line.
   String? _nativeStatus;
+  String? _lastCaptureDiagnostics;
+  bool _captureStarted = false;
+  String? _captureId;
 
   /// Buffered PCM16 audio. Frames are cut on SIZE, not on a timer: whenever at
   /// least [_pcmFrameBytes] bytes are available they are sent IMMEDIATELY as one
@@ -212,6 +215,10 @@ class StreamingRecitationService {
     _micError = null;
     _audioFocusGranted = null;
     _firstChunkAt = null;
+    _nativeStatus = null;
+    _lastCaptureDiagnostics = null;
+    _captureStarted = false;
+    _captureId = DateTime.now().microsecondsSinceEpoch.toString();
 
     final token = await LocalStorageService().getAuthToken();
     if (token == null || token.trim().isEmpty) {
@@ -275,8 +282,18 @@ class StreamingRecitationService {
     // still score when its own reference store is empty (prevents "0 of 0").
     final List<List<int>> refs =
         ayahRefs == null ? [] : ayahRefs.map((r) => [r.$1, r.$2]).toList();
+    final clientInfo = <String, Object>{};
+    try {
+      final info = await PackageInfo.fromPlatform();
+      clientInfo['app_version'] = info.version;
+      final build = int.tryParse(info.buildNumber);
+      if (build != null) clientInfo['app_build'] = build;
+    } catch (_) {
+      // Metadata availability must never block audio capture.
+    }
     _socket!.add(jsonEncode({
       'type': 'start',
+      if (clientInfo.isNotEmpty) 'client_info': clientInfo,
       'surah_number': surahNumber,
       'ayah_number': ayahNumber,
       'ayah_from': ayahFrom ?? ayahNumber,
@@ -343,7 +360,8 @@ class StreamingRecitationService {
   /// focus (the "mic chunks: 0 / focus: NO" failure).
   Future<void> _startForegroundMicService() async {
     try {
-      await _micForegroundChannel.invokeMethod<void>('start');
+      await _micForegroundChannel
+          .invokeMethod<void>('start', {'capture_id': _captureId});
       debugPrint('[Streaming] mic foreground service started.');
     } catch (e) {
       debugPrint(
@@ -399,7 +417,23 @@ class StreamingRecitationService {
       (dynamic msg) {
         final s = msg is String ? msg : msg?.toString();
         if (s != null) {
-          _nativeStatus = s;
+          _nativeStatus = s.replaceAll(RegExp(r'capture_id=[^ ]+ ?'), '');
+          final current = parseCaptureDiagnostics(s, captureId: _captureId);
+          if (s.startsWith('capture started: ') && current != null) {
+            _captureStarted = true;
+          }
+          final diagnostics = _captureStarted ? current : null;
+          if (diagnostics != null) {
+            final payload =
+                jsonEncode({'type': 'capture_diagnostics', ...diagnostics});
+            final socket = _socket;
+            if (payload != _lastCaptureDiagnostics &&
+                socket != null &&
+                socket.readyState == WebSocket.open) {
+              socket.add(payload);
+              _lastCaptureDiagnostics = payload;
+            }
+          }
           debugPrint('[Streaming] native mic status: $s');
           if (s.toLowerCase().contains('error')) _micError = s;
         }

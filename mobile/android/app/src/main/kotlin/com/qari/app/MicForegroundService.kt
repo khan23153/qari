@@ -46,9 +46,10 @@ class MicForegroundService : Service() {
         const val TARGET_RATE = 16000
         const val FALLBACK_RATE = 44100
 
-        fun start(context: Context) {
+        fun start(context: Context, captureId: String? = null) {
             try {
                 val intent = Intent(context, MicForegroundService::class.java)
+                    .putExtra("capture_id", captureId)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(intent)
                 } else {
@@ -71,6 +72,7 @@ class MicForegroundService : Service() {
         }
     }
 
+    private var captureId: String = ""
     private var reader: AudioRecord? = null
     private var readThread: Thread? = null
 
@@ -116,6 +118,7 @@ class MicForegroundService : Service() {
             // Android may redeliver start commands. Never create two AudioRecord
             // loops for the same service instance.
             if (!running) {
+                captureId = intent?.getStringExtra("capture_id") ?: ""
                 startCapture()
             }
         } catch (e: Exception) {
@@ -188,7 +191,7 @@ class MicForegroundService : Service() {
             }
             reader = ar
             running = true
-            status("capture started: rate=$rate resample=$resample source=$srcName gain=3x")
+            status("capture started: capture_id=$captureId rate=$rate resample=$resample source=$srcName gain=3x")
             val shortBuf = ShortArray(minBuf / 2)
             val resampler = if (resample) LinearResampler(rate, TARGET_RATE) else null
             val gain = SoftGain()
@@ -239,7 +242,7 @@ class MicForegroundService : Service() {
                         val now = System.currentTimeMillis()
                         if (now - lastDiagAt > 2000) {
                             lastDiagAt = now
-                            status("reading: rate=$rate source=$srcName zeroTicks=$zeroTicks dataTicks=$dataTicks dropped=$audioDropped")
+                            status("reading: capture_id=$captureId rate=$rate source=$srcName zeroTicks=$zeroTicks dataTicks=$dataTicks dropped=$audioDropped")
                         }
                     }
                 } catch (e: Exception) {
@@ -303,16 +306,14 @@ class MicForegroundService : Service() {
         }
     }
 
-    /** Preferred capture sources in priority order. VOICE_RECOGNITION applies
-     * the device's hardware/AGC input gain and is tuned for exactly this
-     * always-on-speech use case; UNPROCESSED intentionally bypasses ALL
-     * processing (incl. gain) and was producing mic levels ~20 dB too quiet
-     * (RMS 0.0015-0.0027 < server SILENCE_RMS_THRESHOLD 0.006 → every frame
-     * discarded as silence). MIC is the safe fallback. */
+    /** Try the general microphone path used by recorder apps first. Device
+     * processing differs by source; VOICE_RECOGNITION disables preprocessing
+     * by default, so it is retained as a fallback rather than assumed to supply
+     * AGC/noise suppression. The existing gain and resampler stay unchanged. */
     private fun buildAudioRecord(rate: Int, bufSize: Int): Pair<AudioRecord, String>? {
         val candidates = listOf(
-            "VOICE_RECOGNITION" to MediaRecorder.AudioSource.VOICE_RECOGNITION,
             "MIC" to MediaRecorder.AudioSource.MIC,
+            "VOICE_RECOGNITION" to MediaRecorder.AudioSource.VOICE_RECOGNITION,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                 "UNPROCESSED" to MediaRecorder.AudioSource.UNPROCESSED else null,
         ).filterNotNull()
@@ -422,9 +423,9 @@ class MicForegroundService : Service() {
     }
 }
 
-/** Fixed +9.5 dB software gain as a safety net for devices whose
- * VOICE_RECOGNITION input is still quiet (some OEMs report low input levels
- * even with AGC enabled). Clamps to int16 range so boosted speech never
+/** Existing fixed +9.5 dB software gain for devices with quiet input levels.
+ * Hardware preprocessing is source- and device-dependent; this software gain
+ * remains explicit. Clamps to int16 range so boosted speech never
  * wraps around. Applied AFTER hardware gain, BEFORE resampling. */
 class SoftGain(private val factor: Double = 3.0) {
     fun apply(buf: ShortArray, n: Int) {

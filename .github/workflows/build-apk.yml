@@ -23,6 +23,10 @@ on:
         description: "Commit APK + metadata back to this branch (VPS then just git-pulls)"
         type: boolean
         default: true
+      mic_pilot:
+        description: "Build a separate Qari Mic Test package for capture qualification"
+        type: boolean
+        default: false
       notes_en:
         description: "Release notes (English) for app_release.json"
         type: string
@@ -60,11 +64,33 @@ jobs:
         env:
           BUMP: ${{ inputs.bump }}
           NOTES_EN: ${{ inputs.notes_en }}
+          MIC_PILOT: ${{ inputs.mic_pilot }}
         run: |
           ARGS=()
           if [ "$BUMP" = "true" ]; then ARGS+=(--bump); fi
+          if [ "$MIC_PILOT" = "true" ]; then ARGS+=(--mic-pilot); fi
           if [ -n "$NOTES_EN" ]; then ARGS+=(--notes-en "$NOTES_EN"); fi
           ./scripts/release_app.sh "${ARGS[@]}"
+
+      - name: Verify native microphone PCM conversion
+        working-directory: mobile/android
+        run: ./gradlew :app:testReleaseUnitTest --no-daemon
+
+      - name: Verify APK package identity
+        env:
+          MIC_PILOT: ${{ inputs.mic_pilot }}
+        run: |
+          if command -v rg >/dev/null; then
+            AAPT=$(rg --files "$ANDROID_HOME/build-tools" | rg '/aapt$' | sort -V | tail -1)
+          else
+            AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)
+          fi
+          "$AAPT" dump badging releases/app-release.apk > "$RUNNER_TEMP/qari-apk-badging.txt"
+          PACKAGE=$(sed -n '1p' "$RUNNER_TEMP/qari-apk-badging.txt")
+          EXPECTED=com.qari.app
+          if [ "$MIC_PILOT" = "true" ]; then EXPECTED=com.qari.app.micpilot; fi
+          echo "$PACKAGE"
+          echo "$PACKAGE" | grep -F "name='$EXPECTED'"
 
       - name: Read built version
         id: version
@@ -80,7 +106,7 @@ jobs:
           if-no-files-found: error
 
       - name: Commit APK + metadata back to branch
-        if: ${{ inputs.commit_release }}
+        if: ${{ inputs.commit_release && !inputs.mic_pilot }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
