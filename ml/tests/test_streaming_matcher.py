@@ -1,5 +1,7 @@
 """Unit tests for the real-time streaming word matcher."""
 
+import pytest
+
 from ml.alignment.streaming_matcher import (
     StreamingMatcher,
     WordStatus,
@@ -309,3 +311,59 @@ def test_normal_progression_still_works_with_clamp_on():
     st = _statuses(m._resolved_states)
     assert all(st[i] == WordStatus.MATCHED for i in range(4)), st
     assert m._cursor == 4
+
+
+@pytest.mark.parametrize('invocation', [
+    ['اعوذ', 'بالله', 'من', 'الشيطان', 'الرجيم'],
+    ['اعوز', 'بالله', 'من', 'الشر'],
+])
+def test_opening_invocation_does_not_resolve_selected_fatihah(invocation):
+    matcher = StreamingMatcher(BISMILLAH)
+    for size in range(1, len(invocation) + 1):
+        assert matcher.evaluate(invocation[:size], [.95] * size) == []
+        assert matcher._cursor == 0
+    hypothesis = invocation + BISMILLAH
+    for _ in BISMILLAH:
+        states = matcher.evaluate(hypothesis, [.95] * len(hypothesis))
+    assert {s.index: s.status for s in states} == {
+        i: WordStatus.MATCHED for i in range(len(BISMILLAH))
+    }
+    assert matcher._cursor == 4
+
+
+def test_wrong_first_word_requires_two_adjacent_later_anchors():
+    matcher = StreamingMatcher(BISMILLAH)
+    assert matcher.evaluate(['خطا', 'الله'], [.95, .95]) == []
+    states = matcher.evaluate(['خطا', 'الله', 'الرحمن'], [.95] * 3)
+    by_index = {s.index: s for s in states}
+    assert by_index[0].status == WordStatus.ERROR
+    assert by_index[0].spoken == 'خطا'
+    assert by_index[1].status == WordStatus.MATCHED
+    assert by_index[2].status == WordStatus.MATCHED
+
+
+def test_initial_later_anchor_must_be_confident_and_adjacent():
+    matcher = StreamingMatcher(BISMILLAH)
+    assert matcher.evaluate(['الله', 'الرحمن'], [.95, .2]) == []
+    assert matcher._cursor == 0
+    states = matcher.evaluate(['الله', 'الرحمن'], [.95, .95])
+    by_index = {s.index: s for s in states}
+    assert by_index[0].status == WordStatus.SKIPPED
+    assert by_index[1].status == WordStatus.MATCHED
+    assert by_index[2].status == WordStatus.MATCHED
+
+    separated = StreamingMatcher(BISMILLAH)
+    assert separated.evaluate(['الله', 'ضوضاء', 'الرحمن'], [.95] * 3) == []
+    assert separated._cursor == 0
+
+
+def test_repeated_shared_word_cannot_establish_initial_position():
+    matcher = StreamingMatcher(['ابتداء', 'الله', 'الله'])
+    assert matcher.evaluate(['الله', 'الله'], [.95, .95]) == []
+    assert matcher._cursor == 0
+
+
+def test_fuzzy_reference_variants_do_not_turn_one_repeated_word_into_start():
+    matcher = StreamingMatcher(['ابتداء', 'الله', 'بالله'])
+    assert matcher.evaluate(['الله', 'الله'], [.95, .95]) == []
+    assert matcher._cursor == 0

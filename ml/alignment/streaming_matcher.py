@@ -402,15 +402,34 @@ class StreamingMatcher:
 
         last_match_i = -1
         last_match_j = -1
+        matched_pairs = []
         for kind, ii, jj in ops:
             if kind == "pair" and paired(ii, jj):
                 last_match_i = ii
                 last_match_j = jj
+                matched_pairs.append((ii, jj))
         if last_match_i < 0:
             # Heard something, but nothing that confidently anchors to this
             # window: hold position (the next pass re-aligns with fresh audio).
             self._stall_passes += 1
             return list(self._resolved_states)
+
+        # Before tracking starts, a lone later/shared word cannot establish
+        # position: opening invocations also contain "Allah" and would mark
+        # "bism" wrong before Al-Fatihah was reached. Require the first word
+        # or two adjacent, distinct confident pairs inside the existing window.
+        # Once anchored, ordinary one-word mistakes retain their live handling.
+        if anchor == 0 and matched_pairs[0][0] != 0:
+            adjacent_start = any(
+                next_i == prev_i + 1 and next_j == prev_j + 1
+                and ref_win[prev_i] != ref_win[next_i]
+                and hyp[prev_j] != hyp[next_j]
+                for (prev_i, prev_j), (next_i, next_j)
+                in zip(matched_pairs, matched_pairs[1:])
+            )
+            if not adjacent_start:
+                self._stall_passes += 1
+                return list(self._resolved_states)
 
         # Only a one-word substitution bounded by a later confident match can
         # identify a spoken mistake. A missing or uncertain ASR token remains
