@@ -560,11 +560,18 @@ class StreamingMatcher:
         window_end = reference_count
 
         def confidence(index: int) -> float:
-            if confidences is not None and 0 <= index < len(confidences):
+            if confidences is None:
+                return 1.0  # Legacy callers supply trusted text without scores.
+            if 0 <= index < len(confidences):
                 return float(confidences[index])
-            return 1.0
+            return 0.0
 
         while i < window_end and j < hypothesis_count:
+            # Uncertain recognition is neither a match nor a spoken mistake,
+            # and cannot establish a later position in the reference.
+            if not confidence(j) >= self.live_confidence_threshold:
+                j += 1
+                continue
             spoken = hypothesis_words[j]
             expected = self.reference[i]
 
@@ -581,7 +588,8 @@ class StreamingMatcher:
             if skip_to is not None:
                 for index in range(i, skip_to):
                     self._resolved_states.append(
-                        WordState(index, self.reference[index], WordStatus.SKIPPED)
+                        WordState(index, self.reference[index], WordStatus.SKIPPED,
+                                  confidence=0.0)
                     )
                 self._resolved_states.append(
                     WordState(
@@ -602,6 +610,7 @@ class StreamingMatcher:
                 hypothesis_words,
                 j + 1,
                 insertion_search_end,
+                confidences,
             )
             if insertion_to is not None:
                 j = insertion_to
@@ -633,8 +642,14 @@ class StreamingMatcher:
         hypothesis: list[str],
         start: int,
         end: int,
+        confidences: Optional[list[float]] = None,
     ) -> Optional[int]:
         for index in range(start, min(len(hypothesis), end)):
+            if confidences is not None and not (
+                index < len(confidences)
+                and float(confidences[index]) >= self.live_confidence_threshold
+            ):
+                continue
             if self._is_match(hypothesis[index], word):
                 return index
         return None
@@ -661,7 +676,7 @@ class StreamingMatcher:
                     expected=expected,
                     status=self._resolved.get(index, WordStatus.SKIPPED),
                     spoken=state.spoken if state is not None else None,
-                    confidence=state.confidence if state is not None else 1.0,
+                    confidence=state.confidence if state is not None else 0.0,
                 )
             )
         return final_states

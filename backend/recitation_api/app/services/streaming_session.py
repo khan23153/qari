@@ -1333,19 +1333,23 @@ class StreamingRecitationSession:
         """End the session: persist audio + build the final result blob."""
         from ml.alignment.streaming_matcher import WordStatus
 
-        # If live transcription never produced a hypothesis (e.g. the forced
-        # final transcription on `stop` was slow and the client timed out, or the
-        # transcriber was the stub and produced nothing), do ONE full-audio
-        # transcription here so the verdicts aren't all "skipped" (0 of N). This
-        # guarantees a meaningful result whenever reference words exist.
+        # A missing live hypothesis permits one final decode of audible speech.
+        # Production evidence must remain independent of the prompted model;
+        # failed recognition and silence cannot be promoted into a verdict.
         if not self._last_hypothesis and self._transcriber is not None and self._pcm:
             try:
                 audio = self._decode_float()
-                words, confs = await asyncio.to_thread(
-                    self._transcriber, audio, self.sample_rate
-                )
-                if words:
-                    self._last_hypothesis = words
+                if _rms_energy(audio) >= SILENCE_RMS_THRESHOLD:
+                    transcriber = (
+                        self._transcriber if self._is_stub
+                        else _independent_transcriber
+                    )
+                    words, confs = await asyncio.to_thread(
+                        transcriber, audio, self.sample_rate
+                    )
+                    self._hypothesis = list(words)
+                    self._hypothesis_confs = list(confs)
+                    self._last_hypothesis = self._hypothesis
             except Exception as exc:  # pragma: no cover - model failures
                 logger.error("stream.finalize_transcribe_failed", session_id=self.session_id, error=str(exc))
 
@@ -1358,14 +1362,26 @@ class StreamingRecitationSession:
         )
 
         states = (
-            self._matcher.finalize(self._last_hypothesis)
+            self._matcher.finalize(self._last_hypothesis, self._hypothesis_confs)
             if self._matcher is not None
             else []
         )
 
         word_verdicts = []
         matched = 0
+        evidence_confidences = []
         for st in states:
+            supported = (
+                st.status in (WordStatus.MATCHED, WordStatus.ERROR)
+                and bool(st.spoken)
+                and st.confidence >= getattr(self._matcher, 'live_confidence_threshold', 0.55)
+            )
+            if supported:
+                evidence_confidences.append(st.confidence)
+            elif not self._is_stub:
+                # The mobile review falls back to live pending status when an
+                # unconfirmed index is absent. Keep global indices unchanged.
+                continue
             is_correct = st.status == WordStatus.MATCHED
             if is_correct:
                 matched += 1
@@ -1385,11 +1401,12 @@ class StreamingRecitationSession:
                 "phoneme_errors": [],
             })
 
-        total = len(states)
+        total = len(word_verdicts)
         accuracy = (matched / total) if total else 0.0
-        # Live matching without a resolvable reference gives us nothing to score
-        # against → low confidence (mobile shows "no red marks", per trust rule).
-        confidence = 1.0 if total else 0.0
+        confidence = (
+            sum(evidence_confidences) / len(evidence_confidences)
+            if evidence_confidences else 0.0
+        )
 
         # Best-effort tajweed pass (Tarteel-style post-session "mistake
         # review"): one timed full-audio transcription feeds the acoustic

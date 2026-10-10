@@ -169,6 +169,52 @@ def test_empty_hypothesis():
     assert all(s.status == WordStatus.SKIPPED for s in fin)
 
 
+def test_final_review_does_not_promote_uncertain_matching_word():
+    matcher = StreamingMatcher(BISMILLAH)
+    states = matcher.finalize(BISMILLAH[:3], [.8, .2, .9])
+    assert [state.status for state in states] == [
+        WordStatus.MATCHED, WordStatus.SKIPPED,
+        WordStatus.MATCHED, WordStatus.SKIPPED,
+    ]
+    assert [state.confidence for state in states] == [.8, 0, .9, 0]
+
+
+def test_uncertain_later_word_cannot_anchor_final_skips():
+    states = StreamingMatcher(BISMILLAH).finalize(
+        ['بسم', 'الرحيم'], [.9, .2],
+    )
+    assert [state.status for state in states] == [
+        WordStatus.MATCHED, WordStatus.SKIPPED,
+        WordStatus.SKIPPED, WordStatus.SKIPPED,
+    ]
+    assert all(state.confidence == 0 for state in states[1:])
+
+
+def test_uncertain_insertion_anchor_cannot_hide_confident_final_error():
+    states = StreamingMatcher(BISMILLAH[:2]).finalize(
+        ['الناس', 'بسم', 'الله'], [.9, .2, .8],
+    )
+    assert [state.status for state in states] == [WordStatus.ERROR, WordStatus.MATCHED]
+    assert states[0].spoken == 'الناس'
+    assert [state.confidence for state in states] == [.9, .8]
+
+
+@pytest.mark.parametrize('confidences', [[], [.9]])
+def test_explicit_missing_final_confidence_is_not_trusted(confidences):
+    states = StreamingMatcher(BISMILLAH[:2]).finalize(BISMILLAH[:2], confidences)
+    assert states[1].status == WordStatus.SKIPPED
+    assert states[1].confidence == 0
+    assert states[0].status == (
+        WordStatus.MATCHED if confidences else WordStatus.SKIPPED
+    )
+
+
+def test_omitted_final_confidence_retains_legacy_trusted_text_contract():
+    states = StreamingMatcher(BISMILLAH[:2]).finalize(BISMILLAH[:2])
+    assert all(state.status == WordStatus.MATCHED for state in states)
+    assert [state.confidence for state in states] == [1, 1]
+
+
 def test_sliding_window_limits_single_pass():
     """A single transcription pass only resolves a BOUNDED window of reference
     words starting at the cursor — not the whole ayah — so the server does
