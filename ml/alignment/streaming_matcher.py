@@ -370,9 +370,11 @@ class StreamingMatcher:
 
         def confidence(j: int) -> float:
             absolute = hyp_start + j
-            if confidences is not None and 0 <= absolute < len(confidences):
+            if confidences is None:
+                return 1.0  # Legacy callers provide trusted text without scores.
+            if 0 <= absolute < len(confidences):
                 return float(confidences[absolute])
-            return 1.0
+            return 0.0
 
         def paired(i: int, j: int) -> bool:
             return confidence(j) >= self.live_confidence_threshold and self._is_match(
