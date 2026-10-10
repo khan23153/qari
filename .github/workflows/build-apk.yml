@@ -76,7 +76,7 @@ jobs:
         working-directory: mobile/android
         env:
           ORG_GRADLE_PROJECT_qariMicPilot: ${{ inputs.mic_pilot }}
-        run: ./gradlew :app:testReleaseUnitTest --no-daemon
+        run: ./gradlew :app:testReleaseUnitTest -Pandroid.onlyEnableUnitTestForTheTestedBuildType=false --no-daemon
 
       - name: Verify APK package identity
         env:
