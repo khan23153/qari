@@ -616,9 +616,17 @@ class StreamingMatcher:
                 j = insertion_to
                 continue
 
-            self._resolved_states.append(
-                WordState(i, expected, WordStatus.ERROR, spoken, confidence(j))
-            )
+            if self._known_error_words is None or spoken in self._known_error_words:
+                self._resolved_states.append(
+                    WordState(i, expected, WordStatus.ERROR, spoken, confidence(j))
+                )
+            else:
+                # High decoder confidence does not make a garbled token proof
+                # of a spoken substitution. Preserve the reference position
+                # as an unconfirmed gap and let later words establish progress.
+                self._resolved_states.append(
+                    WordState(i, expected, WordStatus.SKIPPED, '', 0.0)
+                )
             i += 1
             j += 1
 

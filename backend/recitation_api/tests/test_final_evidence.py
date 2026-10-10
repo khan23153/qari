@@ -7,6 +7,7 @@ import pytest
 from app.services import streaming_session as ss
 from app import main as api_main
 from ml.inference import faster_whisper_transcriber
+from ml.alignment.streaming_matcher import StreamingMatcher
 from tests.test_streaming import REFERENCE, REFERENCE_ENTRIES, _pcm_seconds
 
 
@@ -113,3 +114,26 @@ async def test_trusted_final_error_remains_red_and_continuation_keeps_global_ind
     assert [verdict['is_correct'] for verdict in result['word_verdicts']] == [True, False, True, True]
     assert result['word_verdicts'][1]['error_type'] == 'error'
     assert result['confidence'] == .95
+
+
+@pytest.mark.parametrize('spoken, indices, correct', [
+    ('اسقباعه', [0, 2, 3], [True, True, True]),
+    ('الناس', [0, 1, 2, 3], [True, False, True, True]),
+])
+@pytest.mark.asyncio
+async def test_configured_final_vocabulary_omits_garbled_word_without_index_drift(
+    production_session, spoken, indices, correct,
+):
+    # Exercise the configured matcher used by reference loading. The production
+    # wrapper's separate configuration-preservation fix must retain this object.
+    session = production_session
+    session._matcher = StreamingMatcher(REFERENCE, known_error_words={'الناس'})
+    session._last_hypothesis = ['بسم', spoken, 'الرحمن', 'الرحيم']
+    session._hypothesis_confs = [.9] * 4
+    result = await session.finalize()
+    assert [verdict['word_index'] for verdict in result['word_verdicts']] == indices
+    assert [verdict['is_correct'] for verdict in result['word_verdicts']] == correct
+    assert result['confidence'] == .9
+    if spoken == 'الناس':
+        assert result['word_verdicts'][1]['error_type'] == 'error'
+        assert result['word_verdicts'][1]['actual_text'] == 'الناس'

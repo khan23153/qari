@@ -454,7 +454,38 @@ def test_unknown_asr_text_remains_unconfirmed_while_cursor_follows_next_word():
     assert by_index[2].status == WordStatus.MATCHED
     assert matcher._cursor == 3
     final = matcher.finalize(['بسم', 'اسقباعه', 'الرحمن', 'الرحيم'], [.95] * 4)
-    assert {s.index: s for s in final}[1].status == WordStatus.ERROR
+    by_index = {s.index: s for s in final}
+    assert by_index[1].status == WordStatus.SKIPPED
+    assert by_index[1].confidence == 0
+    assert not by_index[1].spoken
+    assert by_index[2].status == WordStatus.MATCHED
+    assert by_index[3].status == WordStatus.MATCHED
+    assert matcher._cursor == 4
+
+
+@pytest.mark.parametrize('vocabulary, status', [
+    (None, WordStatus.ERROR),
+    (set(), WordStatus.SKIPPED),
+    ({'الناس'}, WordStatus.SKIPPED),
+])
+def test_final_unknown_word_obeys_configured_vocabulary_and_legacy_contract(vocabulary, status):
+    matcher = StreamingMatcher(BISMILLAH, known_error_words=vocabulary)
+    states = matcher.finalize(['بسم', 'اسقباعه', 'الرحمن', 'الرحيم'], [.9] * 4)
+    assert [state.index for state in states] == [0, 1, 2, 3]
+    assert states[1].status == status
+    assert states[2].status == states[3].status == WordStatus.MATCHED
+    assert states[1].confidence == (.9 if status == WordStatus.ERROR else 0)
+
+
+def test_final_known_wrong_word_stays_error_with_later_matches():
+    matcher = StreamingMatcher(BISMILLAH, known_error_words={'الناس'})
+    states = matcher.finalize(['بسم', 'الناس', 'الرحمن', 'الرحيم'], [.9] * 4)
+    assert [state.status for state in states] == [
+        WordStatus.MATCHED, WordStatus.ERROR, WordStatus.MATCHED, WordStatus.MATCHED,
+    ]
+    assert states[1].spoken == 'الناس'
+    assert states[1].confidence == .9
+    assert matcher._cursor == 4
 
 
 def test_known_wrong_word_is_still_red_and_confidence_guard_still_applies():
