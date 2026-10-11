@@ -161,6 +161,87 @@ class _ConservativeLiveMatcher:
             confidences,
         )
 
+    def finalize_independent(self, hypothesis_words, confidences):
+        """Combine confirmed live states with an independently decoded recording.
+
+        A stitched live hypothesis is not a second recording: overlapping
+        windows can duplicate words. Never re-score that text here. Opening
+        invocations are outside the selected reference, so establish its start
+        from a confident first word or two adjacent, distinct opening anchors.
+        """
+        from ml.alignment.streaming_matcher import WordStatus
+
+        delegate = deepcopy(self._delegate)
+        limit = min(len(self.reference), max(0, int(self.max_live_words)))
+        delegate.reference = self.reference[:limit]
+        threshold = self.live_confidence_threshold
+
+        def supported(state):
+            return (
+                0 <= state.index < limit
+                and state.status in (WordStatus.MATCHED, WordStatus.ERROR)
+                and bool(state.spoken)
+                and state.confidence >= threshold
+            )
+
+        # The live aligner retains real WordStates, including decoder scores.
+        # A final recognition failure cannot discard those earlier witnesses.
+        states = {
+            state.index: state for state in self._delegate._resolved_states
+            if supported(state)
+        }
+
+        def confident_match(hyp_index, ref_index):
+            return (
+                hyp_index < len(confidences)
+                and confidences[hyp_index] >= threshold
+                and delegate._is_match(
+                    hypothesis_words[hyp_index], delegate.reference[ref_index]
+                )
+            )
+
+        anchor = None
+        if limit:
+            for hyp_index in range(len(hypothesis_words)):
+                if confident_match(hyp_index, 0):
+                    anchor = (0, hyp_index)
+                    break
+            if anchor is None:
+                # Keep the same bounded opening-reference search as legacy
+                # final alignment. Only the invocation's hypothesis prefix
+                # may be arbitrarily long; it grants no reference progress.
+                opening_limit = min(limit, delegate.lookahead + 1)
+                for hyp_index in range(len(hypothesis_words) - 1):
+                    for ref_index in range(opening_limit - 1):
+                        if (
+                            delegate.reference[ref_index] != delegate.reference[ref_index + 1]
+                            and hypothesis_words[hyp_index] != hypothesis_words[hyp_index + 1]
+                            and confident_match(hyp_index, ref_index)
+                            and confident_match(hyp_index + 1, ref_index + 1)
+                        ):
+                            anchor = (ref_index, hyp_index)
+                            break
+                    if anchor is not None:
+                        break
+
+        if anchor is not None:
+            ref_start, hyp_start = anchor
+            delegate.reference = delegate.reference[ref_start:]
+            fresh_states = delegate.finalize(
+                hypothesis_words[hyp_start:], confidences[hyp_start:],
+            )
+            for state in fresh_states:
+                state.index += ref_start
+                previous = states.get(state.index)
+                if supported(state) and (
+                    previous is None
+                    or (previous.status == WordStatus.ERROR
+                        and state.status == WordStatus.MATCHED)
+                ):
+                    states[state.index] = state
+
+        return [states[index] for index in sorted(states)]
+
 
 _original_stream_load_reference = (
     _streaming_session.StreamingRecitationSession.load_reference

@@ -1333,10 +1333,29 @@ class StreamingRecitationSession:
         """End the session: persist audio + build the final result blob."""
         from ml.alignment.streaming_matcher import WordStatus
 
-        # A missing live hypothesis permits one final decode of audible speech.
+        independent_finalizer = getattr(self._matcher, 'finalize_independent', None)
+        use_recording_evidence = not self._is_stub and independent_finalizer is not None
+        final_words: list[str] = []
+        final_confs: list[float] = []
+
+        # Production final review needs one independent full-recording decode,
+        # even when live windows have already produced a stitched hypothesis.
+        # Retain that live text for diagnostics; it is not final audio evidence.
+        if use_recording_evidence and self._pcm:
+            try:
+                audio = self._decode_float()
+                if _rms_energy(audio) >= SILENCE_RMS_THRESHOLD:
+                    words, confs = await asyncio.to_thread(
+                        _independent_transcriber, audio, self.sample_rate
+                    )
+                    final_words, final_confs = list(words), list(confs)
+            except Exception as exc:  # pragma: no cover - model failures
+                logger.error("stream.finalize_transcribe_failed", session_id=self.session_id, error=str(exc))
+
+        # A missing legacy/stub hypothesis permits one decode of audible speech.
         # Production evidence must remain independent of the prompted model;
         # failed recognition and silence cannot be promoted into a verdict.
-        if not self._last_hypothesis and self._transcriber is not None and self._pcm:
+        if not use_recording_evidence and not self._last_hypothesis and self._transcriber is not None and self._pcm:
             try:
                 audio = self._decode_float()
                 if _rms_energy(audio) >= SILENCE_RMS_THRESHOLD:
@@ -1361,11 +1380,14 @@ class StreamingRecitationSession:
             else audio_path
         )
 
-        states = (
-            self._matcher.finalize(self._last_hypothesis, self._hypothesis_confs)
-            if self._matcher is not None
-            else []
-        )
+        if use_recording_evidence:
+            states = independent_finalizer(final_words, final_confs)
+        else:
+            states = (
+                self._matcher.finalize(self._last_hypothesis, self._hypothesis_confs)
+                if self._matcher is not None
+                else []
+            )
 
         word_verdicts = []
         matched = 0
@@ -1413,11 +1435,14 @@ class StreamingRecitationSession:
         # review"): one timed full-audio transcription feeds the acoustic
         # tajweed checks (ghunnah/qalqalah/madd — numpy only, no torch).
         # Never blocks the result on failure; stub sessions and very long
-        # sessions skip it.
+        # sessions skip it. Independent production word review also skips this
+        # prompted model pass: token emission times are not validated phoneme
+        # boundaries and do not support acoustic grading.
         tajweed_score = 0.0
         tajweed_issues: list[dict] = []
         if (
             not self._is_stub
+            and not use_recording_evidence
             and total
             and self._pcm
             and self.duration_seconds <= 300
@@ -1439,10 +1464,13 @@ class StreamingRecitationSession:
             "surah_number": self.surah,
             "ayah_number": self.ayah_from,
             "overall_score": round(accuracy, 4),
-            "pronunciation_score": round(accuracy, 4),
+            "pronunciation_score": 0.0 if use_recording_evidence else round(accuracy, 4),
+            "pronunciation_available": False,
             "tajweed_score": round(tajweed_score, 4),
+            "tajweed_available": False,
             "tajweed_issues": tajweed_issues,
-            "fluency_score": round(accuracy, 4),
+            "fluency_score": 0.0 if use_recording_evidence else round(accuracy, 4),
+            "fluency_available": False,
             "accuracy_score": round(accuracy, 4),
             "word_verdicts": word_verdicts,
             "reference_audio_url": self.reference_audio_url or None,

@@ -33,10 +33,11 @@ def production_session(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_final_result_preserves_confidence_and_omits_unconfirmed_indices(production_session):
+async def test_final_result_preserves_confidence_and_omits_unconfirmed_indices(production_session, monkeypatch):
     session = production_session
     session._last_hypothesis = REFERENCE[:3]
     session._hypothesis_confs = [.8, .2, .9]
+    monkeypatch.setattr(ss, '_independent_transcriber', lambda audio, sr: (REFERENCE[:3], [.8, .2, .9]))
     session.add_audio(_pcm_seconds(1.5))
     result = await session.finalize()
     assert [verdict['word_index'] for verdict in result['word_verdicts']] == [0, 2]
@@ -108,10 +109,12 @@ async def test_empty_or_unscored_independent_fallback_cannot_promote_oracle(
 
 
 @pytest.mark.asyncio
-async def test_trusted_final_error_remains_red_and_continuation_keeps_global_indices(production_session):
+async def test_trusted_final_error_remains_red_and_continuation_keeps_global_indices(production_session, monkeypatch):
     session = production_session
     session._last_hypothesis = ['بسم', 'الناس', 'الرحمن', 'الرحيم']
     session._hypothesis_confs = [.95] * 4
+    monkeypatch.setattr(ss, '_independent_transcriber',
+                        lambda audio, sr: (['بسم', 'الناس', 'الرحمن', 'الرحيم'], [.95] * 4))
     session.add_audio(_pcm_seconds(1.5))
     result = await session.finalize()
     assert [verdict['word_index'] for verdict in result['word_verdicts']] == [0, 1, 2, 3]
