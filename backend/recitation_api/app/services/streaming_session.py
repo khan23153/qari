@@ -218,7 +218,7 @@ _MULTI_SPACE = _re.compile(r"\s+")
 def _normalize(text: str) -> str:
     if not text:
         return ""
-    text = text.replace("ٰ", "ا")
+    text = text.replace("ٰ", "ا").replace("ۧ", "ي").replace("۞", " ")
     text = _HARAKAT.sub("", text)
     text = _TATWEEL.sub("", text)
     for variant, canonical in _ALEF.items():
@@ -298,8 +298,7 @@ def _get_live_error_vocabulary() -> frozenset[str]:
             for word in ref.words:
                 vocabulary.add(_normalize(word.word))
                 text = word.text_with_tashkeel or ""
-                if "ٰ" in text:
-                    vocabulary.add(_normalize(text.replace("ٰ", "ا")))
+                vocabulary.add(_normalize(text))
         vocabulary.discard("")
         frozen = frozenset(vocabulary)
         _live_error_vocab_cache = (store, frozen)
@@ -307,6 +306,46 @@ def _get_live_error_vocabulary() -> frozenset[str]:
     except Exception as exc:
         logger.debug("stream.error_vocab_unavailable", error=type(exc).__name__)
         return frozenset()
+
+
+_live_word_alias_cache: Optional[tuple[object, dict[str, str]]] = None
+
+
+def _get_live_word_aliases() -> dict[str, str]:
+    """Unambiguous legacy corpus spellings absent from canonical Quran keys.
+
+    These compare reference/recognition text only; they never enter ASR. A key
+    that is itself a canonical Quran word (or has multiple targets) is not an
+    alias, so عليكم cannot become عليهم through this table.
+    """
+    global _live_word_alias_cache
+    try:
+        store = _get_reference_store()
+        if _live_word_alias_cache is not None and _live_word_alias_cache[0] is store:
+            return dict(_live_word_alias_cache[1])
+        canonical_words: set[str] = set()
+        targets: dict[str, set[str]] = {}
+        for key in store.list_ayahs():
+            reference = store.get(*key)
+            if reference is None:
+                continue
+            for word in reference.words:
+                legacy = _normalize(word.word)
+                canonical = _normalize(word.text_with_tashkeel or word.word)
+                if canonical:
+                    canonical_words.add(canonical)
+                if legacy and canonical and legacy != canonical:
+                    targets.setdefault(legacy, set()).add(canonical)
+        aliases = {
+            legacy: next(iter(candidates))
+            for legacy, candidates in targets.items()
+            if legacy not in canonical_words and len(candidates) == 1
+        }
+        _live_word_alias_cache = (store, aliases)
+        return dict(aliases)
+    except Exception as exc:
+        logger.debug("stream.word_aliases_unavailable", error=type(exc).__name__)
+        return {}
 
 
 def resolve_reference_words(surah: int, ayah: int) -> tuple[list[str], list[str], str, list[dict]]:
@@ -809,6 +848,7 @@ class StreamingRecitationSession:
             self.reference_words,
             ayah_boundaries=self.ayah_boundaries,
             known_error_words=_get_live_error_vocabulary(),
+            word_aliases=_get_live_word_aliases(),
         )
 
         if self._explicit_transcriber is not None:

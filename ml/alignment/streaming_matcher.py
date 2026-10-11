@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from enum import Enum
+from functools import lru_cache
 from typing import Iterable, Optional
 
 from .phonetic import PHONETIC_MATCH_THRESHOLD, phonetic_similarity
@@ -176,11 +177,13 @@ class StreamingMatcher:
         ayah_boundaries: Optional[list[dict]] = None,
         ayah_lookahead: int = AYAH_LOOKAHEAD,
         known_error_words: Optional[Iterable[str]] = None,
+        word_aliases: Optional[dict[str, str]] = None,
     ) -> None:
         self.reference = list(reference_words)
         self._known_error_words = (
             frozenset(known_error_words) if known_error_words is not None else None
         )
+        self._word_aliases = dict(word_aliases or {})
         self.match_threshold = match_threshold
         self.live_confidence_threshold = max(0.0, min(1.0, live_confidence_threshold))
         self.lookahead = max(0, lookahead)
@@ -242,9 +245,9 @@ class StreamingMatcher:
     def _is_match(self, hypothesis: str, reference: str) -> bool:
         if not hypothesis or not reference:
             return False
+        hypothesis = self._word_aliases.get(hypothesis, hypothesis)
+        reference = self._word_aliases.get(reference, reference)
         if hypothesis == reference:
-            return True
-        if char_similarity(hypothesis, reference) >= self.match_threshold:
             return True
         # Quranic liaison: a word that loses its leading article inside the
         # recitation flow (e.g. reference 'صرط' spoken as the close token
@@ -259,6 +262,16 @@ class StreamingMatcher:
         # and the tracker skipped it as a mistake. If the only difference is one
         # alef it is the same word.
         if _equal_modulo_one_alef(hypothesis, reference):
+            return True
+        # A different recognized Quran word is evidence of that word, not a
+        # fuzzy spelling of the selected one (عليكم must not confirm عليهم).
+        # Keep the existing orthographic aliases above, but apply vocabulary
+        # identity before character/phonetic similarity. In live mode an
+        # incomplete word can still be revised before a later anchor commits it.
+        if (self._known_error_words is not None
+                and hypothesis in self._known_error_words):
+            return False
+        if char_similarity(hypothesis, reference) >= self.match_threshold:
             return True
         if self.use_phonetic and (
             phonetic_similarity(hypothesis, reference) >= self.phonetic_threshold
@@ -568,6 +581,25 @@ class StreamingMatcher:
                 return float(confidences[index])
             return 0.0
 
+        def continuation_score(ref_index: int, hyp_index: int) -> int:
+            ref_end = min(reference_count, ref_index + self.window_size)
+            hyp_end = min(hypothesis_count, hyp_index + self.window_size)
+
+            @lru_cache(maxsize=None)
+            def score(ri: int, hj: int) -> int:
+                if ri >= ref_end or hj >= hyp_end:
+                    return 0
+                if not confidence(hj) >= self.live_confidence_threshold:
+                    # An uncertain token may be an insertion or a missed word.
+                    # It contributes zero evidence; later confident pairs can
+                    # still distinguish the competing bounded continuations.
+                    return max(score(ri, hj + 1), score(ri + 1, hj + 1))
+                if self._is_match(hypothesis_words[hj], self.reference[ri]):
+                    return 1 + score(ri + 1, hj + 1)
+                return 0
+
+            return score(ref_index, hyp_index)
+
         while i < window_end and j < hypothesis_count:
             # Uncertain recognition is neither a match nor a spoken mistake,
             # and cannot establish a later position in the reference.
@@ -606,6 +638,11 @@ class StreamingMatcher:
                 j += 1
                 continue
 
+            next_pair = (
+                i + 1 < window_end and j + 1 < hypothesis_count
+                and confidence(j + 1) >= self.live_confidence_threshold
+                and self._is_match(hypothesis_words[j + 1], self.reference[i + 1])
+            )
             insertion_search_end = j + 1 + self.lookahead
             insertion_to = self._find_hyp(
                 expected,
@@ -614,8 +651,25 @@ class StreamingMatcher:
                 insertion_search_end,
                 confidences,
             )
-            if insertion_to is not None:
+            # Compare bounded continuations, not just a shared word/pair. An
+            # inserted invocation has the stronger following reference sequence;
+            # a later repeated phrase must not erase intervening confirmed text.
+            insertion_context = (
+                insertion_to is not None
+                and continuation_score(i, insertion_to) > continuation_score(i + 1, j + 1)
+            )
+            if insertion_to is not None and (not next_pair or insertion_context):
                 j = insertion_to
+                continue
+
+            if next_pair:
+                known = self._known_error_words is None or spoken in self._known_error_words
+                self._resolved_states.append(WordState(
+                    i, expected, WordStatus.ERROR if known else WordStatus.SKIPPED,
+                    spoken if known else '', confidence(j) if known else 0.0,
+                ))
+                i += 1
+                j += 1
                 continue
 
             if self._known_error_words is None or spoken in self._known_error_words:
