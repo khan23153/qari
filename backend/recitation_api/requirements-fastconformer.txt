@@ -1,0 +1,4 @@
+# Optional independent RNNT runtime. Install alongside requirements.txt and the
+# existing NumPy runtime. The core wheel is explicitly pinned for qualification.
+sherpa-onnx==1.13.8
+sherpa-onnx-core==1.13.8
