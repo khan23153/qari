@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app import main
 from app.services import streaming_session as ss
 from ml.inference import faster_whisper_transcriber as fw
 from ml.inference import fastconformer_transcriber as rnnt
@@ -18,6 +19,65 @@ class TimedDecode(tuple):
         return value
 
 
+def test_single_consumed_word_cannot_repeat_when_its_end_emission_is_revised():
+    words, confs, times = ss._stitch_timed_hypothesis(
+        ['قل'], [.878], [(.16, .16)],
+        ['قل', 'الله'], [.999, .989], [(.16, .56), (1.12, 1.44)],
+        consumed=1, consumed_end=.16, window_start=0, window_seconds=1.8,
+        confidence_threshold=.55, right_context_seconds=.24,
+    )
+    assert words == ['قل', 'الله']
+    assert confs == [.878, .989]
+    assert times == [(.16, .16), (1.12, 1.44)]
+
+
+def test_a_genuine_later_repeat_after_the_single_past_anchor_is_retained():
+    words, confs, times = ss._stitch_timed_hypothesis(
+        ['قل'], [.878], [(.16, .16)],
+        ['قل', 'قل', 'الله'], [.999, .91, .989],
+        [(.16, .56), (.64, 1.04), (1.12, 1.44)],
+        consumed=1, consumed_end=.16, window_start=0, window_seconds=1.8,
+        confidence_threshold=.55, right_context_seconds=.24,
+    )
+    assert words == ['قل', 'قل', 'الله']
+    assert confs == [.878, .91, .989]
+    assert times == [(.16, .16), (.64, 1.04), (1.12, 1.44)]
+
+
+@pytest.mark.parametrize('window_start,timings', [
+    (0.0, [(.24, .64), (.8, 1.04)]),
+    (.08, [(.16, .56), (.72, .96)]),
+])
+def test_a_repeat_one_frame_later_is_not_an_anchor_for_the_consumed_word(window_start, timings):
+    words, _, _ = ss._stitch_timed_hypothesis(
+        ['قل'], [.95], [(.16, .16)],
+        ['قل', 'الله'], [.95, .95], timings,
+        consumed=1, consumed_end=.16, window_start=window_start, window_seconds=1.5,
+        confidence_threshold=.55, right_context_seconds=.24,
+    )
+    assert words == ['قل', 'قل', 'الله']
+
+
+def test_the_same_absolute_start_frame_anchors_a_revised_sliding_window():
+    words, _, _ = ss._stitch_timed_hypothesis(
+        ['قل'], [.95], [(.16, .16)],
+        ['قل', 'الله'], [.95, .95], [(.08, .48), (1.04, 1.36)],
+        consumed=1, consumed_end=.16, window_start=.08, window_seconds=1.8,
+        confidence_threshold=.55, right_context_seconds=.24,
+    )
+    assert words == ['قل', 'الله']
+
+
+def test_a_long_consumed_word_cannot_repeat_when_its_last_emission_moves():
+    words, _, _ = ss._stitch_timed_hypothesis(
+        ['الرحمن'], [.9], [(.16, .16)],
+        ['الرحمن', 'الرحيم'], [.99, .95], [(.16, 1.44), (1.52, 1.6)],
+        consumed=1, consumed_end=.16, window_start=0, window_seconds=2,
+        confidence_threshold=.55, right_context_seconds=.24,
+    )
+    assert words == ['الرحمن', 'الرحيم']
+
+
 @pytest.fixture
 def session(monkeypatch):
     words = ['قل', 'هو', 'الله', 'احد', 'الله', 'الصمد']
@@ -30,6 +90,61 @@ def session(monkeypatch):
     result = ss.StreamingRecitationSession(surah=112)
     result.load_reference()
     return result
+
+
+@pytest.mark.asyncio
+async def test_revised_qul_emissions_cannot_turn_an_omitted_huwa_red(session, monkeypatch):
+    decodes = iter([
+        TimedDecode(['قل', 'الله'], [.878, .975], [(.16, .16), (.8, .8)]),
+        TimedDecode(['قل', 'الله'], [.999, .989], [(.16, .56), (1.12, 1.44)]),
+    ])
+    monkeypatch.setattr(ss, 'TRANSCRIBE_INTERVAL_SEC', .6)
+    monkeypatch.setattr(ss, '_independent_transcriber', lambda *_: next(decodes))
+    # At the first tick only one reference word has enough measured speech
+    # budget. The next chunk unlocks the following words, as in the real WAV.
+    session.add_audio(_pcm_seconds(.6) + bytes(19200))
+    first = await session.maybe_transcribe()
+    assert [(e['word_index'], e['status']) for e in first] == [(0, 'match')]
+    session.add_audio(_pcm_seconds(.6))
+    second = await session.maybe_transcribe()
+    assert [(e['word_index'], e['status']) for e in second] == [(2, 'match')]
+    assert not any(e['word_index'] == 1 for e in first + second)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('engine', ['fastconformer_rnnt', 'faster_whisper'])
+async def test_fast_rnnt_reveals_new_audio_before_the_legacy_decode_interval(session, monkeypatch, engine):
+    monkeypatch.setenv('QARI_LIVE_ASR_ENGINE', engine)
+    assert isinstance(session._matcher, main._ConservativeLiveMatcher)
+    decodes = iter([
+        TimedDecode(['قل'], [.95], [(.08, .16)]),
+        TimedDecode(['قل', 'هو'], [.95, .95], [(.08, .16), (.64, .8)]),
+    ])
+    monkeypatch.setattr(ss, '_independent_transcriber', lambda *_: next(decodes))
+    session.add_audio(_pcm_seconds(.9))
+    first = await session.maybe_transcribe()
+    assert [(e['word_index'], e['status']) for e in first] == (
+        [(0, 'match')] if engine == 'fastconformer_rnnt' else []
+    )
+    session.add_audio(_pcm_seconds(.9))
+    second = await session.maybe_transcribe()
+    assert [(e['word_index'], e['status']) for e in second] == (
+        [(1, 'match')] if engine == 'fastconformer_rnnt' else [(0, 'match')]
+    )
+
+
+@pytest.mark.asyncio
+async def test_fast_rnnt_quiet_interval_does_not_decode_or_reveal_old_speech(session, monkeypatch):
+    monkeypatch.setenv('QARI_LIVE_ASR_ENGINE', 'fastconformer_rnnt')
+    assert isinstance(session._matcher, main._ConservativeLiveMatcher)
+    monkeypatch.setattr(ss, '_independent_transcriber', lambda *_:
+                        TimedDecode(['قل'], [.95], [(.08, .16)]))
+    session.add_audio(_pcm_seconds(.9))
+    assert [e['word_index'] for e in await session.maybe_transcribe()] == [0]
+    session.add_audio(bytes(28800))
+    assert await session.maybe_transcribe() == []
+    assert session._pass_count == 1
+    assert session._matcher._cursor == 1
 
 
 @pytest.mark.asyncio

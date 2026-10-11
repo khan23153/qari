@@ -42,6 +42,9 @@ logger = get_logger(__name__)
 
 # How many seconds of *new* audio to accumulate before re-transcribing.
 TRANSCRIBE_INTERVAL_SEC = 1.2
+# The pinned RNNT decoder finishes well within this interval on the VPS.
+# Keep the existing Whisper/stub cadence and all recognition guards unchanged.
+RNNT_TRANSCRIBE_INTERVAL_SEC = .9
 # --- Early first pass (2026-09-26): cut the first-word latency ---------------
 #
 # Measured decomposition of the ~2.1 s first-word latency on this 4-vCPU VPS:
@@ -679,8 +682,9 @@ def _stitch_timed_hypothesis(
 
     RNNT bounds describe token emissions, with an 80ms frame. A distinct
     adjacent word may share that frame; an already consumed word may not be
-    counted again. Two confident past tokens also anchor revisions of a long
-    word whose last emission moved as the next window became clearer.
+    counted again. A confident identical word beginning on the same past
+    emission frame anchors an end-time revision even with one consumed word.
+    Two confident past tokens also anchor revisions whose first emission moved.
     """
     import math
     if not len(window_words) == len(window_confs) == len(window_times):
@@ -699,6 +703,15 @@ def _stitch_timed_hypothesis(
     if keep > len(prefix_confs) or keep > len(prefix_times):
         raise ValueError("Consumed timed evidence is incomplete")
     overlap_end = 0
+    if keep and prefix_confs[keep - 1] >= confidence_threshold:
+        previous_begin = prefix_times[keep - 1][0]
+        for index, (begin, _) in enumerate(absolute):
+            if (begin <= consumed_end + .08 + 1e-6
+                    and abs(begin - previous_begin) <= 1e-6
+                    and window_confs[index] >= confidence_threshold
+                    and _normalize(window_words[index]) == _normalize(prefix[keep - 1])):
+                overlap_end = index + 1
+                break
     if (keep >= 2 and prefix_confs[keep - 2] >= confidence_threshold
             and prefix_confs[keep - 1] >= confidence_threshold
             and prefix[keep - 2] != prefix[keep - 1]):
@@ -709,13 +722,15 @@ def _stitch_timed_hypothesis(
                     and window_confs[index + 1] >= confidence_threshold
                     and _words_similar(window_words[index], prefix[keep - 2])
                     and _words_similar(window_words[index + 1], prefix[keep - 1])):
-                overlap_end = index + 2
+                overlap_end = max(overlap_end, index + 2)
                 break
     fresh = [
         index for index, (_, end) in enumerate(absolute)
         if index >= overlap_end and end > consumed_end - .08
         and (right_context_seconds <= 0.0
-             or end <= window_start + window_seconds - right_context_seconds)
+             # RNNT timestamps are emission-frame starts. Count that 80 ms
+             # frame before requiring complete future context from PCM.
+             or end + .08 <= window_start + window_seconds - right_context_seconds)
         and not (keep and end <= consumed_end + .08
                  and _words_similar(window_words[index], prefix[keep - 1]))
     ]
@@ -952,6 +967,8 @@ class StreamingRecitationSession:
         """Seconds of *new* audio to accumulate before the next pass."""
         if EARLY_FIRST_PASS and self._is_first_pass():
             return EARLY_FIRST_PASS_SEC
+        if not self._is_stub and _live_asr_engine() == "fastconformer_rnnt":
+            return RNNT_TRANSCRIBE_INTERVAL_SEC
         return TRANSCRIBE_INTERVAL_SEC
 
     async def transcription_loop(self, websocket) -> None:
