@@ -72,6 +72,10 @@ services:
       QARI_RECITATION_API_PUBLIC_URL: ${QARI_RECITATION_API_PUBLIC_URL:?Set the public recitation API URL in infra/.env}
       PYTHONPATH: /app
       QARI_ML_USE_STUB: "false"
+      # Optional qualified independent decoder. The existing Whisper witness
+      # remains the default and its model assets stay mounted for rollback.
+      QARI_LIVE_ASR_ENGINE: ${QARI_LIVE_ASR_ENGINE:-faster_whisper}
+      QARI_FASTCONFORMER_MODEL_DIR: ${QARI_FASTCONFORMER_MODEL_DIR:-/app/models/qari-fastconformer-pcd-rnnt-int8}
       # Trained Qari V50 model (LoRA merged + CT2 INT8, built from local files).
       QARI_FASTERWHISPER_MODEL_DIR: /app/models/qari-v50-ct2
       # Independent (UNPROMPTED) verification model. The V50 adapter is an
@@ -79,8 +83,7 @@ services:
       # it cannot validate a recitation — this base Quran ASR model, decoded
       # with NO prompt, is the honest witness of what was actually said.
       QARI_FASTERWHISPER_VERIFY_MODEL_DIR: /app/models/qari-ct2-base
-      # 2 threads per decode: tier-1 (prompted) and tier-2 (unprompted) run
-      # CONCURRENTLY, so 2+2 = all 4 cores (wall time = max, not sum).
+      # The selected independent live decode uses two CPU threads.
       QARI_FASTERWHISPER_THREADS: "2"
       # Which decode feeds the LIVE word reveal: "tier2" = the independent
       # unprompted witness (honest), "corroborated" = the prompt-conditioned
