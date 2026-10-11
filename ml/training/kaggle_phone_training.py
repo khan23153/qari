@@ -14,12 +14,53 @@ import soundfile as sf
 from ml.training.finetune_whisper_robust import normalize_arabic
 
 
-def _read_rows(root: Path, name: str) -> list[dict]:
+def _metadata_rows(root: Path, name: str) -> list[dict]:
+    return [json.loads(line) for line in (root / name).read_text(encoding="utf-8").splitlines()
+            if line.strip()]
+
+
+def _filename_label(row: dict) -> bool:
+    # TLOG's clean split validates filenames/audio, not the spoken transcript.
+    # A boolean clean/verified flag does not supply independent label evidence.
+    return any(str(row.get(key) or "").lower().startswith("tlog")
+               for key in ("source", "phase3_role"))
+
+
+def _lineage_keys(root: Path, row: dict) -> set[tuple[str, str]]:
+    keys = {("path", str((root / str(row.get("audio_path") or "")).resolve()))}
+    if row.get("parent_audio_path"):
+        keys.add(("path", str((root / str(row["parent_audio_path"])).resolve())))
+    if row.get("clip_id"):
+        keys.add(("clip", str(row["clip_id"])))
+    return keys
+
+
+def _partition_labels(root: Path, rows: list[dict], *, related: list[dict] | None = None) -> tuple[list[dict], list[dict]]:
+    all_rows = rows + (related or [])
+    unsafe = set().union(*(_lineage_keys(root, r) for r in all_rows if _filename_label(r)))
+    # Propagate to descendants regardless of row order or an altered source tag.
+    while True:
+        expanded = set(unsafe)
+        for row in all_rows:
+            keys = _lineage_keys(root, row)
+            if keys & unsafe:
+                expanded.update(keys)
+        if expanded == unsafe:
+            break
+        unsafe = expanded
+    approved, quarantined = [], []
+    for row in rows:
+        if _lineage_keys(root, row) & unsafe:
+            reason = "filename_label_unvalidated" if _filename_label(row) else "unvalidated_label_lineage"
+            quarantined.append(dict(row, quarantine_reason=reason))
+        else:
+            approved.append(row)
+    return approved, quarantined
+
+
+def _read_rows(root: Path, name: str, metadata: list[dict] | None = None) -> list[dict]:
     rows = []
-    for line in (root / name).read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        row = json.loads(line)
+    for row in _metadata_rows(root, name) if metadata is None else metadata:
         text = str(row.get("text") or "").strip()
         if not normalize_arabic(text):
             raise ValueError("A spoken transcript is required; expected verse text is not a label")
@@ -67,8 +108,20 @@ def prepare_pilot_data(
     """Keep actual labels, cap augmentation, and reject train/eval leakage."""
     root = Path(dataset_root).resolve()
     output = Path(output_dir)
-    train = _read_rows(root, "train_manifest.jsonl")
-    evaluation = _read_rows(root, "eval_manifest.jsonl")
+    original_train = _metadata_rows(root, "train_manifest.jsonl")
+    original_eval = _metadata_rows(root, "eval_manifest.jsonl")
+    _, unsafe_eval = _partition_labels(root, original_eval, related=original_train)
+    if unsafe_eval:
+        raise ValueError("Evaluation contains an unvalidated filename-label lineage")
+    approved, quarantined = _partition_labels(root, original_train, related=original_eval)
+    output.mkdir(parents=True, exist_ok=True)
+    with (output / "quarantined_train_manifest.jsonl").open("w", encoding="utf-8") as handle:
+        for row in quarantined:
+            handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+    if not approved:
+        raise ValueError("No speech-validated training rows after label-source quarantine")
+    train = _read_rows(root, "train_manifest.jsonl", approved)
+    evaluation = _read_rows(root, "eval_manifest.jsonl", original_eval)
     train_speakers = {_speaker(r) for r in train} - {""}
     eval_speakers = {_speaker(r) for r in evaluation} - {""}
     if any(not _speaker(r) for r in evaluation) or len(eval_speakers) < min_eval_speakers:
@@ -117,6 +170,9 @@ def prepare_pilot_data(
                 public = {k: v for k, v in row.items() if not k.startswith("_")}
                 handle.write(json.dumps(public, ensure_ascii=False) + "\n")
     report = {
+        "input_train_rows": len(original_train),
+        "quarantined_training_rows": len(quarantined),
+        "quarantined_sources": dict(Counter(r.get("source", "unknown") for r in quarantined)),
         "train_rows": len(balanced), "eval_rows": len(evaluation),
         "excluded_augmentations": excluded_augmentations,
         "excluded_transcript_cap": len(selected) - len(balanced),
