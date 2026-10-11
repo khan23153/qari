@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
 
 
 class RecitationUploadRequest(BaseModel):
@@ -39,6 +39,7 @@ class WordVerdictOut(BaseModel):
     word_index: int
     is_correct: bool
     confidence: float = 1.0
+    evidence_confirmed: StrictBool = False
     expected_text: Optional[str] = None
     actual_text: Optional[str] = None
     start_ms: Optional[int] = None

@@ -1390,6 +1390,7 @@ class StreamingRecitationSession:
                 "word_index": st.index,
                 "is_correct": is_correct,
                 "confidence": round(st.confidence, 3),
+                "evidence_confirmed": supported,
                 "expected_text": st.expected,
                 "actual_text": st.spoken,
                 "error_type": None if is_correct else st.status.value,
