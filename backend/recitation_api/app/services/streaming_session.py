@@ -481,21 +481,39 @@ def _independent_transcriber(audio, sr: int) -> tuple[list[str], list[float]]:
     live matcher needs to flag real mistakes.
     """
     try:
-        from ml.inference.faster_whisper_transcriber import get_transcriber
-
-        raw_words, confs = get_transcriber().transcribe_independent(audio, sr)
+        if _live_asr_engine() == "fastconformer_rnnt":
+            from ml.inference.fastconformer_transcriber import get_transcriber
+            decoded = get_transcriber().transcribe(audio, sr)
+        else:
+            from ml.inference.faster_whisper_transcriber import get_transcriber
+            decoded = get_transcriber().transcribe_independent(audio, sr)
+        raw_words, confs = decoded
     except Exception as exc:  # pragma: no cover - model/load failures
         logger.error("stream.independent_decode_failed", error=str(exc))
         return [], []
 
     norm: list[str] = []
     out_confs: list[float] = []
-    for w, c in zip(raw_words, confs):
+    timings = getattr(decoded, "timings", None)
+    out_timings = []
+    for index, (w, c) in enumerate(zip(raw_words, confs)):
         n = _normalize(w)
         if n:
             norm.append(n)
             out_confs.append(c)
+            if timings is not None:
+                out_timings.append(timings[index])
+    if timings is not None:
+        from ml.inference.transcript import TimedTranscript
+        return TimedTranscript(norm, out_confs, out_timings)
     return norm, out_confs
+
+
+def _live_asr_engine() -> str:
+    engine = os.environ.get("QARI_LIVE_ASR_ENGINE", "faster_whisper")
+    if engine not in {"faster_whisper", "fastconformer_rnnt"}:
+        raise ValueError("Unsupported live ASR engine")
+    return engine
 
 
 def _make_stub_transcriber(reference_words: list[str]) -> Transcriber:
@@ -609,6 +627,59 @@ def _rms_energy(samples: list[float]) -> float:
     return (sum(s * s for s in samples) / len(samples)) ** 0.5
 
 
+def _stitch_timed_hypothesis(
+    prefix, prefix_confs, prefix_times, window_words, window_confs,
+    window_times, *, consumed, consumed_end, window_start, window_seconds,
+    confidence_threshold,
+):
+    """Retain consumed evidence and replace the remaining overlapping audio.
+
+    RNNT bounds describe token emissions, with an 80ms frame. A distinct
+    adjacent word may share that frame; an already consumed word may not be
+    counted again. Two confident past tokens also anchor revisions of a long
+    word whose last emission moved as the next window became clearer.
+    """
+    import math
+    if not len(window_words) == len(window_confs) == len(window_times):
+        raise ValueError("Timed transcript evidence must align")
+    absolute = []
+    previous = -1.0
+    for confidence, (begin, end) in zip(window_confs, window_times):
+        if not all(math.isfinite(v) for v in (begin, end, confidence)):
+            raise ValueError("Nonfinite timed evidence")
+        if not (0 <= begin <= end <= window_seconds + .08
+                and begin >= previous and 0 <= confidence <= 1):
+            raise ValueError("Timed evidence is outside its PCM window")
+        previous = begin
+        absolute.append((begin + window_start, end + window_start))
+    keep = min(max(0, int(consumed)), len(prefix))
+    if keep > len(prefix_confs) or keep > len(prefix_times):
+        raise ValueError("Consumed timed evidence is incomplete")
+    overlap_end = 0
+    if (keep >= 2 and prefix_confs[keep - 2] >= confidence_threshold
+            and prefix_confs[keep - 1] >= confidence_threshold
+            and prefix[keep - 2] != prefix[keep - 1]):
+        for index in range(len(window_words) - 1):
+            if (absolute[index][1] <= consumed_end + .08
+                    and window_confs[index] >= confidence_threshold
+                    and window_confs[index + 1] >= confidence_threshold
+                    and _words_similar(window_words[index], prefix[keep - 2])
+                    and _words_similar(window_words[index + 1], prefix[keep - 1])):
+                overlap_end = index + 2
+                break
+    fresh = [
+        index for index, (_, end) in enumerate(absolute)
+        if index >= overlap_end and end > consumed_end - .08
+        and not (keep and end <= consumed_end + .08
+                 and _words_similar(window_words[index], prefix[keep - 1]))
+    ]
+    return (
+        list(prefix[:keep]) + [window_words[i] for i in fresh],
+        list(prefix_confs[:keep]) + [window_confs[i] for i in fresh],
+        list(prefix_times[:keep]) + [absolute[i] for i in fresh],
+    )
+
+
 # ---------------------------------------------------------------------------
 # Session
 # ---------------------------------------------------------------------------
@@ -667,6 +738,8 @@ class StreamingRecitationSession:
         # cumulative words so `finalize()` and existing callers keep working.
         self._hypothesis: list[str] = []
         self._hypothesis_confs: list[float] = []
+        self._hypothesis_timings: list[tuple[float, float]] = []
+        self._consumed_audio_end = float("-inf")
         self._last_hypothesis: list[str] = []
         # Alternate-pass verification state: number of live transcription
         # passes so far and the (word, conf) list from the last unprompted
@@ -753,14 +826,17 @@ class StreamingRecitationSession:
             # reveals one word every 0.9 seconds without inspecting speech and
             # therefore auto-completes an ayah when the user says nothing.
             try:
-                from ml.inference.faster_whisper_transcriber import get_transcriber
-
+                engine = _live_asr_engine()
+                if engine == "fastconformer_rnnt":
+                    from ml.inference.fastconformer_transcriber import get_transcriber
+                else:
+                    from ml.inference.faster_whisper_transcriber import get_transcriber
                 get_transcriber().load()
                 self._transcriber = _real_transcriber
                 self._is_stub = False
                 logger.info(
                     "stream.transcriber", session_id=self.session_id,
-                    engine="faster-whisper", words=len(self.reference_words),
+                    engine=engine, words=len(self.reference_words),
                 )
             except Exception as exc:
                 logger.error(
@@ -1033,6 +1109,7 @@ class StreamingRecitationSession:
                     or self._pass_count % VERIFY_EVERY_N_PASSES == 0
                     or stall
                 )
+                window_timings = None
                 try:
                     if EVIDENCE_POLICY == "tier2":
                         # The independent witness IS the live hypothesis (see
@@ -1040,9 +1117,11 @@ class StreamingRecitationSession:
                         # at all: one decode instead of two halves CPU use and
                         # drops the pass wall time (~1.1s vs ~1.9s measured on
                         # this VPS), which is the live reveal latency.
-                        win_words, win_confs = await asyncio.to_thread(
+                        decoded = await asyncio.to_thread(
                             _independent_transcriber, audio, self.sample_rate
                         )
+                        win_words, win_confs = decoded
+                        window_timings = getattr(decoded, "timings", None)
                         raw_words, raw_confs = list(win_words), list(win_confs)
                         self._verified_words = [
                             (w, c) for w, c in zip(raw_words, raw_confs) if w
@@ -1187,12 +1266,27 @@ class StreamingRecitationSession:
                     )
                     self._hypothesis = self._hypothesis[:keep]
                     self._hypothesis_confs = self._hypothesis_confs[:keep]
-                stitched, stitched_confs = stitch_hypothesis(
-                    self._hypothesis,
-                    self._hypothesis_confs,
-                    win_words,
-                    win_confs,
-                )
+                    self._hypothesis_timings = self._hypothesis_timings[:keep]
+                if window_timings is not None:
+                    try:
+                        stitched, stitched_confs, stitched_times = _stitch_timed_hypothesis(
+                            self._hypothesis, self._hypothesis_confs,
+                            self._hypothesis_timings, win_words, win_confs,
+                            window_timings,
+                            consumed=getattr(self._matcher, "_hyp_cursor", 0),
+                            consumed_end=self._consumed_audio_end,
+                            window_start=start / self.sample_rate,
+                            window_seconds=len(audio) / self.sample_rate,
+                            confidence_threshold=getattr(self._matcher, "live_confidence_threshold", .55),
+                        )
+                    except (ValueError, TypeError) as exc:
+                        logger.error("stream.transcribe_failed", session_id=self.session_id, error=str(exc))
+                        return []
+                else:
+                    stitched, stitched_confs = stitch_hypothesis(
+                        self._hypothesis, self._hypothesis_confs, win_words, win_confs,
+                    )
+                    stitched_times = []
                 # Clamp the cumulative hypothesis so ASR hallucinations /
                 # repeated-token explosions can't grow it without bound. The
                 # cap must be measured from the matcher's CONSUMED prefix
@@ -1215,12 +1309,18 @@ class StreamingRecitationSession:
                     stitched_confs = stitched_confs[:cap]
                 self._hypothesis = stitched
                 self._hypothesis_confs = stitched_confs
+                self._hypothesis_timings = stitched_times[:cap]
 
             self._last_hypothesis = self._hypothesis
             _cursor_before = int(getattr(self._matcher, "_cursor", 0) or 0)
             states = self._matcher.evaluate(
                 self._hypothesis, self._hypothesis_confs
             )
+            consumed = int(getattr(self._matcher, "_hyp_cursor", 0))
+            if 0 < consumed <= len(self._hypothesis_timings):
+                self._consumed_audio_end = max(
+                    self._consumed_audio_end, self._hypothesis_timings[consumed - 1][1],
+                )
             if STREAM_DEBUG:
                 logger.info(
                     "stream.pass",

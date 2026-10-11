@@ -468,12 +468,16 @@ def _warmup_ml() -> None:
     except Exception as exc:  # pragma: no cover - optional ml deps
         logger.debug("warmup.refstore_failed", error=str(exc))
     try:
-        from ml.inference.faster_whisper_transcriber import get_transcriber
-
-        transcriber = get_transcriber()
-        transcriber.load()  # primary (prompted / V50) model
-        transcriber._model_verify_for()  # independent verification (live witness)
-        logger.info("warmup.models_done")
+        engine = _streaming_session._live_asr_engine()
+        if engine == "fastconformer_rnnt":
+            from ml.inference.fastconformer_transcriber import get_transcriber
+            get_transcriber().load()
+        else:
+            from ml.inference.faster_whisper_transcriber import get_transcriber
+            transcriber = get_transcriber()
+            transcriber.load()
+            transcriber._model_verify_for()
+        logger.info("warmup.models_done", engine=engine)
     except Exception as exc:  # pragma: no cover - model load failures
         logger.debug("warmup.model_failed", error=str(exc))
 
