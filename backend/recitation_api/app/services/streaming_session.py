@@ -791,6 +791,7 @@ class StreamingRecitationSession:
         self._pcm = bytearray()
         self._samples_at_last_transcribe = 0
         self._transcribe_lock = asyncio.Lock()
+        self._audio_ready = asyncio.Event()
         self._transcribe_stop = False
         self._matcher = None
         self._last_status: dict[int, str] = {}
@@ -941,6 +942,10 @@ class StreamingRecitationSession:
     # ------------------------------------------------------------------
     def add_audio(self, chunk: bytes) -> None:
         self._pcm.extend(chunk)
+        if not self._is_stub and _live_asr_engine() == "fastconformer_rnnt":
+            threshold = int(self._next_interval_sec() * self.sample_rate)
+            if self._total_samples - self._samples_at_last_transcribe >= threshold:
+                self._audio_ready.set()
 
     # Background transcription loop (driven by the WebSocket handler so the
     # receive loop never blocks on the slow Whisper call). Re-transcribes the
@@ -949,6 +954,7 @@ class StreamingRecitationSession:
     # so concurrent ticks never stack.
     def stop_transcription(self) -> "asyncio.Future":
         self._transcribe_stop = True
+        self._audio_ready.set()
         return asyncio.sleep(0)  # no-op awaitable for callers
 
     def _is_first_pass(self) -> bool:
@@ -972,6 +978,9 @@ class StreamingRecitationSession:
         return TRANSCRIBE_INTERVAL_SEC
 
     async def transcription_loop(self, websocket) -> None:
+        if not self._is_stub and _live_asr_engine() == "fastconformer_rnnt":
+            await self._audio_driven_transcription_loop(websocket)
+            return
         self._transcribe_stop = False
         try:
             while not self._transcribe_stop:
@@ -995,6 +1004,38 @@ class StreamingRecitationSession:
                 remaining = self._next_interval_sec() - elapsed
                 if remaining > 0:
                     await asyncio.sleep(remaining)
+        except asyncio.CancelledError:
+            return
+
+    async def _audio_driven_transcription_loop(self, websocket) -> None:
+        """Wake on eligible fresh PCM without adding a polling delay."""
+        try:
+            while not self._transcribe_stop:
+                threshold = int(self._next_interval_sec() * self.sample_rate)
+                if self._total_samples - self._samples_at_last_transcribe >= threshold:
+                    self._audio_ready.set()
+                await self._audio_ready.wait()
+                self._audio_ready.clear()
+                if self._transcribe_stop:
+                    break
+                # Another caller may be draining a forced decode. Wait for it
+                # instead of repeatedly waking on the same unconsumed samples.
+                if self._transcribe_lock.locked():
+                    async with self._transcribe_lock:
+                        pass
+                    if self._transcribe_stop:
+                        break
+                previous_samples = self._samples_at_last_transcribe
+                try:
+                    for event in await self.maybe_transcribe():
+                        await websocket.send_json(event)
+                except Exception as exc:  # pragma: no cover - model failures
+                    logger.error("stream.loop_transcribe_failed", session_id=self.session_id, error=str(exc))
+                if (self._samples_at_last_transcribe == previous_samples
+                        and self._total_samples - previous_samples >= threshold):
+                    # Unexpected failures before consuming PCM retain the old
+                    # bounded retry cadence rather than spinning on that PCM.
+                    await asyncio.sleep(self._next_interval_sec())
         except asyncio.CancelledError:
             return
 
