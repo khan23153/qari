@@ -2,6 +2,8 @@
 
 import math
 import struct
+import asyncio
+import threading
 from types import SimpleNamespace
 
 import pytest
@@ -154,6 +156,36 @@ async def test_forced_tick_without_new_speech_does_not_repeat_decode(production_
     before = len(calls)
     assert await production_session.maybe_transcribe(force=True) == []
     assert len(calls) == before
+
+
+@pytest.mark.asyncio
+async def test_forced_stop_drains_inflight_decode_before_quiet_return(production_session, monkeypatch):
+    entered = threading.Event()
+    release = threading.Event()
+    calls = []
+    def recognize(audio, sr):
+        calls.append(len(audio))
+        entered.set()
+        assert release.wait(3), "test must release the controlled decoder"
+        return WORDS[:3], [.95] * 3
+    monkeypatch.setattr(ss, "_independent_transcriber", recognize)
+    production_session.add_audio(pcm(1.5))
+    background = asyncio.create_task(production_session.maybe_transcribe())
+    assert await asyncio.to_thread(entered.wait, 1)
+    forced_started = asyncio.Event()
+    async def stop_pass():
+        forced_started.set()
+        return await production_session.maybe_transcribe(force=True)
+    forced = asyncio.create_task(stop_pass())
+    try:
+        await forced_started.wait()
+        await asyncio.sleep(0)
+        assert not forced.done(), "stop must wait for already received audio to finish decoding"
+    finally:
+        release.set()
+        await asyncio.gather(background, forced)
+    assert len(calls) == 1
+    assert production_session._hypothesis == WORDS[:3]
 
 
 @pytest.mark.asyncio

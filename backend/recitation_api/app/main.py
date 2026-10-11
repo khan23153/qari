@@ -193,6 +193,13 @@ _original_stream_maybe_transcribe = (
 
 async def _maybe_transcribe_with_recent_audio_gate(self, *, force: bool = False):
     """Gate repeated windows and cap live progress by actual active speech."""
+    if self._transcribe_lock.locked():
+        if not force:
+            return []
+        # A stop must drain the existing decode even when it has already
+        # consumed all received samples. Final review must not race its result.
+        async with self._transcribe_lock:
+            pass
     active_seconds = 0.0
     if not self._is_stub and self.sample_rate > 0:
         total_samples = self._total_samples
