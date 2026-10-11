@@ -116,3 +116,36 @@ def test_independent_adapter_retains_timestamps_when_normalizing(session, monkey
     assert result.words == ['العالمين']
     assert result.confidences == [.9]
     assert result.timings == [(0, .5)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('interruption', [([], []), (['قل', 'هو', 'الله', 'احد'], [.95] * 4)])
+async def test_decode_failure_or_missing_metadata_does_not_poison_timed_history(session, monkeypatch, interruption):
+    decodes = iter([
+        TimedDecode(['قل', 'هو', 'الله'], [.95] * 3, [(.1, .3), (.4, .6), (.7, .9)]),
+        interruption,
+        TimedDecode(['قل', 'هو', 'الله', 'احد', 'الله', 'الصمد'], [.95] * 6,
+                    [(.1, .3), (.4, .6), (.7, .9), (1.5, 1.7), (1.8, 1.9), (2, 2.1)]),
+    ])
+    monkeypatch.setattr(ss, '_independent_transcriber', lambda audio, sr: next(decodes))
+    session.add_audio(_pcm_seconds(1.5))
+    await session.maybe_transcribe()
+    times = list(session._hypothesis_timings)
+    session.add_audio(_pcm_seconds(1.5))
+    assert await session.maybe_transcribe() == []
+    assert session._hypothesis_timings == times
+    assert session._matcher._cursor == 3
+    session.add_audio(_pcm_seconds(1.5))
+    events = await session.maybe_transcribe()
+    assert [(e['word_index'], e['status']) for e in events] == [(3, 'match'), (4, 'match'), (5, 'match')]
+
+
+def test_future_second_token_cannot_be_trimmed_as_past_context():
+    words, confs, times = ss._stitch_timed_hypothesis(
+        ['قل', 'هو', 'الله'], [.95] * 3, [(.1, .3), (.4, .6), (.7, .9)],
+        ['هو', 'الله', 'الصمد'], [.95] * 3, [(.4, .6), (4.2, 4.4), (4.6, 4.8)],
+        consumed=3, consumed_end=.9, window_start=0, window_seconds=6,
+        confidence_threshold=.55,
+    )
+    assert words == ['قل', 'هو', 'الله', 'الله', 'الصمد']
+    assert times[-2:] == [(4.2, 4.4), (4.6, 4.8)]

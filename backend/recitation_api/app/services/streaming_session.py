@@ -661,6 +661,7 @@ def _stitch_timed_hypothesis(
             and prefix[keep - 2] != prefix[keep - 1]):
         for index in range(len(window_words) - 1):
             if (absolute[index][1] <= consumed_end + .08
+                    and absolute[index + 1][1] <= consumed_end + .5
                     and window_confs[index] >= confidence_threshold
                     and window_confs[index + 1] >= confidence_threshold
                     and _words_similar(window_words[index], prefix[keep - 2])
@@ -740,6 +741,7 @@ class StreamingRecitationSession:
         self._hypothesis_confs: list[float] = []
         self._hypothesis_timings: list[tuple[float, float]] = []
         self._consumed_audio_end = float("-inf")
+        self._timed_evidence_seen = False
         self._last_hypothesis: list[str] = []
         # Alternate-pass verification state: number of live transcription
         # passes so far and the (word, conf) list from the last unprompted
@@ -1239,6 +1241,17 @@ class StreamingRecitationSession:
                     )
                     win_words = []
                     win_confs = []
+                if window_timings is not None:
+                    self._timed_evidence_seen = True
+                if self._timed_evidence_seen:
+                    if not win_words:
+                        # Model failure/empty recognition supplies no revision.
+                        # Preserve the last good word/time pairs for recovery.
+                        return []
+                    if window_timings is None:
+                        logger.error("stream.transcribe_failed", session_id=self.session_id,
+                                     error="Timed recognition lost emission metadata")
+                        return []
                 # STALL UNION: when the reference cursor did not advance during
                 # the previous pass, the prompted decode is ECHOING the oracle
                 # prompt. Every echoed word was already resolved earlier, so
