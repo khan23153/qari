@@ -461,9 +461,13 @@ def _warmup_ml() -> None:
     loop so ``/health`` and app readiness are NOT delayed.
     """
     try:
-        from app.services.streaming_session import _get_reference_store
+        from app.services.streaming_session import (
+            _get_reference_store, _get_live_error_vocabulary, _get_live_word_aliases,
+        )
 
         _get_reference_store()
+        _get_live_error_vocabulary()
+        _get_live_word_aliases()
         logger.info("warmup.refstore_done")
     except Exception as exc:  # pragma: no cover - optional ml deps
         logger.debug("warmup.refstore_failed", error=str(exc))

@@ -144,6 +144,10 @@ HYPO_TAIL_CAP = 40
 # Max words of overlap to search when stitching a new window onto the cumulative
 # hypothesis (drops words the previous window already contributed).
 STITCH_MAX_OVERLAP_WORDS = 12
+# Three80ms RNNT frames of right context protect against a word predicted from
+# an unfinished suffix. In a real paced stream, 5.7s of عليكم was decoded as
+# عليهم(.794); the complete6.0s window corrected it to عليكم(.841).
+LIVE_RIGHT_CONTEXT_SEC = .24
 
 # --- Silence gating (fixes "ayah auto-completes while the user is silent") -----
 # When the user is quiet, the mic still streams low-level room noise and Whisper
@@ -669,7 +673,7 @@ def _rms_energy(samples: list[float]) -> float:
 def _stitch_timed_hypothesis(
     prefix, prefix_confs, prefix_times, window_words, window_confs,
     window_times, *, consumed, consumed_end, window_start, window_seconds,
-    confidence_threshold,
+    confidence_threshold, right_context_seconds=0.0,
 ):
     """Retain consumed evidence and replace the remaining overlapping audio.
 
@@ -710,6 +714,8 @@ def _stitch_timed_hypothesis(
     fresh = [
         index for index, (_, end) in enumerate(absolute)
         if index >= overlap_end and end > consumed_end - .08
+        and (right_context_seconds <= 0.0
+             or end <= window_start + window_seconds - right_context_seconds)
         and not (keep and end <= consumed_end + .08
                  and _words_similar(window_words[index], prefix[keep - 1]))
     ]
@@ -1331,6 +1337,7 @@ class StreamingRecitationSession:
                             window_start=start / self.sample_rate,
                             window_seconds=len(audio) / self.sample_rate,
                             confidence_threshold=getattr(self._matcher, "live_confidence_threshold", .55),
+                            right_context_seconds=0.0 if force else LIVE_RIGHT_CONTEXT_SEC,
                         )
                     except (ValueError, TypeError) as exc:
                         logger.error("stream.transcribe_failed", session_id=self.session_id, error=str(exc))
