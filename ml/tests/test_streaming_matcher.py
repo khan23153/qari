@@ -559,3 +559,62 @@ def test_missing_production_vocabulary_cannot_enable_new_semantic_matches(heard,
     assert not matcher._is_match(heard, expected)
     states = matcher.evaluate(['في', heard, 'عالم'], [.95] * 3)
     assert [s.status for s in states] == [WordStatus.MATCHED, WordStatus.SKIPPED, WordStatus.MATCHED]
+
+
+@pytest.mark.parametrize('heard,expected', [
+    ('الله', 'لله'), ('لله', 'الله'),
+    ('قال', 'قل'), ('قل', 'قال'),
+    ('عالم', 'علم'), ('علم', 'عالم'),
+])
+def test_extra_alef_cannot_merge_distinct_known_quran_words(heard, expected):
+    matcher = StreamingMatcher(['في', expected, 'عالمين'],
+                               known_error_words={heard, expected, 'في', 'عالمين'})
+    assert not matcher._is_match(heard, expected)
+    states = matcher.evaluate(['في', heard, 'عالمين'], [.95] * 3)
+    by_index = {s.index: s for s in states}
+    assert by_index[1].status == WordStatus.ERROR
+    assert by_index[2].status == WordStatus.MATCHED
+    assert matcher._cursor == 3
+    assert matcher.finalize(['في', heard, 'عالمين'], [.95] * 3)[1].status == WordStatus.ERROR
+
+
+def test_explicit_corpus_alef_alias_still_confirms_the_same_word():
+    matcher = StreamingMatcher(['الرحمان'], known_error_words={'الرحمن', 'الرحمان'},
+                               word_aliases={'الرحمن': 'الرحمان'})
+    assert matcher._is_match('الرحمن', 'الرحمان')
+    assert matcher.evaluate(['الرحمن'], [.95])[0].status == WordStatus.MATCHED
+
+
+def test_wrong_surah_allah_cannot_reveal_fatihah_lillah():
+    reference = BISMILLAH + ['الحمد', 'لله', 'رب', 'العالمين']
+    matcher = StreamingMatcher(reference, known_error_words=set(reference) | {'قل'})
+    matcher.evaluate(BISMILLAH, [.95] * 4)
+    states = matcher.evaluate(BISMILLAH + ['قل', 'الله'], [.95] * 4 + [.383, .725])
+    assert not any(s.index == 5 and s.status == WordStatus.MATCHED for s in states)
+
+
+@pytest.mark.parametrize('heard,expected', [('باسم','بسم'),('بسم','باسم')])
+def test_known_bism_spelling_variants_remain_confirmable(heard, expected):
+    matcher = StreamingMatcher([expected], known_error_words={heard, expected})
+    assert matcher._is_match(heard, expected)
+    assert matcher.evaluate([heard], [.95])[0].status == WordStatus.MATCHED
+
+
+@pytest.mark.parametrize('heard,expected', [
+    ('الله','لله'),('لله','الله'),('قال','قل'),('قل','قال'),('عالم','علم'),('علم','عالم'),
+])
+def test_missing_vocabulary_cannot_merge_semantic_alef_pairs(heard, expected):
+    matcher = StreamingMatcher(['في', expected, 'عالمين'], known_error_words=set())
+    assert not matcher._is_match(heard, expected)
+    states = matcher.evaluate(['في', heard, 'عالمين'], [.95] * 3)
+    assert [s.status for s in states] == [WordStatus.MATCHED, WordStatus.SKIPPED, WordStatus.MATCHED]
+
+
+def test_missing_vocabulary_preserves_established_spelling_family():
+    matcher = StreamingMatcher(['بسم'], known_error_words=set())
+    assert matcher.evaluate(['باسم'], [.95])[0].status == WordStatus.MATCHED
+
+
+def test_legacy_unspecified_vocabulary_keeps_old_alef_tolerance():
+    matcher = StreamingMatcher(['قال'])
+    assert matcher._is_match('قل','قال')

@@ -81,6 +81,12 @@ _ALEF_VARIANTS = frozenset("اٱآأإٰ")
 # Only emphasis pairs may combine with spelling normalization. A broad
 # phonetic comparison of stripped stems would merge distinct words.
 _EMPHATIC_PAIRS = frozenset(frozenset(pair) for pair in ("صس", "طت", "ضد", "ظذ"))
+# Established Quranic spelling families; generic alef deletion must not merge
+# other known words such as Allah/lillah or qal/qul.
+_ALEF_SPELLING_FAMILIES = frozenset(
+    frozenset(pair) for pair in (("رحمن", "رحمان"), ("صرط", "صراط"), ("بسم", "باسم"))
+)
+
 
 
 def _equal_modulo_one_alef(a: str, b: str) -> bool:
@@ -255,22 +261,21 @@ class StreamingMatcher:
         # article-stripped forms are IDENTICAL this is a match, not a guess.
         if self._strip_article(hypothesis) == self._strip_article(reference):
             return True
-        # Quranic liaison via an EXTRA ALEF: the reciter merges words in flow and
-        # the ASR emits the connecting alef (reference 'صرط' heard as 'صراط',
-        # 'الرحمن' as 'الرحمان'). On a 3-4 letter word that single alef keeps the
-        # similarity at 0.75 — under the 0.80 bar — so the word could NEVER match
-        # and the tracker skipped it as a mistake. If the only difference is one
-        # alef it is the same word.
+        if frozenset((self._strip_article(hypothesis), self._strip_article(reference))) in _ALEF_SPELLING_FAMILIES:
+            return True
+        # Different known Quran words retain their identity, even when they
+        # differ by one alef (الله/لله, قال/قل). Explicit corpus aliases above
+        # already handle verified alternate spellings of the same word. An
+        # explicitly empty vocabulary means lookup failed: accept only the
+        # verified identities above rather than guessing semantic aliases.
+        if (self._known_error_words is not None
+                and (not self._known_error_words
+                     or hypothesis in self._known_error_words)):
+            return False
+        # Unknown ASR spellings may omit a Quranic alef (صرط/صراط,
+        # الرحمن/الرحمان); retain this tolerance without merging known words.
         if _equal_modulo_one_alef(hypothesis, reference):
             return True
-        # A different recognized Quran word is evidence of that word, not a
-        # fuzzy spelling of the selected one (عليكم must not confirm عليهم).
-        # Keep the existing orthographic aliases above, but apply vocabulary
-        # identity before character/phonetic similarity. In live mode an
-        # incomplete word can still be revised before a later anchor commits it.
-        if (self._known_error_words is not None
-                and hypothesis in self._known_error_words):
-            return False
         if char_similarity(hypothesis, reference) >= self.match_threshold:
             return True
         if self.use_phonetic and (
