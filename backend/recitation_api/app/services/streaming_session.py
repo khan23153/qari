@@ -45,6 +45,7 @@ TRANSCRIBE_INTERVAL_SEC = 1.2
 # The pinned RNNT decoder finishes well within this interval on the VPS.
 # Keep the existing Whisper/stub cadence and all recognition guards unchanged.
 RNNT_TRANSCRIBE_INTERVAL_SEC = .9
+RNNT_STARTUP_INTERVAL_SEC = .6
 # --- Early first pass (2026-09-26): cut the first-word latency ---------------
 #
 # Measured decomposition of the ~2.1 s first-word latency on this 4-vCPU VPS:
@@ -944,7 +945,7 @@ class StreamingRecitationSession:
     def add_audio(self, chunk: bytes) -> None:
         self._pcm.extend(chunk)
         if not self._is_stub and _live_asr_engine() == "fastconformer_rnnt":
-            threshold = int(self._next_interval_sec() * self.sample_rate)
+            threshold = self._next_interval_samples()
             if self._total_samples - self._samples_at_last_transcribe >= threshold:
                 self._audio_ready.set()
 
@@ -975,8 +976,24 @@ class StreamingRecitationSession:
         if EARLY_FIRST_PASS and self._is_first_pass():
             return EARLY_FIRST_PASS_SEC
         if not self._is_stub and _live_asr_engine() == "fastconformer_rnnt":
-            return RNNT_TRANSCRIBE_INTERVAL_SEC
+            if not self._matcher or getattr(self._matcher, "_cursor", 0) == 0:
+                return RNNT_STARTUP_INTERVAL_SEC
+            if self.sample_rate <= 0:
+                return RNNT_TRANSCRIBE_INTERVAL_SEC
+            # Preserve the regular audio phase after the early selected-word
+            # decode. A permanent .6s cadence changed later context and produced
+            # a false Yaqul error on a correctly recited Yakun.
+            grid = max(1, round(RNNT_TRANSCRIBE_INTERVAL_SEC * self.sample_rate))
+            used = self._samples_at_last_transcribe
+            return ((used // grid + 1) * grid - used) / self.sample_rate
         return TRANSCRIBE_INTERVAL_SEC
+
+    def _next_interval_samples(self) -> int:
+        """Use one PCM threshold for waking, speech gating and decoding."""
+        samples = self._next_interval_sec() * self.sample_rate
+        if not self._is_stub and _live_asr_engine() == "fastconformer_rnnt":
+            return max(1, round(samples))
+        return int(samples)
 
     async def transcription_loop(self, websocket) -> None:
         if not self._is_stub and _live_asr_engine() == "fastconformer_rnnt":
@@ -1012,7 +1029,7 @@ class StreamingRecitationSession:
         """Wake on eligible fresh PCM without adding a polling delay."""
         try:
             while not self._transcribe_stop:
-                threshold = int(self._next_interval_sec() * self.sample_rate)
+                threshold = self._next_interval_samples()
                 if self._total_samples - self._samples_at_last_transcribe >= threshold:
                     self._audio_ready.set()
                 await self._audio_ready.wait()
@@ -1036,7 +1053,7 @@ class StreamingRecitationSession:
                         and self._total_samples - previous_samples >= threshold):
                     # Unexpected failures before consuming PCM retain the old
                     # bounded retry cadence rather than spinning on that PCM.
-                    await asyncio.sleep(self._next_interval_sec())
+                    await asyncio.sleep(max(RNNT_TRANSCRIBE_INTERVAL_SEC, self._next_interval_sec()))
         except asyncio.CancelledError:
             return
 
@@ -1095,8 +1112,7 @@ class StreamingRecitationSession:
         # normal TRANSCRIBE_INTERVAL_SEC cadence resumes untouched.
         is_first_pass = self._is_first_pass()
         early = EARLY_FIRST_PASS and is_first_pass and not force
-        interval_sec = self._next_interval_sec()
-        threshold = int(interval_sec * self.sample_rate)
+        threshold = self._next_interval_samples()
         if not force and new_samples < threshold:
             return []
         # A forced (stop-time) pass must NOT be dropped just because the

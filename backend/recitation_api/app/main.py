@@ -292,7 +292,7 @@ async def _maybe_transcribe_with_recent_audio_gate(self, *, force: bool = False)
         total_samples = self._total_samples
         previous_samples = self._samples_at_last_transcribe
         new_samples = total_samples - previous_samples
-        cadence_samples = int(self._next_interval_sec() * self.sample_rate)
+        cadence_samples = self._next_interval_samples()
 
         if force or new_samples >= cadence_samples:
             recent_audio = self._decode_float(
