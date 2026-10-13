@@ -226,6 +226,12 @@ _MULTI_SPACE = _re.compile(r"\s+")
 def _normalize(text: str) -> str:
     if not text:
         return ""
+    # At word end, maqsura already carries the long vowel. Preserve internal
+    # carrier keys used by existing corpus aliases and dagger expansion elsewhere.
+    text = _re.sub(
+        r"ى([ـً-ٟ]*)ٰ(?=[ؘ-ًؚ-ٟۖ-ۭ]*(?:\s|$))",
+        r"ى\1", text,
+    )
     text = text.replace("ٰ", "ا").replace("ۧ", "ي").replace("۞", " ")
     text = _HARAKAT.sub("", text)
     text = _TATWEEL.sub("", text)
