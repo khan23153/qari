@@ -149,6 +149,12 @@ class _ConservativeLiveMatcher:
         self._states = [state for state in states if state.index < limit]
         return list(self._states)
 
+    def revise_live_error(self, index, spoken, confidence):
+        limit = min(len(self.reference), max(0, int(self.max_live_words)))
+        if not 0 <= index < limit:
+            return False
+        return self._delegate.revise_live_error(index, spoken, confidence)
+
     def finalize(self, hypothesis_words, confidences=None):
         # finalize resets alignment state. Copy the configured delegate so
         # review retains all guards without mutating the live cursor/state.

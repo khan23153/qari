@@ -803,6 +803,7 @@ class StreamingRecitationSession:
         self._hypothesis_timings: list[tuple[float, float]] = []
         self._consumed_audio_end = float("-inf")
         self._timed_evidence_seen = False
+        self._pending_error_revisions: dict[int, tuple[str, int, int]] = {}
         self._last_hypothesis: list[str] = []
         # Alternate-pass verification state: number of live transcription
         # passes so far and the (word, conf) list from the last unprompted
@@ -1120,6 +1121,7 @@ class StreamingRecitationSession:
                         " ".join(self.reference_text_with_tashkeel_words),
                     )
                 except Exception as exc:  # pragma: no cover - model failures
+                    self._pending_error_revisions.clear()
                     logger.error(
                         "stream.transcribe_failed",
                         session_id=self.session_id, error=str(exc),
@@ -1257,6 +1259,7 @@ class StreamingRecitationSession:
                         raw_words = [w for w, _ in self._verified_words]
                         raw_confs = [c for _, c in self._verified_words]
                 except Exception as exc:  # pragma: no cover - model failures
+                    self._pending_error_revisions.clear()
                     logger.error(
                         "stream.transcribe_failed",
                         session_id=self.session_id, error=str(exc),
@@ -1351,8 +1354,10 @@ class StreamingRecitationSession:
                     if not win_words:
                         # Model failure/empty recognition supplies no revision.
                         # Preserve the last good word/time pairs for recovery.
+                        self._pending_error_revisions.clear()
                         return []
                     if window_timings is None:
+                        self._pending_error_revisions.clear()
                         logger.error("stream.transcribe_failed", session_id=self.session_id,
                                      error="Timed recognition lost emission metadata")
                         return []
@@ -1397,7 +1402,22 @@ class StreamingRecitationSession:
                             confidence_threshold=getattr(self._matcher, "live_confidence_threshold", .55),
                             right_context_seconds=0.0 if force else LIVE_RIGHT_CONTEXT_SEC,
                         )
+                        self._revise_supported_timed_errors(
+                            win_words, win_confs, window_timings,
+                            window_start=start / self.sample_rate,
+                            window_seconds=len(audio) / self.sample_rate,
+                            right_context_seconds=0.0 if force else LIVE_RIGHT_CONTEXT_SEC,
+                            endpoint_samples=start + len(audio),
+                        )
+                        # Stitching validated the complete native window first.
+                        # Copy only proven corrections into its retained prefix;
+                        # fresh tokens, cursors and the consumed boundary stay put.
+                        retained = min(getattr(self._matcher, "_hyp_cursor", 0), len(self._hypothesis))
+                        stitched[:retained] = self._hypothesis[:retained]
+                        stitched_confs[:retained] = self._hypothesis_confs[:retained]
+                        stitched_times[:retained] = self._hypothesis_timings[:retained]
                     except (ValueError, TypeError) as exc:
+                        self._pending_error_revisions.clear()
                         logger.error("stream.transcribe_failed", session_id=self.session_id, error=str(exc))
                         return []
                 else:
@@ -1449,6 +1469,105 @@ class StreamingRecitationSession:
                     hyp=len(self._hypothesis),
                 )
             return self._diff_events(states)
+
+    def _revise_supported_timed_errors(
+        self, window_words, window_confs, window_times, *, window_start,
+        window_seconds, right_context_seconds, endpoint_samples,
+    ) -> None:
+        """Two native views may correct a supported error in the same PCM span."""
+        import math
+        from ml.alignment.streaming_matcher import WordStatus
+
+        delegate = getattr(self._matcher, "_delegate", self._matcher)
+        slots = getattr(delegate, "_live_hyp_indices", {})
+        states = {s.index: s for s in getattr(delegate, "_resolved_states", [])}
+        threshold = getattr(delegate, "live_confidence_threshold", .55)
+        consumed = getattr(self._matcher, "_hyp_cursor", 0)
+        tolerance = .08 + 1e-6
+        try:
+            if (self.sample_rate <= 0 or not 0 < endpoint_samples <= self._total_samples
+                    or not all(math.isfinite(v) for v in (window_start, window_seconds))
+                    or window_start < 0 or window_seconds <= 0
+                    or abs(window_start + window_seconds - endpoint_samples / self.sample_rate) > 1e-6
+                    or not len(window_words) == len(window_confs) == len(window_times)):
+                raise ValueError("Incomplete native revision view")
+            absolute = []
+            previous = -1.0
+            for word, score, (begin, end) in zip(window_words, window_confs, window_times):
+                if (not isinstance(word, str) or not word
+                        or not all(math.isfinite(v) for v in (score, begin, end))
+                        or not 0 <= score <= 1
+                        or not 0 <= begin <= end <= window_seconds + .08
+                        or begin < previous):
+                    raise ValueError("Invalid native revision view")
+                previous = begin
+                absolute.append((begin + window_start, end + window_start))
+        except (ValueError, TypeError):
+            self._pending_error_revisions.clear()
+            return
+
+        eligible = set()
+        for index, state in states.items():
+            anchor = states.get(index + 1)
+            slot, following = slots.get(index), slots.get(index + 1)
+            if (state.status != WordStatus.ERROR or not state.spoken
+                    or not math.isfinite(state.confidence) or not threshold <= state.confidence <= 1
+                    or anchor is None or anchor.status != WordStatus.MATCHED
+                    or not anchor.spoken or anchor.confidence < threshold
+                    or slot is None or following != slot + 1
+                    or not 0 <= slot < following < consumed
+                    or following >= min(len(self._hypothesis), len(self._hypothesis_confs), len(self._hypothesis_timings))):
+                continue
+            old_begin, old_end = self._hypothesis_timings[slot]
+            anchor_begin, anchor_end = self._hypothesis_timings[following]
+            if (not all(math.isfinite(v) for v in (old_begin, old_end, anchor_begin, anchor_end))
+                    or not window_start <= old_begin <= old_end <= self._consumed_audio_end + tolerance
+                    or not old_begin + .08 <= anchor_begin + 1e-6
+                    or self._hypothesis[slot] != state.spoken
+                    or self._hypothesis[following] != anchor.spoken):
+                continue
+            candidates = []
+            for i in range(len(window_words) - 1):
+                begin, end = absolute[i]
+                next_begin, next_end = absolute[i + 1]
+                if (window_confs[i] < threshold or window_confs[i + 1] < threshold
+                        or not delegate._is_match(window_words[i], state.expected)
+                        or not delegate._is_match(window_words[i + 1], anchor.expected)
+                        or abs(begin - old_begin) > tolerance
+                        or abs(next_begin - anchor_begin) > tolerance
+                        or max(begin, old_begin) > min(end + .08, old_end + .08)
+                        or begin + .08 > next_begin + 1e-6
+                        or end > next_begin + tolerance
+                        or (right_context_seconds > 0
+                            and max(end, next_end) + .08 > window_start + window_seconds - right_context_seconds)):
+                    continue
+                # A second strong word on either identifying emission frame
+                # makes the audio occurrence ambiguous, even if its text agrees.
+                if any(j not in (i, i + 1) and window_confs[j] >= threshold
+                       and (abs(bounds[0] - begin) <= tolerance
+                            or abs(bounds[0] - next_begin) <= tolerance)
+                       for j, bounds in enumerate(absolute)):
+                    continue
+                candidates.append(i)
+            if len(candidates) != 1:
+                continue
+            i = candidates[0]
+            eligible.add(index)
+            word = window_words[i]
+            previous = self._pending_error_revisions.get(index)
+            count = 1
+            if previous and previous[0] == word:
+                if endpoint_samples <= previous[1]:
+                    continue
+                count = previous[2] + 1
+            self._pending_error_revisions[index] = (word, endpoint_samples, count)
+            if count >= 2 and self._matcher.revise_live_error(index, word, window_confs[i]):
+                self._hypothesis[slot] = word
+                self._hypothesis_confs[slot] = window_confs[i]
+                self._hypothesis_timings[slot] = absolute[i]
+                self._pending_error_revisions.pop(index, None)
+        for index in set(self._pending_error_revisions) - eligible:
+            self._pending_error_revisions.pop(index, None)
 
     def _diff_events(self, states) -> list[dict]:
         events: list[dict] = []

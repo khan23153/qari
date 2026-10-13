@@ -219,6 +219,9 @@ class StreamingMatcher:
         self._hyp_cursor = 0
         self._resolved: dict[int, WordStatus] = {}
         self._resolved_states: list[WordState] = []
+        # Reference indices do not equal ASR slots (e.g. an opening invocation).
+        # Preserve the actual DP provenance for supported live witnesses.
+        self._live_hyp_indices: dict[int, int] = {}
         # Consecutive evaluate() passes where the anchor made no progress.
         # Drives the wide "search mode" (see _evaluate_live).
         self._stall_passes = 0
@@ -304,6 +307,28 @@ class StreamingMatcher:
                     and all(a == b or frozenset((a, b)) in _EMPHATIC_PAIRS
                             for a, b in zip(heard, expected))
                     and phonetic_similarity(heard, expected) >= self.phonetic_threshold):
+                return True
+        return False
+
+    def revise_live_error(self, index: int, spoken: str, confidence: float) -> bool:
+        """Upgrade one supported error; the session supplies same-audio proof."""
+        import math
+        if (not 0 <= index < len(self.reference)
+                or self._resolved.get(index) != WordStatus.ERROR
+                or index not in self._live_hyp_indices
+                or not math.isfinite(confidence)
+                or not self.live_confidence_threshold <= confidence <= 1
+                or not self._is_match(spoken, self.reference[index])):
+            return False
+        for state in self._resolved_states:
+            if state.index == index:
+                if (not state.spoken or not math.isfinite(state.confidence)
+                        or not self.live_confidence_threshold <= state.confidence <= 1):
+                    return False
+                state.status = WordStatus.MATCHED
+                state.spoken = spoken
+                state.confidence = confidence
+                self._resolved[index] = WordStatus.MATCHED
                 return True
         return False
 
@@ -512,6 +537,7 @@ class StreamingMatcher:
             if index in self._resolved:
                 continue
             if kind == "pair" and paired(ii, jj):
+                self._live_hyp_indices[index] = hyp_start + jj
                 self._resolved_states.append(
                     WordState(
                         index,
@@ -523,6 +549,7 @@ class StreamingMatcher:
                 )
             elif ii in substitutions:
                 hj = substitutions[ii]
+                self._live_hyp_indices[index] = hyp_start + hj
                 self._resolved_states.append(
                     WordState(index, reference[index], WordStatus.ERROR,
                               hyp[hj], confidence(hj))
@@ -734,6 +761,7 @@ class StreamingMatcher:
         self._hyp_cursor = 0
         self._resolved.clear()
         self._resolved_states.clear()
+        self._live_hyp_indices.clear()
         self.evaluate(hypothesis_words, confidences, full=True)
         state_by_index = {state.index: state for state in self._resolved_states}
         final_states: list[WordState] = []
