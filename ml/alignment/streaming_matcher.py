@@ -332,6 +332,31 @@ class StreamingMatcher:
                 return True
         return False
 
+    def revise_live_gap(self, index: int, slot: int, spoken: str, confidence: float) -> bool:
+        """Bind an existing unowned native placeholder; session proves its audio span."""
+        import math
+        if (not 0 < index < len(self.reference) - 1
+                or self._resolved.get(index) != WordStatus.SKIPPED
+                or index in self._live_hyp_indices
+                or slot in self._live_hyp_indices.values()
+                or self._live_hyp_indices.get(index - 1) != slot - 1
+                or self._live_hyp_indices.get(index + 1) != slot + 1
+                or self._resolved.get(index - 1) != WordStatus.MATCHED
+                or self._resolved.get(index + 1) != WordStatus.MATCHED
+                or not math.isfinite(confidence)
+                or not self.live_confidence_threshold <= confidence <= 1
+                or not self._is_match(spoken, self.reference[index])):
+            return False
+        state = next((x for x in self._resolved_states if x.index == index), None)
+        if state is None or state.status != WordStatus.SKIPPED or state.spoken or state.confidence != 0:
+            return False
+        state.status = WordStatus.MATCHED
+        state.spoken = spoken
+        state.confidence = confidence
+        self._resolved[index] = WordStatus.MATCHED
+        self._live_hyp_indices[index] = slot
+        return True
+
     @staticmethod
     def _strip_article(word: str) -> str:
         return word[2:] if len(word) > 4 and word.startswith("ال") else word
