@@ -1677,10 +1677,11 @@ class StreamingRecitationSession:
                 begin = self._hypothesis_timings[slot][0]
                 if math.isfinite(begin) and max(0., total / self.sample_rate - 20.) <= begin <= total / self.sample_rate:
                     recover = True
-                    # Resolving an error must not immediately change the next
-                    # word's frontend context. Retain it only while this native
-                    # uncertainty is inside the existing 20-second horizon.
-                    self._recent_native_uncertainty_begin = begin
+                    # A supported substitution may have a corrected prefix;
+                    # retain that context across its revision. Missing-token
+                    # gaps use ordinary windows again after they are repaired.
+                    if state.status.value == 'error':
+                        self._recent_native_uncertainty_begin = begin
         if not recover:
             return default_start
         # A stable absolute PCM grid avoids moving the recognizer's frontend

@@ -20,6 +20,16 @@ def test_correcting_one_word_does_not_cut_context_before_the_next_word(session):
  assert session._select_audio_window_start(11*16000,round(3.5*16000),early=False,force=False)==0
  assert session._select_audio_window_start(40*16000,round(32.5*16000),early=False,force=False)==round(32.5*16000)
 
+def test_resolved_missing_token_does_not_latch_a_long_context(session):
+ from ml.alignment.streaming_matcher import WordStatus
+ d=session._matcher._delegate
+ state=next(s for s in d._resolved_states if s.index==1)
+ state.status=WordStatus.SKIPPED;state.spoken='';state.confidence=0.
+ d._live_hyp_indices.pop(1)
+ assert session._select_audio_window_start(10*16000,round(2.5*16000),early=False,force=False)==0
+ d._resolved_states=[]
+ assert session._select_audio_window_start(11*16000,round(3.5*16000),early=False,force=False)==round(3.5*16000)
+
 def test_stale_error_does_not_make_later_windows_expensive(session):
  assert session._select_audio_window_start(40*16000,round(32.5*16000),early=False,force=False)==round(32.5*16000)
 
