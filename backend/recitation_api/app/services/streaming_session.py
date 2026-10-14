@@ -600,6 +600,15 @@ def _make_stub_transcriber(reference_words: list[str]) -> Transcriber:
     return _transcribe
 
 
+# Reviewed spelling identities for already-consumed native tokens only.
+# Alif-lam and wasla-lam are not general proof of an article (e.g. اللهم/لهم,
+# التقى/تقي, ألوانه/وأنه). Keep this table explicit; no tokens are synthesized.
+_STITCH_ARTICLE_IDENTITIES = frozenset({
+    frozenset(('اليتيم', 'يتيم')),
+    frozenset(('السايل', 'سايل')),
+})
+
+
 def _words_similar(a: str, b: str, threshold: float = 0.80) -> bool:
     """Loose word match used when stitching overlapping ASR windows.
 
@@ -619,6 +628,11 @@ def _words_similar(a: str, b: str, threshold: float = 0.80) -> bool:
     if na == nb:
         return True
     from ml.alignment.streaming_matcher import char_similarity
+
+    # These reviewed article variants still have to pass the same consumed
+    # PCM/time conditions; a genuine later repetition remains a new word.
+    if frozenset((na, nb)) in _STITCH_ARTICLE_IDENTITIES:
+        return True
 
     return char_similarity(na, nb) >= threshold
 
@@ -731,6 +745,45 @@ def _stitch_timed_hypothesis(
                     and _words_similar(window_words[index + 1], prefix[keep - 1])):
                 overlap_end = max(overlap_end, index + 2)
                 break
+    # A weak token between two strong past words must not make the last word
+    # a fresh occurrence when its emission end grows in the next decode.
+    # Require two unique native start-frame witnesses and a nontrivial old
+    # final span; a zero-frame word could genuinely repeat one frame later.
+    if (keep >= 3 and prefix_confs[keep - 3] >= confidence_threshold
+            and prefix_confs[keep - 2] < confidence_threshold
+            and prefix_confs[keep - 1] >= confidence_threshold):
+        old = prefix_times[keep - 3:keep]
+        def same_identity(a, b):
+            a, b = _normalize(a), _normalize(b)
+            return bool(a and b) and (a == b or frozenset((a, b)) in _STITCH_ARTICLE_IDENTITIES)
+        if (all(math.isfinite(v) for span in old for v in span)
+                and all(a <= b for a, b in old)
+                and window_start <= old[0][0]
+                and old[0][0] + .16 <= old[2][0] + 1e-6
+                and old[2][1] - old[2][0] >= .16 - 1e-6
+                and old[0][1] <= old[1][0] + .08
+                and old[1][1] <= old[2][0] + .08
+                and not same_identity(prefix[keep - 3], prefix[keep - 1])):
+            hits = []
+            for i in range(2, len(window_words)):
+                spans = absolute[i - 2:i + 1]
+                if (any(window_confs[j] < confidence_threshold for j in (i - 2, i))
+                        or not all(same_identity(window_words[j], prefix[k])
+                                   for j, k in ((i - 2, keep - 3), (i, keep - 1)))
+                        or any(abs(spans[k][0] - old[k][0]) > .08 + 1e-6 for k in (0, 2))
+                        or spans[0][0] + .16 > spans[2][0] + 1e-6
+                        or any(max(spans[k][0], old[k][0]) > min(spans[k][1] + .08, old[k][1] + .08) for k in (0, 2))
+                        or spans[0][1] > spans[1][0] + .08
+                        or spans[1][1] > spans[2][0] + .08
+                        or spans[2][1] + .08 > window_start + window_seconds - right_context_seconds):
+                    continue
+                if any(j not in (i - 2, i) and window_confs[j] >= confidence_threshold
+                       and any(abs(bounds[0] - spans[k][0]) <= .08 + 1e-6 for k in (0, 2))
+                       for j, bounds in enumerate(absolute)):
+                    continue
+                hits.append(i)
+            if len(hits) == 1:
+                overlap_end = max(overlap_end, hits[0] + 1)
     fresh = [
         index for index, (_, end) in enumerate(absolute)
         if index >= overlap_end and end > consumed_end - .08
