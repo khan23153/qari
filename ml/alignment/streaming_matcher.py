@@ -275,6 +275,21 @@ class StreamingMatcher:
                 and (not self._known_error_words
                      or hypothesis in self._known_error_words)):
             return False
+        # An unknown emphasis spelling may still identify a different known
+        # word: native السمد represents الصمد, not the equally close الحمد.
+        # Consult the complete Quran vocabulary, never the selected reference,
+        # before permitting generic edit-distance or phonetic tolerance.
+        if self._known_error_words:
+            identities = set()
+            for index, letter in enumerate(hypothesis):
+                for pair in _EMPHATIC_PAIRS:
+                    if letter in pair:
+                        replacement = next(value for value in pair if value != letter)
+                        candidate = hypothesis[:index] + replacement + hypothesis[index + 1:]
+                        if candidate in self._known_error_words:
+                            identities.add(self._word_aliases.get(candidate, candidate))
+            if identities and identities != {reference}:
+                return False
         # Unknown ASR spellings may omit a Quranic alef (صرط/صراط,
         # الرحمن/الرحمان); retain this tolerance without merging known words.
         if _equal_modulo_one_alef(hypothesis, reference):
