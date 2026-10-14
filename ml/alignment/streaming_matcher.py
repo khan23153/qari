@@ -372,6 +372,42 @@ class StreamingMatcher:
         self._live_hyp_indices[index] = slot
         return True
 
+    def recover_native_anchor(self, index, slot, words, confidences) -> bool:
+        """Resume at two independently timed anchors inside the existing reach.
+
+        The session establishes two-view native PCM provenance. Unrecognized
+        intervening words remain unconfirmed; recovery never declares them errors.
+        """
+        import math
+        ceiling = min(len(self.reference), self._cursor + LIVE_SEARCH_REACH_WIDE,
+                      self._ayah_ceiling(self._cursor, len(self.reference)))
+        identity = lambda word: self._word_aliases.get(word, word)
+        if (self._cursor <= 0 or self._stall_passes < LIVE_LOW_CONF_STREAK
+                or self._resolved.get(self._cursor - 1) != WordStatus.MATCHED
+                or not self._cursor < index < ceiling - 1
+                or not self._hyp_cursor <= slot < min(len(words), len(confidences)) - 1
+                or identity(words[slot]) == identity(words[slot + 1])):
+            return False
+        for offset in (0, 1):
+            if (identity(words[slot + offset]) != identity(self.reference[index + offset])
+                    or not math.isfinite(confidences[slot + offset])
+                    or not self.live_confidence_threshold <= confidences[slot + offset] <= 1
+                    or index + offset in self._resolved):
+                return False
+        for missed in range(self._cursor, index):
+            self._resolved_states.append(WordState(missed, self.reference[missed], WordStatus.SKIPPED, '', 0.))
+            self._resolved[missed] = WordStatus.SKIPPED
+        for offset in (0, 1):
+            target, source = index + offset, slot + offset
+            self._resolved_states.append(WordState(target, self.reference[target], WordStatus.MATCHED,
+                words[source], confidences[source]))
+            self._resolved[target] = WordStatus.MATCHED
+            self._live_hyp_indices[target] = source
+        self._cursor = index + 2
+        self._hyp_cursor = slot + 2
+        self._stall_passes = 0
+        return True
+
     @staticmethod
     def _strip_article(word: str) -> str:
         return word[2:] if len(word) > 4 and word.startswith("ال") else word

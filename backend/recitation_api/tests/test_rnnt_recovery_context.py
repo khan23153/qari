@@ -14,6 +14,12 @@ def test_ordinary_window_is_unchanged_without_unresolved_evidence(session):
 def test_recent_native_error_gets_bounded_grid_aligned_context(session):
  assert session._select_audio_window_start(round(20.3*16000),round(12.8*16000),early=False,force=False)==0
 
+def test_correcting_one_word_does_not_cut_context_before_the_next_word(session):
+ assert session._select_audio_window_start(10*16000,round(2.5*16000),early=False,force=False)==0
+ session._matcher._delegate._resolved_states=[]
+ assert session._select_audio_window_start(11*16000,round(3.5*16000),early=False,force=False)==0
+ assert session._select_audio_window_start(40*16000,round(32.5*16000),early=False,force=False)==round(32.5*16000)
+
 def test_stale_error_does_not_make_later_windows_expensive(session):
  assert session._select_audio_window_start(40*16000,round(32.5*16000),early=False,force=False)==round(32.5*16000)
 

@@ -173,6 +173,19 @@ class _ConservativeLiveMatcher:
             confidences,
         )
 
+    def recover_native_anchor(self, index, slot, words, confidences):
+        delegate = self._delegate
+        saved = delegate.reference
+        delegate.reference = self.reference[:max(0, int(self.max_live_words))]
+        try:
+            recovered = delegate.recover_native_anchor(index, slot, words, confidences)
+        finally:
+            delegate.reference = saved
+        if recovered:
+            self._cursor, self._hyp_cursor = delegate._cursor, delegate._hyp_cursor
+            self._states = list(delegate._resolved_states)
+        return recovered
+
     def finalize_independent(self, hypothesis_words, confidences):
         """Combine confirmed live states with an independently decoded recording.
 

@@ -866,6 +866,7 @@ class StreamingRecitationSession:
         self._pending_error_revisions: dict[int, tuple[str, int, int]] = {}
         self._pending_gap_revisions: dict[int, tuple[int, float, int, int, tuple]] = {}
         self._last_native_view = None
+        self._pending_native_reanchor = None
         self._pending_error_events: dict[int, tuple[str, int, int]] = {}
         self._confirmed_native_errors: set[int] = set()
         self._last_hypothesis: list[str] = []
@@ -1203,6 +1204,7 @@ class StreamingRecitationSession:
                     self._pending_error_revisions.clear()
                     self._pending_gap_revisions.clear()
                     self._last_native_view = None
+                    self._pending_native_reanchor = None
                     self._pending_error_events.clear()
                     logger.error(
                         "stream.transcribe_failed",
@@ -1346,6 +1348,7 @@ class StreamingRecitationSession:
                     self._pending_error_revisions.clear()
                     self._pending_gap_revisions.clear()
                     self._last_native_view = None
+                    self._pending_native_reanchor = None
                     self._pending_error_events.clear()
                     logger.error(
                         "stream.transcribe_failed",
@@ -1444,12 +1447,14 @@ class StreamingRecitationSession:
                         self._pending_error_revisions.clear()
                         self._pending_gap_revisions.clear()
                         self._last_native_view = None
+                        self._pending_native_reanchor = None
                         self._pending_error_events.clear()
                         return []
                     if window_timings is None:
                         self._pending_error_revisions.clear()
                         self._pending_gap_revisions.clear()
                         self._last_native_view = None
+                        self._pending_native_reanchor = None
                         self._pending_error_events.clear()
                         logger.error("stream.transcribe_failed", session_id=self.session_id,
                                      error="Timed recognition lost emission metadata")
@@ -1524,6 +1529,7 @@ class StreamingRecitationSession:
                         self._pending_error_revisions.clear()
                         self._pending_gap_revisions.clear()
                         self._last_native_view = None
+                        self._pending_native_reanchor = None
                         self._pending_error_events.clear()
                         logger.error("stream.transcribe_failed", session_id=self.session_id, error=str(exc))
                         return []
@@ -1561,6 +1567,11 @@ class StreamingRecitationSession:
             states = self._matcher.evaluate(
                 self._hypothesis, self._hypothesis_confs
             )
+            if int(getattr(self._matcher, '_cursor', 0)) == _cursor_before:
+                if self._recover_supported_native_anchor(force=force):
+                    states = list(self._matcher._states)
+            else:
+                self._pending_native_reanchor = None
             consumed = int(getattr(self._matcher, "_hyp_cursor", 0))
             if 0 < consumed <= len(self._hypothesis_timings):
                 self._consumed_audio_end = max(
@@ -1579,12 +1590,83 @@ class StreamingRecitationSession:
                 self._confirm_timed_error_events(right_context_seconds=0.0 if force else LIVE_RIGHT_CONTEXT_SEC)
             return self._diff_events(states)
 
+    def _recover_supported_native_anchor(self, *, force=False):
+        """Two fresh, unique timed word pairs may recover inside bounded reach."""
+        from ml.alignment.streaming_matcher import LIVE_SEARCH_REACH_WIDE, LIVE_LOW_CONF_STREAK
+        view = self._last_native_view
+        recover = getattr(self._matcher, 'recover_native_anchor', None)
+        d = getattr(self._matcher, '_delegate', None)
+        if (view is None or recover is None or d is None
+                or _live_asr_engine() != 'fastconformer_rnnt'
+                or d._cursor <= 0 or d._stall_passes < LIVE_LOW_CONF_STREAK):
+            self._pending_native_reanchor = None
+            return False
+        start, endpoint, words, scores, times = view
+        threshold, tolerance = d.live_confidence_threshold, .08 + 1e-6
+        identity = lambda word: d._word_aliases.get(word, word)
+        ceiling = min(len(d.reference), int(self._matcher.max_live_words),
+            d._cursor + LIVE_SEARCH_REACH_WIDE, d._ayah_ceiling(d._cursor, len(d.reference)))
+        absolute = [(a + start / self.sample_rate, b + start / self.sample_rate) for a,b in times]
+        candidates = []
+        for i in range(len(words) - 1):
+            a,b = absolute[i]; c,e = absolute[i + 1]
+            pair = tuple(identity(w) for w in words[i:i+2])
+            if (min(scores[i:i+2]) < threshold or pair[0] == pair[1]
+                    or a <= self._consumed_audio_end + tolerance or c - a < .16 - 1e-6
+                    or b > c + tolerance
+                    or e + .08 > endpoint / self.sample_rate - (0. if force else LIVE_RIGHT_CONTEXT_SEC)
+                    or any(j not in (i,i+1) and scores[j] >= threshold
+                           and (abs(span[0]-a) <= tolerance or abs(span[0]-c) <= tolerance)
+                           for j,span in enumerate(absolute))):
+                continue
+            # A growing last-word span must not recycle consumed speech as a
+            # new anchor. Apply the existing native revision drift exclusion to
+            # either same-identity consumed occurrence, including zero spans.
+            if any(identity(self._hypothesis[j]) == pair[k]
+                   and max(self._hypothesis_timings[j][0], absolute[i+k][0])
+                       <= min(self._hypothesis_timings[j][1] + .24 + 1e-6,
+                              absolute[i+k][1] + .24 + 1e-6)
+                   for j in range(min(d._hyp_cursor,len(self._hypothesis_timings)))
+                   for k in (0,1)):
+                continue
+            # Include the current position when establishing uniqueness, even
+            # though only a later pair can recover a recognition gap.
+            for index in range(d._cursor, ceiling - 1):
+                if pair != tuple(identity(w) for w in d.reference[index:index+2]):
+                    continue
+                for slot in range(d._hyp_cursor, min(len(self._hypothesis),len(self._hypothesis_timings)) - 1):
+                    if (tuple(identity(w) for w in self._hypothesis[slot:slot+2]) == pair
+                            and min(self._hypothesis_confs[slot:slot+2]) >= threshold
+                            and abs(self._hypothesis_timings[slot][0]-a) <= tolerance
+                            and abs(self._hypothesis_timings[slot+1][0]-c) <= tolerance):
+                        candidates.append((index,slot,pair,a,c))
+        if len(candidates) != 1 or candidates[0][0] == d._cursor:
+            self._pending_native_reanchor = None
+            return False
+        index,slot,pair,a,c = candidates[0]
+        previous = getattr(self, '_pending_native_reanchor', None)
+        count = 1
+        if (previous and previous[:3] == (d._cursor,index,pair)
+                and abs(a-previous[3]) <= tolerance and abs(c-previous[4]) <= tolerance):
+            if endpoint <= previous[5]:
+                return False
+            count = previous[6] + 1
+        self._pending_native_reanchor = (d._cursor,index,pair,a,c,endpoint,count)
+        if count >= 2 and recover(index,slot,self._hypothesis,self._hypothesis_confs):
+            self._pending_native_reanchor = None
+            return True
+        return False
+
     def _select_audio_window_start(self, total, default_start, *, early, force):
         """Recover recent native uncertainty with at most 21 seconds of context."""
         import math
         if early or settings.ml_use_stub or self._explicit_transcriber is not None or _live_asr_engine() != "fastconformer_rnnt":
             return default_start
-        recover = force
+        remembered = getattr(self, '_recent_native_uncertainty_begin', None)
+        recover = force or (
+            remembered is not None
+            and max(0., total / self.sample_rate - 20.) <= remembered <= total / self.sample_rate
+        )
         delegate = getattr(self._matcher, "_delegate", self._matcher)
         slots = getattr(delegate, "_live_hyp_indices", {})
         for state in getattr(delegate, "_resolved_states", []):
@@ -1595,6 +1677,10 @@ class StreamingRecitationSession:
                 begin = self._hypothesis_timings[slot][0]
                 if math.isfinite(begin) and max(0., total / self.sample_rate - 20.) <= begin <= total / self.sample_rate:
                     recover = True
+                    # Resolving an error must not immediately change the next
+                    # word's frontend context. Retain it only while this native
+                    # uncertainty is inside the existing 20-second horizon.
+                    self._recent_native_uncertainty_begin = begin
         if not recover:
             return default_start
         # A stable absolute PCM grid avoids moving the recognizer's frontend
@@ -1682,8 +1768,53 @@ class StreamingRecitationSession:
             self._pending_error_revisions.clear()
             self._pending_gap_revisions.clear()
             self._last_native_view = None
+            self._pending_native_reanchor = None
             self._pending_error_events.clear()
             return
+
+        def bounded_prefix_span(index, i, slot, old_begin, old_end, anchor_begin):
+            # A one-token error may omit a prefix: its sole emission then lies
+            # INSIDE the corrected multi-token word, not at its first frame.
+            # Identify that same occurrence using BOTH already matched neighbors.
+            # Retain the .08s frame tolerance; compensate only the common frame
+            # origin measured from the left neighbor, never an arbitrary drift.
+            left = states.get(index - 1)
+            left_slot = slots.get(index - 1)
+            if (i < 1 or abs(old_end - old_begin) > 1e-6
+                    or left is None or left.status != WordStatus.MATCHED
+                    or not left.spoken or not math.isfinite(left.confidence)
+                    or left.confidence < threshold or left_slot != slot - 1
+                    or not 0 <= left_slot < len(self._hypothesis_timings)
+                    or self._hypothesis[left_slot] != left.spoken
+                    or window_confs[i - 1] < threshold
+                    or _normalize(window_words[i - 1]) != _normalize(left.spoken)
+                    or _normalize(window_words[i + 1]) != _normalize(states[index + 1].spoken)
+                    or len({_normalize(window_words[j]) for j in (i - 1, i, i + 1)}) != 3):
+                return False
+            left_begin, left_end = self._hypothesis_timings[left_slot]
+            new_left_begin, new_left_end = absolute[i - 1]
+            begin, end = absolute[i]
+            next_begin, _ = absolute[i + 1]
+            shift = new_left_begin - left_begin
+            if (not all(math.isfinite(v) for v in (left_begin, left_end))
+                    or not window_start <= left_begin <= left_end
+                    or left_end + .08 > old_begin + 1e-6
+                    or abs(shift) > tolerance
+                    # Subtracting two float32 emission bounds accumulates a few
+                    # microseconds of rounding at long recording offsets.
+                    or abs(new_left_end - shift - left_end) > .08 + 1e-5
+                    or abs(next_begin - shift - anchor_begin) > tolerance
+                    or end - begin < .16 - 1e-6
+                    or not begin - shift <= old_begin <= end - shift
+                    or new_left_end + .08 > begin + 1e-6
+                    or end + .08 > next_begin + 1e-6):
+                return False
+            return not any(
+                j not in (i - 1, i, i + 1) and window_confs[j] >= threshold
+                and any(abs(bounds[0] - absolute[k][0]) <= tolerance
+                        for k in (i - 1, i, i + 1))
+                for j, bounds in enumerate(absolute)
+            )
 
         eligible = set()
         for index, state in states.items():
@@ -1712,13 +1843,18 @@ class StreamingRecitationSession:
                 if (window_confs[i] < threshold or window_confs[i + 1] < threshold
                         or not delegate._is_match(window_words[i], state.expected)
                         or not delegate._is_match(window_words[i + 1], anchor.expected)
-                        or abs(begin - old_begin) > tolerance
-                        or abs(next_begin - anchor_begin) > tolerance
-                        or max(begin, old_begin) > min(end + .08, old_end + .08)
                         or begin + .08 > next_begin + 1e-6
                         or end > next_begin + tolerance
                         or (right_context_seconds > 0
                             and max(end, next_end) + .08 > window_start + window_seconds - right_context_seconds)):
+                    continue
+                same_first_frame = (
+                    abs(begin - old_begin) <= tolerance
+                    and abs(next_begin - anchor_begin) <= tolerance
+                    and max(begin, old_begin) <= min(end + .08, old_end + .08)
+                )
+                if not same_first_frame and not bounded_prefix_span(
+                        index, i, slot, old_begin, old_end, anchor_begin):
                     continue
                 # A second strong word on either identifying emission frame
                 # makes the audio occurrence ambiguous, even if its text agrees.
@@ -1781,6 +1917,7 @@ class StreamingRecitationSession:
         except (ValueError, TypeError):
             self._pending_gap_revisions.clear()
             self._last_native_view = None
+            self._pending_native_reanchor = None
             self._pending_error_events.clear()
             return
         eligible = set()
