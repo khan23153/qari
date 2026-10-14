@@ -190,6 +190,13 @@ class StreamingMatcher:
             frozenset(known_error_words) if known_error_words is not None else None
         )
         self._word_aliases = dict(word_aliases or {})
+        # Final review may slice the active reference after opening alignment.
+        # Keep complete selected identities for ambiguity checks and its offset
+        # for the existing global ayah coordinates.
+        self._selected_reference_identities = tuple(
+            self._word_aliases.get(word, word) for word in self.reference
+        )
+        self._final_reference_offset = 0
         self.match_threshold = match_threshold
         self.live_confidence_threshold = max(0.0, min(1.0, live_confidence_threshold))
         self.lookahead = max(0, lookahead)
@@ -710,6 +717,42 @@ class StreamingMatcher:
     # ------------------------------------------------------------------
     # Final review
     # ------------------------------------------------------------------
+    def _final_phrase_start(self, ref_index, hyp_index, words, confidences):
+        """Corroborate one bounded final position; never commit a phrase here."""
+        import math
+
+        size = 4
+        if hyp_index + size > len(words):
+            return None
+        identity = lambda word: self._word_aliases.get(word, word)
+        phrase = tuple(identity(word) for word in words[hyp_index:hyp_index + size])
+        if len(set(phrase)) != size:
+            return None
+        if confidences is not None and any(
+            slot >= len(confidences)
+            or not math.isfinite(float(confidences[slot]))
+            or not self.live_confidence_threshold <= float(confidences[slot]) <= 1
+            for slot in range(hyp_index, hyp_index + size)
+        ):
+            return None
+        selected = self._selected_reference_identities
+        if sum(selected[start:start + size] == phrase
+               for start in range(len(selected) - size + 1)) != 1:
+            return None
+        offset = self._final_reference_offset
+        ayah_end = self._ayah_ceiling(ref_index + offset, len(self.reference) + offset) - offset
+        # The first committed target stays inside the original exclusive
+        # eight-word ceiling. The four native words corroborate its identity;
+        # they may extend beyond that word ceiling, but not the ayah/speech
+        # limit. Subsequent words still use ordinary one-word final alignment.
+        target_end = min(ref_index + LIVE_SEARCH_REACH_WIDE, ayah_end, len(self.reference))
+        for target in range(ref_index + 1, target_end):
+            if target + size > min(ayah_end, len(self.reference)):
+                continue
+            if tuple(identity(word) for word in self.reference[target:target + size]) == phrase:
+                return target
+        return None
+
     def _evaluate_full(
         self,
         hypothesis_words: list[str],
@@ -819,6 +862,17 @@ class StreamingMatcher:
                 ))
                 i += 1
                 j += 1
+                continue
+
+            # Preserve every supported ordinary continuation above before
+            # consulting a unique stronger phrase after an alignment stall.
+            recovery = self._final_phrase_start(i, j, hypothesis_words, confidences)
+            if recovery is not None:
+                for index in range(i, recovery):
+                    self._resolved_states.append(
+                        WordState(index, self.reference[index], WordStatus.SKIPPED, '', 0.0)
+                    )
+                i = recovery
                 continue
 
             if self._known_error_words is None or spoken in self._known_error_words:

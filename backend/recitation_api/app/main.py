@@ -251,6 +251,7 @@ class _ConservativeLiveMatcher:
 
         if anchor is not None:
             ref_start, hyp_start = anchor
+            delegate._final_reference_offset = ref_start
             delegate.reference = delegate.reference[ref_start:]
             fresh_states = delegate.finalize(
                 hypothesis_words[hyp_start:], confidences[hyp_start:],
