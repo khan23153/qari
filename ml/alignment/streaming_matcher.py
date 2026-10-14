@@ -430,6 +430,8 @@ class StreamingMatcher:
         self,
         hypothesis_words: list[str],
         confidences: Optional[list[float]] = None,
+        *,
+        _recover_opening: bool = False,
     ) -> list[WordState]:
         """Align the recent ASR tokens to a local window of reference words.
 
@@ -500,6 +502,36 @@ class StreamingMatcher:
                 hyp[j], ref_win[i]
             )
 
+        if anchor == 0 and _recover_opening:
+            # An invocation is outside the selected reference. Once its first
+            # word is independently recognized with an exact corpus identity,
+            # do not make it pay for all preceding invocation/noise tokens.
+            # Preserve original hypothesis slots for native PCM provenance.
+            first = self._word_aliases.get(ref_win[0], ref_win[0])
+            for j, word in enumerate(hyp):
+                if (self.live_confidence_threshold <= confidence(j) <= 1
+                        and self._word_aliases.get(word, word) == first):
+                    hyp_start += j
+                    hyp = hyp[j:]
+                    k = len(hyp)
+                    break
+
+        def recover_stalled_opening() -> Optional[list[WordState]]:
+            # Preserve the ordinary DP and its adjacent opening-pair anchor.
+            # Retry only when it cannot establish a valid starting position.
+            if anchor != 0 or _recover_opening:
+                return None
+            first = self._word_aliases.get(ref_win[0], ref_win[0])
+            if not any(
+                j > 0 and self.live_confidence_threshold <= confidence(j) <= 1
+                and self._word_aliases.get(word, word) == first
+                for j, word in enumerate(hyp)
+            ):
+                return None
+            return self._evaluate_live(
+                hypothesis_words, confidences, _recover_opening=True
+            )
+
         NEG = float("-inf")
         dp = [[NEG] * (k + 1) for _ in range(m + 1)]
         dp[0][0] = 0.0
@@ -529,6 +561,9 @@ class StreamingMatcher:
                     best = row[j]
                     best_i, best_j = i, j
         if best <= 0.0:
+            recovered = recover_stalled_opening()
+            if recovered is not None:
+                return recovered
             self._stall_passes += 1
             return list(self._resolved_states)
 
@@ -563,6 +598,9 @@ class StreamingMatcher:
         if last_match_i < 0:
             # Heard something, but nothing that confidently anchors to this
             # window: hold position (the next pass re-aligns with fresh audio).
+            recovered = recover_stalled_opening()
+            if recovered is not None:
+                return recovered
             self._stall_passes += 1
             return list(self._resolved_states)
 
@@ -580,6 +618,9 @@ class StreamingMatcher:
                 in zip(matched_pairs, matched_pairs[1:])
             )
             if not adjacent_start:
+                recovered = recover_stalled_opening()
+                if recovered is not None:
+                    return recovered
                 self._stall_passes += 1
                 return list(self._resolved_states)
 
