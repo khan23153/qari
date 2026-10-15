@@ -96,3 +96,41 @@ def test_matching_or_expected_reference_text_cannot_supply_training_label(row):
 def test_pcd_transcript_requires_nonempty_actual_text(text):
     with pytest.raises(ValueError, match="transcript"):
         subject().prepare_pcd_transcript(text)
+
+
+def test_verified_imlai_can_represent_known_dagger_words_without_losing_vowels():
+    variants = subject().verified_imlai_transcript_variants(
+        "هَٰذَا ذَٰلِكَ فَأَبَىٰ", "هذا ذلك فأبى",
+    )
+    assert "هَذَا ذَلِكَ فَأَبَى" in variants
+    assert "هَٰذَا ذَٰلِكَ فَأَبَى" in variants
+    assert all("فَآوَى" not in text for text in variants)
+
+
+@pytest.mark.parametrize("full,clean", [
+    ("فَأَبَى", "فآوى"),
+    ("هَٰرُونَ", "هارون"),
+    ("مَا وَدَّعَكَ", "ما"),
+])
+def test_verified_imlai_refuses_a_changed_letter_or_word_sequence(full, clean):
+    with pytest.raises(ValueError, match="letters|words"):
+        subject().verified_imlai_transcript_variants(full, clean)
+
+
+def test_verified_imlai_requires_a_clean_independent_edition():
+    with pytest.raises(ValueError, match="clean"):
+        subject().verified_imlai_transcript_variants("هَٰذَا", "هَذَا")
+
+
+def test_verified_imlai_preserves_small_letters_hamza_and_final_maqsura():
+    variants = subject().verified_imlai_transcript_variants(
+        "لَهُۥ بِهِۦ فَآوَى", "لهۥ بهۦ فآوى",
+    )
+    assert all("ۥ" in text and "ۦ" in text and "آ" in text and "ى" in text
+               for text in variants)
+
+
+def test_verified_imlai_does_not_duplicate_already_supported_text():
+    assert subject().verified_imlai_transcript_variants("فَآوَى", "فآوى") == (
+        "فَآوَى", "فآوى",
+    )

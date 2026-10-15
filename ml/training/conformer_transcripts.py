@@ -55,3 +55,36 @@ def pcd_transcript_variants(published_text: str) -> tuple[str, ...]:
     full = prepare_pcd_transcript(published_text)
     plain = "".join(char for char in full if not 0x064B <= ord(char) <= 0x0652)
     return (full,) if plain == full else (full, plain)
+
+
+def verified_imlai_transcript_variants(
+    published_text: str, clean_published_text: str,
+) -> tuple[str, ...]:
+    """Add an Imla'i vowel spelling backed by a separate published edition.
+
+    Some ordinary Imla'i words, such as هذا and ذلك, print a dagger alif
+    as a vowel annotation. The PCD tokenizer cannot represent that mark.
+    Omission is allowed only when the clean edition independently confirms
+    exactly the same letters in every word. This is not a general conversion:
+    هٰرون cannot become هرون when the clean edition spells it هارون.
+
+    Other vowels, hamza/madda, final ى and small Arabic letters stay intact.
+    Neither model predictions nor matcher/reference keys provide this proof.
+    Callers must separately verify the editions' provenance and verse binding.
+    """
+    full = prepare_pcd_transcript(published_text)
+    clean = prepare_pcd_transcript(clean_published_text)
+    if any(not char.isspace() and not unicodedata.category(char).startswith("L")
+           for char in clean):
+        raise ValueError("An independently published clean edition is required")
+    full_words, clean_words = full.split(), clean.split()
+    if len(full_words) != len(clean_words):
+        raise ValueError("Published editions must contain the same words")
+    for word, clean_word in zip(full_words, clean_words):
+        letters = "".join(char for char in word
+                          if unicodedata.category(char).startswith("L"))
+        if letters != clean_word:
+            raise ValueError("Published editions must preserve every word's letters")
+    variants = pcd_transcript_variants(full)
+    verified_spelling = full.replace("\u0670", "")
+    return tuple(dict.fromkeys(variants + pcd_transcript_variants(verified_spelling)))
