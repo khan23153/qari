@@ -171,6 +171,11 @@ SILENCE_RMS_THRESHOLD = 0.006
 # live tracking problem, otherwise it floods the logs every ~2s per session.
 STREAM_DEBUG = os.environ.get("QARI_STREAM_DEBUG", "").lower() in ("1", "true", "yes")
 
+# Preserve the established review of short recordings. Full-surah RNNT
+# attention otherwise grows without bound and can exhaust the API's memory.
+FINAL_RECORDING_SINGLE_PASS_SEC = 240
+FINAL_RECORDING_CHUNK_SEC = 30
+
 # Live evidence policy — WHICH decode feeds the live word reveal.
 #
 #   "tier2" (default): the INDEPENDENT, unprompted base decode is the live
@@ -523,6 +528,32 @@ def _invoke_transcriber(transcriber, audio, sr: int, prompt: str):
     return transcriber(audio, sr)
 
 
+def _independent_recording_transcriber(audio, sr: int) -> tuple[list[str], list[float]]:
+    """Review long RNNT recordings without an unbounded encoder allocation.
+
+    Each sample belongs to exactly one native decode. No overlap stitching,
+    reference text, or synthetic confidence can become final speech evidence.
+    Boundary words may remain uncertain; confirmed live evidence is retained
+    separately by the final matcher. Whisper already manages its own chunks.
+    """
+    if _live_asr_engine() != "fastconformer_rnnt" or len(audio) <= FINAL_RECORDING_SINGLE_PASS_SEC * sr:
+        return _independent_transcriber(audio, sr)
+    if sr != 16000:
+        raise ValueError("RNNT recording review requires 16000 Hz mono PCM")
+    words, confidences = [], []
+    chunk_samples = FINAL_RECORDING_CHUNK_SEC * sr
+    logger.info("stream.recording_review_chunked", seconds=round(len(audio) / sr, 3),
+                chunk_seconds=FINAL_RECORDING_CHUNK_SEC)
+    for start in range(0, len(audio), chunk_samples):
+        chunk = audio[start:start + chunk_samples]
+        if _rms_energy(chunk) < SILENCE_RMS_THRESHOLD:
+            continue
+        native_words, native_confidences = _independent_transcriber(chunk, sr)
+        words.extend(native_words)
+        confidences.extend(native_confidences)
+    return words, confidences
+
+
 def _independent_transcriber(audio, sr: int) -> tuple[list[str], list[float]]:
     """UNPROMPTED decode with the independent base model — the honest witness.
 
@@ -689,7 +720,7 @@ def _rms_energy(samples: list[float]) -> float:
     Used to detect silence: near-silent mic audio (room tone / the user not
     reciting) has a very low RMS, while actual recitation is markedly higher.
     """
-    if not samples:
+    if len(samples) == 0:
         return 0.0
     return (sum(s * s for s in samples) / len(samples)) ** 0.5
 
@@ -2171,7 +2202,7 @@ class StreamingRecitationSession:
                 audio = self._decode_float()
                 if _rms_energy(audio) >= SILENCE_RMS_THRESHOLD:
                     words, confs = await asyncio.to_thread(
-                        _independent_transcriber, audio, self.sample_rate
+                        _independent_recording_transcriber, audio, self.sample_rate
                     )
                     final_words, final_confs = list(words), list(confs)
             except Exception as exc:  # pragma: no cover - model failures
