@@ -379,6 +379,28 @@ class StreamingMatcher:
         self._live_hyp_indices[index] = slot
         return True
 
+    def repair_native_word(self, index: int, spoken: str, confidence: float) -> bool:
+        """Session proves two complete native triples at the original occurrence.
+
+        Keep the cumulative hypothesis and its ownership unchanged. A missing
+        token has no old slot to invent; native provenance is held separately.
+        """
+        import math
+        if (not 0 < index < min(self._cursor, len(self.reference) - 1)
+                or self._resolved.get(index) not in (WordStatus.ERROR, WordStatus.SKIPPED)
+                or self._resolved.get(index - 1) != WordStatus.MATCHED
+                or self._resolved.get(index + 1) != WordStatus.MATCHED
+                or not math.isfinite(confidence)
+                or not self.live_confidence_threshold <= confidence <= 1
+                or not self._is_match(spoken, self.reference[index])):
+            return False
+        state = next((value for value in self._resolved_states if value.index == index), None)
+        if state is None or state.status not in (WordStatus.ERROR, WordStatus.SKIPPED):
+            return False
+        state.status, state.spoken, state.confidence = WordStatus.MATCHED, spoken, confidence
+        self._resolved[index] = WordStatus.MATCHED
+        return True
+
     def recover_native_anchor(self, index, slot, words, confidences) -> bool:
         """Resume at two independently timed anchors inside the existing reach.
 
