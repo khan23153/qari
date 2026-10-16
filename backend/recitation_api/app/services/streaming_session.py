@@ -816,7 +816,9 @@ def _stitch_timed_hypothesis(
         previous_begin = prefix_times[keep - 1][0]
         for index, (begin, _) in enumerate(absolute):
             if (begin <= consumed_end + .08 + 1e-6
-                    and abs(begin - previous_begin) <= 1e-6
+                    # A growing past span may start one encoder frame earlier.
+                    # Allow float32 rounding, but never eat a later repetition.
+                    and previous_begin - .08 - 1e-5 <= begin <= previous_begin + 1e-5
                     and window_confs[index] >= confidence_threshold
                     and _normalize(window_words[index]) == _normalize(prefix[keep - 1])):
                 overlap_end = index + 1
@@ -954,6 +956,7 @@ class StreamingRecitationSession:
         self._pending_error_revisions: dict[int, tuple[str, int, int]] = {}
         self._pending_gap_revisions: dict[int, tuple[int, float, int, int, tuple]] = {}
         self._last_native_view = None
+        self._native_word_repairs: dict[int, dict] = {}
         self._pending_native_reanchor = None
         self._pending_error_events: dict[int, tuple[str, int, int]] = {}
         self._confirmed_native_errors: set[int] = set()
@@ -1602,10 +1605,12 @@ class StreamingRecitationSession:
                             right_context_seconds=0.0 if force else LIVE_RIGHT_CONTEXT_SEC,
                             endpoint_samples=start + len(audio),
                         )
-                        self._last_native_view = (
+                        native_view = (
                             start, start + len(audio), tuple(win_words),
                             tuple(win_confs), tuple(window_timings),
                         )
+                        self._repair_anchored_native_words(native_view)
+                        self._last_native_view = native_view
                         # Stitching validated the complete native window first.
                         # Copy only proven corrections into its retained prefix;
                         # fresh tokens, cursors and the consumed boundary stay put.
@@ -1750,6 +1755,12 @@ class StreamingRecitationSession:
         import math
         if early or settings.ml_use_stub or self._explicit_transcriber is not None or _live_asr_engine() != "fastconformer_rnnt":
             return default_start
+        # RNNT emissions advance by 80ms. A one-second recovery grid flips
+        # the encoder origin by half a frame on alternate seconds, changing
+        # decoded endings and making same-audio timing witnesses disagree.
+        # Use the recording's original encoder phase for ordinary views too.
+        grid = max(1, round(.08 * self.sample_rate))
+        default_start = (default_start // grid) * grid
         remembered = getattr(self, '_recent_native_uncertainty_begin', None)
         recover = force or (
             remembered is not None
@@ -1775,7 +1786,7 @@ class StreamingRecitationSession:
         # A stable absolute PCM grid avoids moving the recognizer's frontend
         # frame origin with every irregular packet. No reference text is used.
         nominal = max(0, total - 20 * self.sample_rate)
-        return (nominal // self.sample_rate) * self.sample_rate
+        return (nominal // grid) * grid
 
     def _confirm_timed_error_events(self, *, right_context_seconds=LIVE_RIGHT_CONTEXT_SEC):
         """Require two native audio views before surfacing a supported error."""
@@ -1820,6 +1831,62 @@ class StreamingRecitationSession:
                 self._confirmed_native_errors.add(state.index)
         for index in set(self._pending_error_events)-eligible:
             self._pending_error_events.pop(index,None)
+
+    def _repair_anchored_native_words(self, current) -> None:
+        """Confirm mature native evidence between two already tracked neighbors."""
+        from ml.alignment.native_evidence import prove_native_word_repair
+        from ml.alignment.streaming_matcher import WordStatus
+        import math
+
+        delegate = getattr(self._matcher, '_delegate', self._matcher)
+        repair = getattr(self._matcher, 'repair_native_word', None)
+        if (repair is None or self._last_native_view is None or self._is_stub
+                or EVIDENCE_POLICY != 'tier2' or _live_asr_engine() != 'fastconformer_rnnt'):
+            return
+        states = {state.index: state for state in getattr(delegate, '_resolved_states', [])}
+        slots = getattr(delegate, '_live_hyp_indices', {})
+        threshold = getattr(delegate, 'live_confidence_threshold', .55)
+        identity = lambda word: delegate._word_aliases.get(word, word)
+        for index, state in states.items():
+            before, after = states.get(index - 1), states.get(index + 1)
+            left, right = slots.get(index - 1), slots.get(index + 1)
+            if (state.status not in (WordStatus.SKIPPED, WordStatus.ERROR)
+                    or before is None or after is None
+                    or before.status != WordStatus.MATCHED or after.status != WordStatus.MATCHED
+                    or any(not anchor.spoken or not math.isfinite(anchor.confidence)
+                           or not threshold <= anchor.confidence <= 1 for anchor in (before, after))
+                    or left is None or right is None or not 0 <= left < right
+                    or right >= getattr(self._matcher, '_hyp_cursor', 0)
+                    or right >= min(len(self._hypothesis), len(self._hypothesis_timings))
+                    or self._hypothesis[left] != before.spoken or self._hypothesis[right] != after.spoken):
+                continue
+            evidence = prove_native_word_repair(
+                self._last_native_view, current,
+                expected=(before.expected, state.expected, after.expected),
+                before_span=self._hypothesis_timings[left], after_span=self._hypothesis_timings[right],
+                identity=identity, threshold=threshold, sample_rate=self.sample_rate,
+                total_samples=self._total_samples, right_context_seconds=LIVE_RIGHT_CONTEXT_SEC,
+            )
+            if evidence:
+                begin, end = evidence['spans'][1]
+                # Native audio already assigned to another confirmed word is
+                # unavailable, including earlier repairs without an old slot.
+                used = []
+                for other_index, other in states.items():
+                    if other_index in (index - 1, index, index + 1) or other.status != WordStatus.MATCHED:
+                        continue
+                    other_slot = slots.get(other_index)
+                    if other_slot is not None and 0 <= other_slot < len(self._hypothesis_timings):
+                        used.append(self._hypothesis_timings[other_slot])
+                    prior = self._native_word_repairs.get(other_index)
+                    if prior:
+                        used.append(prior['spans'][1])
+                if any(max(begin, a) <= min(end + .08, b + .08) + 1e-5 for a, b in used):
+                    continue
+            if evidence and repair(index, evidence['word'], evidence['confidence']):
+                self._native_word_repairs[index] = evidence
+                logger.info('stream.native_word_repaired', word_index=index,
+                            confidence=round(evidence['confidence'], 3), endpoints=evidence['endpoints'])
 
     def _revise_supported_timed_errors(
         self, window_words, window_confs, window_times, *, window_start,
