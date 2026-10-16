@@ -214,6 +214,7 @@ class LiveTranscriberUnavailable(RuntimeError):
 # numpy). The live stream only needs lightweight normalization + the pure-Python
 # StreamingMatcher; the full ASR engine is only used by the real transcriber.
 import re as _re
+import unicodedata as _unicodedata
 
 _HARAKAT = _re.compile(
     "[\u0618-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E8\u06EA-\u06ED]"
@@ -231,12 +232,20 @@ _MULTI_SPACE = _re.compile(r"\s+")
 def _normalize(text: str) -> str:
     if not text:
         return ""
+    # Establish word boundaries and ya variants before preserving identities.
+    text = "".join(" " if _unicodedata.category(c).startswith("P") else c
+                   for c in text).replace("ی", "ي")
     # At word end, maqsura already carries the long vowel. Preserve internal
     # carrier keys used by existing corpus aliases and dagger expansion elsewhere.
     text = _re.sub(
         r"ى([ـً-ٟ]*)ٰ(?=[ؘ-ًؚ-ٟۖ-ۭ]*(?:\s|$))",
         r"ى\1", text,
     )
+    # Protect only an ORIGINAL ya + final maqsura. Expanding small-high ya
+    # later can also produce يى (يُحْـِۧىَ); that is yuhyi, not yahya.
+    maqsura_tag = "\ue000"
+    text = _re.sub(r"(ي[ـؘ-ًؚ-ٟ]*)ى(?=[ـؘ-ًؚ-ٟۖ-ۭ]*(?:\s|$))",
+                   lambda match: match.group(1) + maqsura_tag, text)
     text = text.replace("ٰ", "ا").replace("ۧ", "ي").replace("۞", " ")
     text = _HARAKAT.sub("", text)
     text = _TATWEEL.sub("", text)
@@ -244,6 +253,7 @@ def _normalize(text: str) -> str:
         text = text.replace(variant, canonical)
     for variant, canonical in _YA.items():
         text = text.replace(variant, canonical)
+    text = text.replace(maqsura_tag, "ى")
     text = text.replace(_TA_MARBUTA, _HA)
     for variant, canonical in _HAMZA.items():
         text = text.replace(variant, canonical)
@@ -329,13 +339,25 @@ def _get_live_error_vocabulary() -> frozenset[str]:
 
 _live_word_alias_cache: Optional[tuple[object, dict[str, str]]] = None
 
+# Independently published Imla'i / Uthmani spellings, not model predictions.
+# Provenance and collision checks: docs/recitation-orthography.md.
+_PUBLISHED_WORD_SPELLINGS = (
+    ("نحيي", "نُحْىِ"),
+    ("يحيي", "يُحْىِ"),
+    ("شيئا", "شَيْـًٔا"),
+)
+# Independently attested vocatives only. Lossy normalized forms of يأمن or
+# يأكل also start with يا, but are verbs and cannot authorize such a join.
+_PUBLISHED_VOCATIVES = ("ياقوم", "ياليت", "ياحسرة", "ياويلنا", "يابني")
+
 
 def _get_live_word_aliases() -> dict[str, str]:
-    """Unambiguous legacy corpus spellings absent from canonical Quran keys.
+    """Unambiguous legacy spellings and explicit published spelling families.
 
     These compare reference/recognition text only; they never enter ASR. A key
-    that is itself a canonical Quran word (or has multiple targets) is not an
-    alias, so عليكم cannot become عليهم through this table.
+    that is itself a canonical Quran word (or has multiple targets) cannot
+    acquire a legacy alias. Only the separately verified published families
+    may unify canonical printed forms; عليكم cannot become عليهم here.
     """
     global _live_word_alias_cache
     try:
@@ -355,11 +377,20 @@ def _get_live_word_aliases() -> dict[str, str]:
                     canonical_words.add(canonical)
                 if legacy and canonical and legacy != canonical:
                     targets.setdefault(legacy, set()).add(canonical)
+        published = {_normalize(uthmani): _normalize(imlai)
+                     for imlai, uthmani in _PUBLISHED_WORD_SPELLINGS}
+        reserved = set(published) | set(published.values())
         aliases = {
             legacy: next(iter(candidates))
             for legacy, candidates in targets.items()
-            if legacy not in canonical_words and len(candidates) == 1
+            if legacy not in canonical_words and legacy not in reserved and len(candidates) == 1
         }
+        # Published spellings reserve their own identity ahead of lossy legacy
+        # keys: old يحيي on a Yahya bundle must not redirect actual yuhyi.
+        # Both printed forms are verified identities, including canonical
+        # يُحْـِۧىَ -> يحيي. Never redirect that key using an old Yahya bundle.
+        aliases.update({key: target for key, target in published.items()
+                        if key in canonical_words})
         _live_word_alias_cache = (store, aliases)
         return dict(aliases)
     except Exception as exc:
@@ -589,8 +620,34 @@ def _independent_transcriber(audio, sr: int) -> tuple[list[str], list[float]]:
                 out_timings.append(timings[index])
     if timings is not None:
         from ml.inference.transcript import TimedTranscript
-        return TimedTranscript(norm, out_confs, out_timings)
+        return _join_split_vocatives(TimedTranscript(norm, out_confs, out_timings))
     return norm, out_confs
+
+
+def _join_split_vocatives(transcript):
+    """Join native يا + word only when the global Quran corpus has that form.
+
+    Neither recognition nor this conversion receives the selected passage.
+    Keep the weaker component's native confidence and the complete time span.
+    Untimed decoders cannot supply evidence for this conversion.
+    """
+    from ml.inference.transcript import TimedTranscript
+
+    vocabulary = _get_live_error_vocabulary()
+    vocatives = {_normalize(word) for word in _PUBLISHED_VOCATIVES}
+    words, confidences, timings = [], [], []
+    for word, confidence, timing in zip(transcript.words, transcript.confidences, transcript.timings):
+        if (words and words[-1] == "يا" and "يا" + word in vocatives
+                and "يا" + word in vocabulary
+                and 0 <= timing[0] - timings[-1][1] <= .8 + 1e-6):
+            words[-1] += word
+            confidences[-1] = min(confidences[-1], confidence)
+            timings[-1] = (timings[-1][0], timing[1])
+        else:
+            words.append(word)
+            confidences.append(confidence)
+            timings.append(timing)
+    return TimedTranscript(words, confidences, timings)
 
 
 def _live_asr_engine() -> str:
