@@ -51,7 +51,7 @@ class MainActivity : FlutterActivity() {
                     // is invoked — BEFORE the service's own try/catch runs. Catch it
                     // and pipe it to the Flutter result so the app never hard-crashes.
                     try {
-                        MicForegroundService.start(this)
+                        MicForegroundService.start(this, call.argument<String>("capture_id"))
                         result.success(null)
                     } catch (e: Exception) {
                         MicStreamBridge.lastStatus = "foreground start error: " +

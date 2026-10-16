@@ -24,8 +24,8 @@ enum LiveWordStatus {
       case 'matched':
         return LiveWordStatus.matched;
       case 'error':
-        // ``error_skipped`` folds skip + mispronunciation into one bucket on
-        // the wire (blueprint spec) — mapped to [error] for the UI.
+      // ``error_skipped`` folds skip + mispronunciation into one bucket on
+      // the wire (blueprint spec) — mapped to [error] for the UI.
       case 'error_skipped':
       case 'skipped':
         return LiveWordStatus.error;
@@ -35,11 +35,19 @@ enum LiveWordStatus {
   }
 
   bool get isResolved => this != LiveWordStatus.pending;
-  bool get isMistake => this == LiveWordStatus.error || this == LiveWordStatus.skipped;
+  bool get isMistake =>
+      this == LiveWordStatus.error || this == LiveWordStatus.skipped;
 }
 
 /// Type of message received over the streaming recitation WebSocket.
-enum RecitationStreamEventType { ready, word, finalResult, error, pong, unknown }
+enum RecitationStreamEventType {
+  ready,
+  word,
+  finalResult,
+  error,
+  pong,
+  unknown
+}
 
 /// A single decoded message from the `/ws/recitation/stream` socket.
 class RecitationStreamEvent {
@@ -55,6 +63,7 @@ class RecitationStreamEvent {
   final String? expected;
   final String? spoken;
   final double confidence;
+  final bool evidenceConfirmed;
   final int? timestampMs;
 
   // final
@@ -72,10 +81,24 @@ class RecitationStreamEvent {
     this.expected,
     this.spoken,
     this.confidence = 1.0,
+    this.evidenceConfirmed = false,
     this.timestampMs,
     this.result,
     this.detail,
   });
+
+  /// An uncertain recognition gap may advance the cursor, but cannot turn a
+  /// word red. Matches retain the existing wire contract; spoken mistakes
+  /// require the server's explicit confirmation and the existing 0.55 floor.
+  LiveWordStatus get liveStatus {
+    if (status.isMistake &&
+        (!evidenceConfirmed ||
+            confidence < .55 ||
+            (spoken ?? '').trim().isEmpty)) {
+      return LiveWordStatus.pending;
+    }
+    return status;
+  }
 
   factory RecitationStreamEvent.fromJson(Map<String, dynamic> json) {
     final rawType = json['type'] as String?;
@@ -104,6 +127,7 @@ class RecitationStreamEvent {
           expected: json['expected'] as String?,
           spoken: json['spoken'] as String?,
           confidence: (json['confidence'] as num?)?.toDouble() ?? 1.0,
+          evidenceConfirmed: json['evidence_confirmed'] == true,
           timestampMs: (json['timestamp_ms'] as num?)?.toInt(),
         );
       case 'final':
@@ -150,9 +174,11 @@ class RecitationStreamEvent {
           detail: json['detail'] as String?,
         );
       case 'pong':
-        return const RecitationStreamEvent(type: RecitationStreamEventType.pong);
+        return const RecitationStreamEvent(
+            type: RecitationStreamEventType.pong);
       default:
-        return const RecitationStreamEvent(type: RecitationStreamEventType.unknown);
+        return const RecitationStreamEvent(
+            type: RecitationStreamEventType.unknown);
     }
   }
 }
@@ -173,8 +199,8 @@ class StreamWord {
     final index = rawId != null
         ? rawId.toInt() - 1
         : (rawIndex != null ? rawIndex.toInt() : 0);
-    final text =
-        (json['text_with_tashkeel'] as String?) ?? (json['text'] as String? ?? '');
+    final text = (json['text_with_tashkeel'] as String?) ??
+        (json['text'] as String? ?? '');
     return StreamWord(index: index, text: text);
   }
 }

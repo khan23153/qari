@@ -83,7 +83,7 @@ class MushafRevealView extends StatefulWidget {
   /// Called with the word index when a mistake is tapped (review mode only).
   final ValueChanged<int>? onMistakeTap;
 
-  /// Hifz reveals only confirmed words before review. Hidden glyphs retain
+  /// Hifz reveals confirmed words and mistakes before review. Hidden glyphs retain
   /// their printed positions; ayah medallions remain visible in every phase.
   final bool hideUnspoken;
 
@@ -518,13 +518,15 @@ class _MushafRevealViewState extends State<MushafRevealView> {
   Color get _markerInk =>
       widget.mushaf.isDark ? widget.mushaf.text : widget.mushaf.accent;
 
-  /// Live Hifz reveals confirmed words only. Review shows missed words and
+  /// Live Hifz reveals confirmed words and mistakes. Review shows missed words and
   /// mistakes; both phases retain exactly the same printed geometry.
   InlineSpan _wordSpan(int i, LiveWordViewState state, Brightness brightness) {
     final w = widget;
     final text = mushafDisplayText(w.words[i]);
-    final hidden =
-        !w.reviewMode && w.hideUnspoken && state != LiveWordViewState.correct;
+    final hidden = !w.reviewMode &&
+        w.hideUnspoken &&
+        (state == LiveWordViewState.unspoken ||
+            state == LiveWordViewState.active);
     final isMistake = !hidden && state == LiveWordViewState.mismatch;
     final isActive = state == LiveWordViewState.active;
     final isUnspoken = state == LiveWordViewState.unspoken;

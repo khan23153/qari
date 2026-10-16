@@ -42,6 +42,10 @@ logger = get_logger(__name__)
 
 # How many seconds of *new* audio to accumulate before re-transcribing.
 TRANSCRIBE_INTERVAL_SEC = 1.2
+# The pinned RNNT decoder finishes well within this interval on the VPS.
+# Keep the existing Whisper/stub cadence and all recognition guards unchanged.
+RNNT_TRANSCRIBE_INTERVAL_SEC = .9
+RNNT_STARTUP_INTERVAL_SEC = .6
 # --- Early first pass (2026-09-26): cut the first-word latency ---------------
 #
 # Measured decomposition of the ~2.1 s first-word latency on this 4-vCPU VPS:
@@ -144,6 +148,10 @@ HYPO_TAIL_CAP = 40
 # Max words of overlap to search when stitching a new window onto the cumulative
 # hypothesis (drops words the previous window already contributed).
 STITCH_MAX_OVERLAP_WORDS = 12
+# Three80ms RNNT frames of right context protect against a word predicted from
+# an unfinished suffix. In a real paced stream, 5.7s of عليكم was decoded as
+# عليهم(.794); the complete6.0s window corrected it to عليكم(.841).
+LIVE_RIGHT_CONTEXT_SEC = .24
 
 # --- Silence gating (fixes "ayah auto-completes while the user is silent") -----
 # When the user is quiet, the mic still streams low-level room noise and Whisper
@@ -162,6 +170,11 @@ SILENCE_RMS_THRESHOLD = 0.006
 # counter). Off by default — enable with QARI_STREAM_DEBUG=1 when diagnosing a
 # live tracking problem, otherwise it floods the logs every ~2s per session.
 STREAM_DEBUG = os.environ.get("QARI_STREAM_DEBUG", "").lower() in ("1", "true", "yes")
+
+# Preserve the established review of short recordings. Full-surah RNNT
+# attention otherwise grows without bound and can exhaust the API's memory.
+FINAL_RECORDING_SINGLE_PASS_SEC = 240
+FINAL_RECORDING_CHUNK_SEC = 30
 
 # Live evidence policy — WHICH decode feeds the live word reveal.
 #
@@ -196,11 +209,12 @@ class LiveTranscriberUnavailable(RuntimeError):
 # Reference resolution (expected normalized words for an ayah)
 # ---------------------------------------------------------------------------
 
-# Inlined Arabic normalizer (mirrors ml.inference.asr.normalize_arabic) so the
+# Lightweight live normalizer; dagger alef retains its spoken long vowel. The
 # streaming reference resolution does NOT import the heavy ASR module (torch /
 # numpy). The live stream only needs lightweight normalization + the pure-Python
 # StreamingMatcher; the full ASR engine is only used by the real transcriber.
 import re as _re
+import unicodedata as _unicodedata
 
 _HARAKAT = _re.compile(
     "[\u0618-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E8\u06EA-\u06ED]"
@@ -218,12 +232,28 @@ _MULTI_SPACE = _re.compile(r"\s+")
 def _normalize(text: str) -> str:
     if not text:
         return ""
+    # Establish word boundaries and ya variants before preserving identities.
+    text = "".join(" " if _unicodedata.category(c).startswith("P") else c
+                   for c in text).replace("ی", "ي")
+    # At word end, maqsura already carries the long vowel. Preserve internal
+    # carrier keys used by existing corpus aliases and dagger expansion elsewhere.
+    text = _re.sub(
+        r"ى([ـً-ٟ]*)ٰ(?=[ؘ-ًؚ-ٟۖ-ۭ]*(?:\s|$))",
+        r"ى\1", text,
+    )
+    # Protect only an ORIGINAL ya + final maqsura. Expanding small-high ya
+    # later can also produce يى (يُحْـِۧىَ); that is yuhyi, not yahya.
+    maqsura_tag = "\ue000"
+    text = _re.sub(r"(ي[ـؘ-ًؚ-ٟ]*)ى(?=[ـؘ-ًؚ-ٟۖ-ۭ]*(?:\s|$))",
+                   lambda match: match.group(1) + maqsura_tag, text)
+    text = text.replace("ٰ", "ا").replace("ۧ", "ي").replace("۞", " ")
     text = _HARAKAT.sub("", text)
     text = _TATWEEL.sub("", text)
     for variant, canonical in _ALEF.items():
         text = text.replace(variant, canonical)
     for variant, canonical in _YA.items():
         text = text.replace(variant, canonical)
+    text = text.replace(maqsura_tag, "ى")
     text = text.replace(_TA_MARBUTA, _HA)
     for variant, canonical in _HAMZA.items():
         text = text.replace(variant, canonical)
@@ -275,6 +305,99 @@ def _get_reference_store():
     return _reference_store_cache
 
 
+_live_error_vocab_cache: Optional[tuple[object, frozenset[str]]] = None
+
+
+def _get_live_error_vocabulary() -> frozenset[str]:
+    """Known words across the immutable corpus, used only to confirm errors.
+
+    Garbled ASR strings are recognition gaps, not proof of a spoken mistake.
+    This vocabulary never enters recognition or supplies words to the matcher.
+    """
+    global _live_error_vocab_cache
+    try:
+        store = _get_reference_store()
+        if _live_error_vocab_cache is not None and _live_error_vocab_cache[0] is store:
+            return _live_error_vocab_cache[1]
+        vocabulary: set[str] = set()
+        for key in store.list_ayahs():
+            ref = store.get(*key)
+            if ref is None:
+                continue
+            for word in ref.words:
+                vocabulary.add(_normalize(word.word))
+                text = word.text_with_tashkeel or ""
+                vocabulary.add(_normalize(text))
+        vocabulary.discard("")
+        frozen = frozenset(vocabulary)
+        _live_error_vocab_cache = (store, frozen)
+        return frozen
+    except Exception as exc:
+        logger.debug("stream.error_vocab_unavailable", error=type(exc).__name__)
+        return frozenset()
+
+
+_live_word_alias_cache: Optional[tuple[object, dict[str, str]]] = None
+
+# Independently published Imla'i / Uthmani spellings, not model predictions.
+# Provenance and collision checks: docs/recitation-orthography.md.
+_PUBLISHED_WORD_SPELLINGS = (
+    ("نحيي", "نُحْىِ"),
+    ("يحيي", "يُحْىِ"),
+    ("شيئا", "شَيْـًٔا"),
+)
+# Independently attested vocatives only. Lossy normalized forms of يأمن or
+# يأكل also start with يا, but are verbs and cannot authorize such a join.
+_PUBLISHED_VOCATIVES = ("ياقوم", "ياليت", "ياحسرة", "ياويلنا", "يابني")
+
+
+def _get_live_word_aliases() -> dict[str, str]:
+    """Unambiguous legacy spellings and explicit published spelling families.
+
+    These compare reference/recognition text only; they never enter ASR. A key
+    that is itself a canonical Quran word (or has multiple targets) cannot
+    acquire a legacy alias. Only the separately verified published families
+    may unify canonical printed forms; عليكم cannot become عليهم here.
+    """
+    global _live_word_alias_cache
+    try:
+        store = _get_reference_store()
+        if _live_word_alias_cache is not None and _live_word_alias_cache[0] is store:
+            return dict(_live_word_alias_cache[1])
+        canonical_words: set[str] = set()
+        targets: dict[str, set[str]] = {}
+        for key in store.list_ayahs():
+            reference = store.get(*key)
+            if reference is None:
+                continue
+            for word in reference.words:
+                legacy = _normalize(word.word)
+                canonical = _normalize(word.text_with_tashkeel or word.word)
+                if canonical:
+                    canonical_words.add(canonical)
+                if legacy and canonical and legacy != canonical:
+                    targets.setdefault(legacy, set()).add(canonical)
+        published = {_normalize(uthmani): _normalize(imlai)
+                     for imlai, uthmani in _PUBLISHED_WORD_SPELLINGS}
+        reserved = set(published) | set(published.values())
+        aliases = {
+            legacy: next(iter(candidates))
+            for legacy, candidates in targets.items()
+            if legacy not in canonical_words and legacy not in reserved and len(candidates) == 1
+        }
+        # Published spellings reserve their own identity ahead of lossy legacy
+        # keys: old يحيي on a Yahya bundle must not redirect actual yuhyi.
+        # Both printed forms are verified identities, including canonical
+        # يُحْـِۧىَ -> يحيي. Never redirect that key using an old Yahya bundle.
+        aliases.update({key: target for key, target in published.items()
+                        if key in canonical_words})
+        _live_word_alias_cache = (store, aliases)
+        return dict(aliases)
+    except Exception as exc:
+        logger.debug("stream.word_aliases_unavailable", error=type(exc).__name__)
+        return {}
+
+
 def resolve_reference_words(surah: int, ayah: int) -> tuple[list[str], list[str], str, list[dict]]:
     """Resolve the expected (reference) word list for a single ayah.
 
@@ -294,7 +417,7 @@ def resolve_reference_words(surah: int, ayah: int) -> tuple[list[str], list[str]
         if store.has(surah, ayah):
             ref = store.get(surah, ayah)
             display = [w.text_with_tashkeel or w.word for w in ref.words]
-            norm = [_normalize(w.word) for w in ref.words]
+            norm = [_normalize(text) for text in display]
             entries, display, norm = _pack_entries(display, norm)
             return display, norm, ref.reference_audio_url or "", entries
     except Exception as exc:  # pragma: no cover - ml deps optional
@@ -436,6 +559,32 @@ def _invoke_transcriber(transcriber, audio, sr: int, prompt: str):
     return transcriber(audio, sr)
 
 
+def _independent_recording_transcriber(audio, sr: int) -> tuple[list[str], list[float]]:
+    """Review long RNNT recordings without an unbounded encoder allocation.
+
+    Each sample belongs to exactly one native decode. No overlap stitching,
+    reference text, or synthetic confidence can become final speech evidence.
+    Boundary words may remain uncertain; confirmed live evidence is retained
+    separately by the final matcher. Whisper already manages its own chunks.
+    """
+    if _live_asr_engine() != "fastconformer_rnnt" or len(audio) <= FINAL_RECORDING_SINGLE_PASS_SEC * sr:
+        return _independent_transcriber(audio, sr)
+    if sr != 16000:
+        raise ValueError("RNNT recording review requires 16000 Hz mono PCM")
+    words, confidences = [], []
+    chunk_samples = FINAL_RECORDING_CHUNK_SEC * sr
+    logger.info("stream.recording_review_chunked", seconds=round(len(audio) / sr, 3),
+                chunk_seconds=FINAL_RECORDING_CHUNK_SEC)
+    for start in range(0, len(audio), chunk_samples):
+        chunk = audio[start:start + chunk_samples]
+        if _rms_energy(chunk) < SILENCE_RMS_THRESHOLD:
+            continue
+        native_words, native_confidences = _independent_transcriber(chunk, sr)
+        words.extend(native_words)
+        confidences.extend(native_confidences)
+    return words, confidences
+
+
 def _independent_transcriber(audio, sr: int) -> tuple[list[str], list[float]]:
     """UNPROMPTED decode with the independent base model — the honest witness.
 
@@ -447,21 +596,65 @@ def _independent_transcriber(audio, sr: int) -> tuple[list[str], list[float]]:
     live matcher needs to flag real mistakes.
     """
     try:
-        from ml.inference.faster_whisper_transcriber import get_transcriber
-
-        raw_words, confs = get_transcriber().transcribe_independent(audio, sr)
+        if _live_asr_engine() == "fastconformer_rnnt":
+            from ml.inference.fastconformer_transcriber import get_transcriber
+            decoded = get_transcriber().transcribe(audio, sr)
+        else:
+            from ml.inference.faster_whisper_transcriber import get_transcriber
+            decoded = get_transcriber().transcribe_independent(audio, sr)
+        raw_words, confs = decoded
     except Exception as exc:  # pragma: no cover - model/load failures
         logger.error("stream.independent_decode_failed", error=str(exc))
         return [], []
 
     norm: list[str] = []
     out_confs: list[float] = []
-    for w, c in zip(raw_words, confs):
+    timings = getattr(decoded, "timings", None)
+    out_timings = []
+    for index, (w, c) in enumerate(zip(raw_words, confs)):
         n = _normalize(w)
         if n:
             norm.append(n)
             out_confs.append(c)
+            if timings is not None:
+                out_timings.append(timings[index])
+    if timings is not None:
+        from ml.inference.transcript import TimedTranscript
+        return _join_split_vocatives(TimedTranscript(norm, out_confs, out_timings))
     return norm, out_confs
+
+
+def _join_split_vocatives(transcript):
+    """Join native يا + word only when the global Quran corpus has that form.
+
+    Neither recognition nor this conversion receives the selected passage.
+    Keep the weaker component's native confidence and the complete time span.
+    Untimed decoders cannot supply evidence for this conversion.
+    """
+    from ml.inference.transcript import TimedTranscript
+
+    vocabulary = _get_live_error_vocabulary()
+    vocatives = {_normalize(word) for word in _PUBLISHED_VOCATIVES}
+    words, confidences, timings = [], [], []
+    for word, confidence, timing in zip(transcript.words, transcript.confidences, transcript.timings):
+        if (words and words[-1] == "يا" and "يا" + word in vocatives
+                and "يا" + word in vocabulary
+                and 0 <= timing[0] - timings[-1][1] <= .8 + 1e-6):
+            words[-1] += word
+            confidences[-1] = min(confidences[-1], confidence)
+            timings[-1] = (timings[-1][0], timing[1])
+        else:
+            words.append(word)
+            confidences.append(confidence)
+            timings.append(timing)
+    return TimedTranscript(words, confidences, timings)
+
+
+def _live_asr_engine() -> str:
+    engine = os.environ.get("QARI_LIVE_ASR_ENGINE", "faster_whisper")
+    if engine not in {"faster_whisper", "fastconformer_rnnt"}:
+        raise ValueError("Unsupported live ASR engine")
+    return engine
 
 
 def _make_stub_transcriber(reference_words: list[str]) -> Transcriber:
@@ -495,6 +688,15 @@ def _make_stub_transcriber(reference_words: list[str]) -> Transcriber:
     return _transcribe
 
 
+# Reviewed spelling identities for already-consumed native tokens only.
+# Alif-lam and wasla-lam are not general proof of an article (e.g. اللهم/لهم,
+# التقى/تقي, ألوانه/وأنه). Keep this table explicit; no tokens are synthesized.
+_STITCH_ARTICLE_IDENTITIES = frozenset({
+    frozenset(('اليتيم', 'يتيم')),
+    frozenset(('السايل', 'سايل')),
+})
+
+
 def _words_similar(a: str, b: str, threshold: float = 0.80) -> bool:
     """Loose word match used when stitching overlapping ASR windows.
 
@@ -514,6 +716,11 @@ def _words_similar(a: str, b: str, threshold: float = 0.80) -> bool:
     if na == nb:
         return True
     from ml.alignment.streaming_matcher import char_similarity
+
+    # These reviewed article variants still have to pass the same consumed
+    # PCM/time conditions; a genuine later repetition remains a new word.
+    if frozenset((na, nb)) in _STITCH_ARTICLE_IDENTITIES:
+        return True
 
     return char_similarity(na, nb) >= threshold
 
@@ -570,9 +777,118 @@ def _rms_energy(samples: list[float]) -> float:
     Used to detect silence: near-silent mic audio (room tone / the user not
     reciting) has a very low RMS, while actual recitation is markedly higher.
     """
-    if not samples:
+    if len(samples) == 0:
         return 0.0
     return (sum(s * s for s in samples) / len(samples)) ** 0.5
+
+
+def _stitch_timed_hypothesis(
+    prefix, prefix_confs, prefix_times, window_words, window_confs,
+    window_times, *, consumed, consumed_end, window_start, window_seconds,
+    confidence_threshold, right_context_seconds=0.0,
+):
+    """Retain consumed evidence and replace the remaining overlapping audio.
+
+    RNNT bounds describe token emissions, with an 80ms frame. A distinct
+    adjacent word may share that frame; an already consumed word may not be
+    counted again. A confident identical word beginning on the same past
+    emission frame anchors an end-time revision even with one consumed word.
+    Two confident past tokens also anchor revisions whose first emission moved.
+    """
+    import math
+    if not len(window_words) == len(window_confs) == len(window_times):
+        raise ValueError("Timed transcript evidence must align")
+    absolute = []
+    previous = -1.0
+    for confidence, (begin, end) in zip(window_confs, window_times):
+        if not all(math.isfinite(v) for v in (begin, end, confidence)):
+            raise ValueError("Nonfinite timed evidence")
+        if not (0 <= begin <= end <= window_seconds + .08
+                and begin >= previous and 0 <= confidence <= 1):
+            raise ValueError("Timed evidence is outside its PCM window")
+        previous = begin
+        absolute.append((begin + window_start, end + window_start))
+    keep = min(max(0, int(consumed)), len(prefix))
+    if keep > len(prefix_confs) or keep > len(prefix_times):
+        raise ValueError("Consumed timed evidence is incomplete")
+    overlap_end = 0
+    if keep and prefix_confs[keep - 1] >= confidence_threshold:
+        previous_begin = prefix_times[keep - 1][0]
+        for index, (begin, _) in enumerate(absolute):
+            if (begin <= consumed_end + .08 + 1e-6
+                    # A growing past span may start one encoder frame earlier.
+                    # Allow float32 rounding, but never eat a later repetition.
+                    and previous_begin - .08 - 1e-5 <= begin <= previous_begin + 1e-5
+                    and window_confs[index] >= confidence_threshold
+                    and _normalize(window_words[index]) == _normalize(prefix[keep - 1])):
+                overlap_end = index + 1
+                break
+    if (keep >= 2 and prefix_confs[keep - 2] >= confidence_threshold
+            and prefix_confs[keep - 1] >= confidence_threshold
+            and prefix[keep - 2] != prefix[keep - 1]):
+        for index in range(len(window_words) - 1):
+            if (absolute[index][1] <= consumed_end + .08
+                    and absolute[index + 1][1] <= consumed_end + .5
+                    and window_confs[index] >= confidence_threshold
+                    and window_confs[index + 1] >= confidence_threshold
+                    and _words_similar(window_words[index], prefix[keep - 2])
+                    and _words_similar(window_words[index + 1], prefix[keep - 1])):
+                overlap_end = max(overlap_end, index + 2)
+                break
+    # A weak token between two strong past words must not make the last word
+    # a fresh occurrence when its emission end grows in the next decode.
+    # Require two unique native start-frame witnesses and a nontrivial old
+    # final span; a zero-frame word could genuinely repeat one frame later.
+    if (keep >= 3 and prefix_confs[keep - 3] >= confidence_threshold
+            and prefix_confs[keep - 2] < confidence_threshold
+            and prefix_confs[keep - 1] >= confidence_threshold):
+        old = prefix_times[keep - 3:keep]
+        def same_identity(a, b):
+            a, b = _normalize(a), _normalize(b)
+            return bool(a and b) and (a == b or frozenset((a, b)) in _STITCH_ARTICLE_IDENTITIES)
+        if (all(math.isfinite(v) for span in old for v in span)
+                and all(a <= b for a, b in old)
+                and window_start <= old[0][0]
+                and old[0][0] + .16 <= old[2][0] + 1e-6
+                and old[2][1] - old[2][0] >= .16 - 1e-6
+                and old[0][1] <= old[1][0] + .08
+                and old[1][1] <= old[2][0] + .08
+                and not same_identity(prefix[keep - 3], prefix[keep - 1])):
+            hits = []
+            for i in range(2, len(window_words)):
+                spans = absolute[i - 2:i + 1]
+                if (any(window_confs[j] < confidence_threshold for j in (i - 2, i))
+                        or not all(same_identity(window_words[j], prefix[k])
+                                   for j, k in ((i - 2, keep - 3), (i, keep - 1)))
+                        or any(abs(spans[k][0] - old[k][0]) > .08 + 1e-6 for k in (0, 2))
+                        or spans[0][0] + .16 > spans[2][0] + 1e-6
+                        or any(max(spans[k][0], old[k][0]) > min(spans[k][1] + .08, old[k][1] + .08) for k in (0, 2))
+                        or spans[0][1] > spans[1][0] + .08
+                        or spans[1][1] > spans[2][0] + .08
+                        or spans[2][1] + .08 > window_start + window_seconds - right_context_seconds):
+                    continue
+                if any(j not in (i - 2, i) and window_confs[j] >= confidence_threshold
+                       and any(abs(bounds[0] - spans[k][0]) <= .08 + 1e-6 for k in (0, 2))
+                       for j, bounds in enumerate(absolute)):
+                    continue
+                hits.append(i)
+            if len(hits) == 1:
+                overlap_end = max(overlap_end, hits[0] + 1)
+    fresh = [
+        index for index, (_, end) in enumerate(absolute)
+        if index >= overlap_end and end > consumed_end - .08
+        and (right_context_seconds <= 0.0
+             # RNNT timestamps are emission-frame starts. Count that 80 ms
+             # frame before requiring complete future context from PCM.
+             or end + .08 <= window_start + window_seconds - right_context_seconds)
+        and not (keep and end <= consumed_end + .08
+                 and _words_similar(window_words[index], prefix[keep - 1]))
+    ]
+    return (
+        list(prefix[:keep]) + [window_words[i] for i in fresh],
+        list(prefix_confs[:keep]) + [window_confs[i] for i in fresh],
+        list(prefix_times[:keep]) + [absolute[i] for i in fresh],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -625,6 +941,7 @@ class StreamingRecitationSession:
         self._pcm = bytearray()
         self._samples_at_last_transcribe = 0
         self._transcribe_lock = asyncio.Lock()
+        self._audio_ready = asyncio.Event()
         self._transcribe_stop = False
         self._matcher = None
         self._last_status: dict[int, str] = {}
@@ -633,6 +950,16 @@ class StreamingRecitationSession:
         # cumulative words so `finalize()` and existing callers keep working.
         self._hypothesis: list[str] = []
         self._hypothesis_confs: list[float] = []
+        self._hypothesis_timings: list[tuple[float, float]] = []
+        self._consumed_audio_end = float("-inf")
+        self._timed_evidence_seen = False
+        self._pending_error_revisions: dict[int, tuple[str, int, int]] = {}
+        self._pending_gap_revisions: dict[int, tuple[int, float, int, int, tuple]] = {}
+        self._last_native_view = None
+        self._native_word_repairs: dict[int, dict] = {}
+        self._pending_native_reanchor = None
+        self._pending_error_events: dict[int, tuple[str, int, int]] = {}
+        self._confirmed_native_errors: set[int] = set()
         self._last_hypothesis: list[str] = []
         # Alternate-pass verification state: number of live transcription
         # passes so far and the (word, conf) list from the last unprompted
@@ -699,6 +1026,8 @@ class StreamingRecitationSession:
         self._matcher = StreamingMatcher(
             self.reference_words,
             ayah_boundaries=self.ayah_boundaries,
+            known_error_words=_get_live_error_vocabulary(),
+            word_aliases=_get_live_word_aliases(),
         )
 
         if self._explicit_transcriber is not None:
@@ -718,14 +1047,17 @@ class StreamingRecitationSession:
             # reveals one word every 0.9 seconds without inspecting speech and
             # therefore auto-completes an ayah when the user says nothing.
             try:
-                from ml.inference.faster_whisper_transcriber import get_transcriber
-
+                engine = _live_asr_engine()
+                if engine == "fastconformer_rnnt":
+                    from ml.inference.fastconformer_transcriber import get_transcriber
+                else:
+                    from ml.inference.faster_whisper_transcriber import get_transcriber
                 get_transcriber().load()
                 self._transcriber = _real_transcriber
                 self._is_stub = False
                 logger.info(
                     "stream.transcriber", session_id=self.session_id,
-                    engine="faster-whisper", words=len(self.reference_words),
+                    engine=engine, words=len(self.reference_words),
                 )
             except Exception as exc:
                 logger.error(
@@ -767,6 +1099,10 @@ class StreamingRecitationSession:
     # ------------------------------------------------------------------
     def add_audio(self, chunk: bytes) -> None:
         self._pcm.extend(chunk)
+        if not self._is_stub and _live_asr_engine() == "fastconformer_rnnt":
+            threshold = self._next_interval_samples()
+            if self._total_samples - self._samples_at_last_transcribe >= threshold:
+                self._audio_ready.set()
 
     # Background transcription loop (driven by the WebSocket handler so the
     # receive loop never blocks on the slow Whisper call). Re-transcribes the
@@ -775,6 +1111,7 @@ class StreamingRecitationSession:
     # so concurrent ticks never stack.
     def stop_transcription(self) -> "asyncio.Future":
         self._transcribe_stop = True
+        self._audio_ready.set()
         return asyncio.sleep(0)  # no-op awaitable for callers
 
     def _is_first_pass(self) -> bool:
@@ -793,9 +1130,30 @@ class StreamingRecitationSession:
         """Seconds of *new* audio to accumulate before the next pass."""
         if EARLY_FIRST_PASS and self._is_first_pass():
             return EARLY_FIRST_PASS_SEC
+        if not self._is_stub and _live_asr_engine() == "fastconformer_rnnt":
+            if not self._matcher or getattr(self._matcher, "_cursor", 0) == 0:
+                return RNNT_STARTUP_INTERVAL_SEC
+            if self.sample_rate <= 0:
+                return RNNT_TRANSCRIBE_INTERVAL_SEC
+            # Preserve the regular audio phase after the early selected-word
+            # decode. A permanent .6s cadence changed later context and produced
+            # a false Yaqul error on a correctly recited Yakun.
+            grid = max(1, round(RNNT_TRANSCRIBE_INTERVAL_SEC * self.sample_rate))
+            used = self._samples_at_last_transcribe
+            return ((used // grid + 1) * grid - used) / self.sample_rate
         return TRANSCRIBE_INTERVAL_SEC
 
+    def _next_interval_samples(self) -> int:
+        """Use one PCM threshold for waking, speech gating and decoding."""
+        samples = self._next_interval_sec() * self.sample_rate
+        if not self._is_stub and _live_asr_engine() == "fastconformer_rnnt":
+            return max(1, round(samples))
+        return int(samples)
+
     async def transcription_loop(self, websocket) -> None:
+        if not self._is_stub and _live_asr_engine() == "fastconformer_rnnt":
+            await self._audio_driven_transcription_loop(websocket)
+            return
         self._transcribe_stop = False
         try:
             while not self._transcribe_stop:
@@ -819,6 +1177,38 @@ class StreamingRecitationSession:
                 remaining = self._next_interval_sec() - elapsed
                 if remaining > 0:
                     await asyncio.sleep(remaining)
+        except asyncio.CancelledError:
+            return
+
+    async def _audio_driven_transcription_loop(self, websocket) -> None:
+        """Wake on eligible fresh PCM without adding a polling delay."""
+        try:
+            while not self._transcribe_stop:
+                threshold = self._next_interval_samples()
+                if self._total_samples - self._samples_at_last_transcribe >= threshold:
+                    self._audio_ready.set()
+                await self._audio_ready.wait()
+                self._audio_ready.clear()
+                if self._transcribe_stop:
+                    break
+                # Another caller may be draining a forced decode. Wait for it
+                # instead of repeatedly waking on the same unconsumed samples.
+                if self._transcribe_lock.locked():
+                    async with self._transcribe_lock:
+                        pass
+                    if self._transcribe_stop:
+                        break
+                previous_samples = self._samples_at_last_transcribe
+                try:
+                    for event in await self.maybe_transcribe():
+                        await websocket.send_json(event)
+                except Exception as exc:  # pragma: no cover - model failures
+                    logger.error("stream.loop_transcribe_failed", session_id=self.session_id, error=str(exc))
+                if (self._samples_at_last_transcribe == previous_samples
+                        and self._total_samples - previous_samples >= threshold):
+                    # Unexpected failures before consuming PCM retain the old
+                    # bounded retry cadence rather than spinning on that PCM.
+                    await asyncio.sleep(max(RNNT_TRANSCRIBE_INTERVAL_SEC, self._next_interval_sec()))
         except asyncio.CancelledError:
             return
 
@@ -877,8 +1267,7 @@ class StreamingRecitationSession:
         # normal TRANSCRIBE_INTERVAL_SEC cadence resumes untouched.
         is_first_pass = self._is_first_pass()
         early = EARLY_FIRST_PASS and is_first_pass and not force
-        interval_sec = self._next_interval_sec()
-        threshold = int(interval_sec * self.sample_rate)
+        threshold = self._next_interval_samples()
         if not force and new_samples < threshold:
             return []
         # A forced (stop-time) pass must NOT be dropped just because the
@@ -903,6 +1292,11 @@ class StreamingRecitationSession:
                         " ".join(self.reference_text_with_tashkeel_words),
                     )
                 except Exception as exc:  # pragma: no cover - model failures
+                    self._pending_error_revisions.clear()
+                    self._pending_gap_revisions.clear()
+                    self._last_native_view = None
+                    self._pending_native_reanchor = None
+                    self._pending_error_events.clear()
                     logger.error(
                         "stream.transcribe_failed",
                         session_id=self.session_id, error=str(exc),
@@ -922,7 +1316,9 @@ class StreamingRecitationSession:
                 window_samples = int(
                     (window_sec + overlap_sec) * self.sample_rate
                 )
-                start = max(0, total - window_samples)
+                start = self._select_audio_window_start(
+                    total, max(0, total - window_samples), early=early, force=force,
+                )
                 audio = self._decode_float(start_sample=start)
                 # Silence gate: if this window is essentially quiet (the user is
                 # not reciting), Whisper would still hallucinate phantom Arabic
@@ -998,6 +1394,7 @@ class StreamingRecitationSession:
                     or self._pass_count % VERIFY_EVERY_N_PASSES == 0
                     or stall
                 )
+                window_timings = None
                 try:
                     if EVIDENCE_POLICY == "tier2":
                         # The independent witness IS the live hypothesis (see
@@ -1005,9 +1402,11 @@ class StreamingRecitationSession:
                         # at all: one decode instead of two halves CPU use and
                         # drops the pass wall time (~1.1s vs ~1.9s measured on
                         # this VPS), which is the live reveal latency.
-                        win_words, win_confs = await asyncio.to_thread(
+                        decoded = await asyncio.to_thread(
                             _independent_transcriber, audio, self.sample_rate
                         )
+                        win_words, win_confs = decoded
+                        window_timings = getattr(decoded, "timings", None)
                         raw_words, raw_confs = list(win_words), list(win_confs)
                         self._verified_words = [
                             (w, c) for w, c in zip(raw_words, raw_confs) if w
@@ -1037,6 +1436,11 @@ class StreamingRecitationSession:
                         raw_words = [w for w, _ in self._verified_words]
                         raw_confs = [c for _, c in self._verified_words]
                 except Exception as exc:  # pragma: no cover - model failures
+                    self._pending_error_revisions.clear()
+                    self._pending_gap_revisions.clear()
+                    self._last_native_view = None
+                    self._pending_native_reanchor = None
+                    self._pending_error_events.clear()
                     logger.error(
                         "stream.transcribe_failed",
                         session_id=self.session_id, error=str(exc),
@@ -1125,6 +1529,27 @@ class StreamingRecitationSession:
                     )
                     win_words = []
                     win_confs = []
+                if window_timings is not None:
+                    self._timed_evidence_seen = True
+                if self._timed_evidence_seen:
+                    if not win_words:
+                        # Model failure/empty recognition supplies no revision.
+                        # Preserve the last good word/time pairs for recovery.
+                        self._pending_error_revisions.clear()
+                        self._pending_gap_revisions.clear()
+                        self._last_native_view = None
+                        self._pending_native_reanchor = None
+                        self._pending_error_events.clear()
+                        return []
+                    if window_timings is None:
+                        self._pending_error_revisions.clear()
+                        self._pending_gap_revisions.clear()
+                        self._last_native_view = None
+                        self._pending_native_reanchor = None
+                        self._pending_error_events.clear()
+                        logger.error("stream.transcribe_failed", session_id=self.session_id,
+                                     error="Timed recognition lost emission metadata")
+                        return []
                 # STALL UNION: when the reference cursor did not advance during
                 # the previous pass, the prompted decode is ECHOING the oracle
                 # prompt. Every echoed word was already resolved earlier, so
@@ -1152,12 +1577,60 @@ class StreamingRecitationSession:
                     )
                     self._hypothesis = self._hypothesis[:keep]
                     self._hypothesis_confs = self._hypothesis_confs[:keep]
-                stitched, stitched_confs = stitch_hypothesis(
-                    self._hypothesis,
-                    self._hypothesis_confs,
-                    win_words,
-                    win_confs,
-                )
+                    self._hypothesis_timings = self._hypothesis_timings[:keep]
+                if window_timings is not None:
+                    try:
+                        stitched, stitched_confs, stitched_times = _stitch_timed_hypothesis(
+                            self._hypothesis, self._hypothesis_confs,
+                            self._hypothesis_timings, win_words, win_confs,
+                            window_timings,
+                            consumed=getattr(self._matcher, "_hyp_cursor", 0),
+                            consumed_end=self._consumed_audio_end,
+                            window_start=start / self.sample_rate,
+                            window_seconds=len(audio) / self.sample_rate,
+                            confidence_threshold=getattr(self._matcher, "live_confidence_threshold", .55),
+                            right_context_seconds=0.0 if force else LIVE_RIGHT_CONTEXT_SEC,
+                        )
+                        self._revise_supported_timed_gaps(
+                            win_words, win_confs, window_timings,
+                            window_start=start / self.sample_rate,
+                            window_seconds=len(audio) / self.sample_rate,
+                            right_context_seconds=0.0 if force else LIVE_RIGHT_CONTEXT_SEC,
+                            endpoint_samples=start + len(audio),
+                        )
+                        self._revise_supported_timed_errors(
+                            win_words, win_confs, window_timings,
+                            window_start=start / self.sample_rate,
+                            window_seconds=len(audio) / self.sample_rate,
+                            right_context_seconds=0.0 if force else LIVE_RIGHT_CONTEXT_SEC,
+                            endpoint_samples=start + len(audio),
+                        )
+                        native_view = (
+                            start, start + len(audio), tuple(win_words),
+                            tuple(win_confs), tuple(window_timings),
+                        )
+                        self._repair_anchored_native_words(native_view)
+                        self._last_native_view = native_view
+                        # Stitching validated the complete native window first.
+                        # Copy only proven corrections into its retained prefix;
+                        # fresh tokens, cursors and the consumed boundary stay put.
+                        retained = min(getattr(self._matcher, "_hyp_cursor", 0), len(self._hypothesis))
+                        stitched[:retained] = self._hypothesis[:retained]
+                        stitched_confs[:retained] = self._hypothesis_confs[:retained]
+                        stitched_times[:retained] = self._hypothesis_timings[:retained]
+                    except (ValueError, TypeError) as exc:
+                        self._pending_error_revisions.clear()
+                        self._pending_gap_revisions.clear()
+                        self._last_native_view = None
+                        self._pending_native_reanchor = None
+                        self._pending_error_events.clear()
+                        logger.error("stream.transcribe_failed", session_id=self.session_id, error=str(exc))
+                        return []
+                else:
+                    stitched, stitched_confs = stitch_hypothesis(
+                        self._hypothesis, self._hypothesis_confs, win_words, win_confs,
+                    )
+                    stitched_times = []
                 # Clamp the cumulative hypothesis so ASR hallucinations /
                 # repeated-token explosions can't grow it without bound. The
                 # cap must be measured from the matcher's CONSUMED prefix
@@ -1180,12 +1653,23 @@ class StreamingRecitationSession:
                     stitched_confs = stitched_confs[:cap]
                 self._hypothesis = stitched
                 self._hypothesis_confs = stitched_confs
+                self._hypothesis_timings = stitched_times[:cap]
 
             self._last_hypothesis = self._hypothesis
             _cursor_before = int(getattr(self._matcher, "_cursor", 0) or 0)
             states = self._matcher.evaluate(
                 self._hypothesis, self._hypothesis_confs
             )
+            if int(getattr(self._matcher, '_cursor', 0)) == _cursor_before:
+                if self._recover_supported_native_anchor(force=force):
+                    states = list(self._matcher._states)
+            else:
+                self._pending_native_reanchor = None
+            consumed = int(getattr(self._matcher, "_hyp_cursor", 0))
+            if 0 < consumed <= len(self._hypothesis_timings):
+                self._consumed_audio_end = max(
+                    self._consumed_audio_end, self._hypothesis_timings[consumed - 1][1],
+                )
             if STREAM_DEBUG:
                 logger.info(
                     "stream.pass",
@@ -1195,11 +1679,475 @@ class StreamingRecitationSession:
                     stall=int(getattr(self._matcher, "_stall_passes", 0) or 0),
                     hyp=len(self._hypothesis),
                 )
+            if self._last_native_view is not None:
+                self._confirm_timed_error_events(right_context_seconds=0.0 if force else LIVE_RIGHT_CONTEXT_SEC)
             return self._diff_events(states)
+
+    def _recover_supported_native_anchor(self, *, force=False):
+        """Two fresh, unique timed word pairs may recover inside bounded reach."""
+        from ml.alignment.streaming_matcher import LIVE_SEARCH_REACH_WIDE, LIVE_LOW_CONF_STREAK
+        view = self._last_native_view
+        recover = getattr(self._matcher, 'recover_native_anchor', None)
+        d = getattr(self._matcher, '_delegate', None)
+        if (view is None or recover is None or d is None
+                or _live_asr_engine() != 'fastconformer_rnnt'
+                or d._cursor <= 0 or d._stall_passes < LIVE_LOW_CONF_STREAK):
+            self._pending_native_reanchor = None
+            return False
+        start, endpoint, words, scores, times = view
+        threshold, tolerance = d.live_confidence_threshold, .08 + 1e-6
+        identity = lambda word: d._word_aliases.get(word, word)
+        ceiling = min(len(d.reference), int(self._matcher.max_live_words),
+            d._cursor + LIVE_SEARCH_REACH_WIDE, d._ayah_ceiling(d._cursor, len(d.reference)))
+        absolute = [(a + start / self.sample_rate, b + start / self.sample_rate) for a,b in times]
+        candidates = []
+        for i in range(len(words) - 1):
+            a,b = absolute[i]; c,e = absolute[i + 1]
+            pair = tuple(identity(w) for w in words[i:i+2])
+            if (min(scores[i:i+2]) < threshold or pair[0] == pair[1]
+                    or a <= self._consumed_audio_end + tolerance or c - a < .16 - 1e-6
+                    or b > c + tolerance
+                    or e + .08 > endpoint / self.sample_rate - (0. if force else LIVE_RIGHT_CONTEXT_SEC)
+                    or any(j not in (i,i+1) and scores[j] >= threshold
+                           and (abs(span[0]-a) <= tolerance or abs(span[0]-c) <= tolerance)
+                           for j,span in enumerate(absolute))):
+                continue
+            # A growing last-word span must not recycle consumed speech as a
+            # new anchor. Apply the existing native revision drift exclusion to
+            # either same-identity consumed occurrence, including zero spans.
+            if any(identity(self._hypothesis[j]) == pair[k]
+                   and max(self._hypothesis_timings[j][0], absolute[i+k][0])
+                       <= min(self._hypothesis_timings[j][1] + .24 + 1e-6,
+                              absolute[i+k][1] + .24 + 1e-6)
+                   for j in range(min(d._hyp_cursor,len(self._hypothesis_timings)))
+                   for k in (0,1)):
+                continue
+            # Include the current position when establishing uniqueness, even
+            # though only a later pair can recover a recognition gap.
+            for index in range(d._cursor, ceiling - 1):
+                if pair != tuple(identity(w) for w in d.reference[index:index+2]):
+                    continue
+                for slot in range(d._hyp_cursor, min(len(self._hypothesis),len(self._hypothesis_timings)) - 1):
+                    if (tuple(identity(w) for w in self._hypothesis[slot:slot+2]) == pair
+                            and min(self._hypothesis_confs[slot:slot+2]) >= threshold
+                            and abs(self._hypothesis_timings[slot][0]-a) <= tolerance
+                            and abs(self._hypothesis_timings[slot+1][0]-c) <= tolerance):
+                        candidates.append((index,slot,pair,a,c))
+        if len(candidates) != 1 or candidates[0][0] == d._cursor:
+            self._pending_native_reanchor = None
+            return False
+        index,slot,pair,a,c = candidates[0]
+        previous = getattr(self, '_pending_native_reanchor', None)
+        count = 1
+        if (previous and previous[:3] == (d._cursor,index,pair)
+                and abs(a-previous[3]) <= tolerance and abs(c-previous[4]) <= tolerance):
+            if endpoint <= previous[5]:
+                return False
+            count = previous[6] + 1
+        self._pending_native_reanchor = (d._cursor,index,pair,a,c,endpoint,count)
+        if count >= 2 and recover(index,slot,self._hypothesis,self._hypothesis_confs):
+            self._pending_native_reanchor = None
+            return True
+        return False
+
+    def _select_audio_window_start(self, total, default_start, *, early, force):
+        """Recover recent native uncertainty with at most 21 seconds of context."""
+        import math
+        if early or settings.ml_use_stub or self._explicit_transcriber is not None or _live_asr_engine() != "fastconformer_rnnt":
+            return default_start
+        # RNNT emissions advance by 80ms. A one-second recovery grid flips
+        # the encoder origin by half a frame on alternate seconds, changing
+        # decoded endings and making same-audio timing witnesses disagree.
+        # Use the recording's original encoder phase for ordinary views too.
+        grid = max(1, round(.08 * self.sample_rate))
+        default_start = (default_start // grid) * grid
+        remembered = getattr(self, '_recent_native_uncertainty_begin', None)
+        recover = force or (
+            remembered is not None
+            and max(0., total / self.sample_rate - 20.) <= remembered <= total / self.sample_rate
+        )
+        delegate = getattr(self._matcher, "_delegate", self._matcher)
+        slots = getattr(delegate, "_live_hyp_indices", {})
+        for state in getattr(delegate, "_resolved_states", []):
+            if state.status.value not in {"error", "skipped"}:
+                continue
+            slot = slots.get(state.index, slots.get(state.index - 1))
+            if slot is not None and 0 <= slot < len(self._hypothesis_timings):
+                begin = self._hypothesis_timings[slot][0]
+                if math.isfinite(begin) and max(0., total / self.sample_rate - 20.) <= begin <= total / self.sample_rate:
+                    recover = True
+                    # A supported substitution may have a corrected prefix;
+                    # retain that context across its revision. Missing-token
+                    # gaps use ordinary windows again after they are repaired.
+                    if state.status.value == 'error':
+                        self._recent_native_uncertainty_begin = begin
+        if not recover:
+            return default_start
+        # A stable absolute PCM grid avoids moving the recognizer's frontend
+        # frame origin with every irregular packet. No reference text is used.
+        nominal = max(0, total - 20 * self.sample_rate)
+        return (nominal // grid) * grid
+
+    def _confirm_timed_error_events(self, *, right_context_seconds=LIVE_RIGHT_CONTEXT_SEC):
+        """Require two native audio views before surfacing a supported error."""
+        import math
+        from ml.alignment.streaming_matcher import WordStatus
+        view = self._last_native_view
+        if view is None:
+            self._pending_error_events.clear()
+            return
+        start, endpoint, words, scores, times = view
+        delegate = getattr(self._matcher, "_delegate", self._matcher)
+        slots = getattr(delegate, "_live_hyp_indices", {})
+        threshold = getattr(delegate, "live_confidence_threshold", .55)
+        tolerance = .08 + 1e-6
+        eligible = set()
+        for state in getattr(delegate, "_resolved_states", []):
+            slot = slots.get(state.index)
+            if (state.status != WordStatus.ERROR or not state.spoken or slot is None
+                    or not 0 <= slot < len(self._hypothesis_timings)
+                    or not math.isfinite(state.confidence) or state.confidence < threshold):
+                continue
+            old_begin, old_end = self._hypothesis_timings[slot]
+            candidates=[]
+            for i,(word,score,(begin,end)) in enumerate(zip(words,scores,times)):
+                begin += start/self.sample_rate
+                end += start/self.sample_rate
+                if (word == state.spoken and math.isfinite(score) and threshold <= score <= 1
+                        and abs(begin-old_begin) <= tolerance
+                        and max(begin,old_begin) <= min(end+.08,old_end+.08)
+                        and end + .08 <= endpoint/self.sample_rate-right_context_seconds+1e-6
+                        and not any(j!=i and scores[j]>=threshold and abs(times[j][0]+start/self.sample_rate-begin)<=tolerance for j in range(len(words)))):
+                    candidates.append(i)
+            if len(candidates)!=1:
+                continue
+            eligible.add(state.index)
+            previous=self._pending_error_events.get(state.index)
+            if previous and endpoint<=previous[1]:
+                continue
+            count=previous[2]+1 if previous and previous[0]==state.spoken else 1
+            self._pending_error_events[state.index]=(state.spoken,endpoint,count)
+            if count>=2:
+                self._confirmed_native_errors.add(state.index)
+        for index in set(self._pending_error_events)-eligible:
+            self._pending_error_events.pop(index,None)
+
+    def _repair_anchored_native_words(self, current) -> None:
+        """Confirm mature native evidence between two already tracked neighbors."""
+        from ml.alignment.native_evidence import prove_native_word_repair
+        from ml.alignment.streaming_matcher import WordStatus
+        import math
+
+        delegate = getattr(self._matcher, '_delegate', self._matcher)
+        repair = getattr(self._matcher, 'repair_native_word', None)
+        if (repair is None or self._last_native_view is None or self._is_stub
+                or EVIDENCE_POLICY != 'tier2' or _live_asr_engine() != 'fastconformer_rnnt'):
+            return
+        states = {state.index: state for state in getattr(delegate, '_resolved_states', [])}
+        slots = getattr(delegate, '_live_hyp_indices', {})
+        threshold = getattr(delegate, 'live_confidence_threshold', .55)
+        identity = lambda word: delegate._word_aliases.get(word, word)
+        for index, state in states.items():
+            before, after = states.get(index - 1), states.get(index + 1)
+            left, right = slots.get(index - 1), slots.get(index + 1)
+            if (state.status not in (WordStatus.SKIPPED, WordStatus.ERROR)
+                    or before is None or after is None
+                    or before.status != WordStatus.MATCHED or after.status != WordStatus.MATCHED
+                    or any(not anchor.spoken or not math.isfinite(anchor.confidence)
+                           or not threshold <= anchor.confidence <= 1 for anchor in (before, after))
+                    or left is None or right is None or not 0 <= left < right
+                    or right >= getattr(self._matcher, '_hyp_cursor', 0)
+                    or right >= min(len(self._hypothesis), len(self._hypothesis_timings))
+                    or self._hypothesis[left] != before.spoken or self._hypothesis[right] != after.spoken):
+                continue
+            evidence = prove_native_word_repair(
+                self._last_native_view, current,
+                expected=(before.expected, state.expected, after.expected),
+                before_span=self._hypothesis_timings[left], after_span=self._hypothesis_timings[right],
+                identity=identity, threshold=threshold, sample_rate=self.sample_rate,
+                total_samples=self._total_samples, right_context_seconds=LIVE_RIGHT_CONTEXT_SEC,
+            )
+            if evidence:
+                begin, end = evidence['spans'][1]
+                # Native audio already assigned to another confirmed word is
+                # unavailable, including earlier repairs without an old slot.
+                used = []
+                for other_index, other in states.items():
+                    if other_index in (index - 1, index, index + 1) or other.status != WordStatus.MATCHED:
+                        continue
+                    other_slot = slots.get(other_index)
+                    if other_slot is not None and 0 <= other_slot < len(self._hypothesis_timings):
+                        used.append(self._hypothesis_timings[other_slot])
+                    prior = self._native_word_repairs.get(other_index)
+                    if prior:
+                        used.append(prior['spans'][1])
+                if any(max(begin, a) <= min(end + .08, b + .08) + 1e-5 for a, b in used):
+                    continue
+            if evidence and repair(index, evidence['word'], evidence['confidence']):
+                self._native_word_repairs[index] = evidence
+                logger.info('stream.native_word_repaired', word_index=index,
+                            confidence=round(evidence['confidence'], 3), endpoints=evidence['endpoints'])
+
+    def _revise_supported_timed_errors(
+        self, window_words, window_confs, window_times, *, window_start,
+        window_seconds, right_context_seconds, endpoint_samples,
+    ) -> None:
+        """Two native views may correct a supported error in the same PCM span."""
+        import math
+        from ml.alignment.streaming_matcher import WordStatus
+
+        delegate = getattr(self._matcher, "_delegate", self._matcher)
+        slots = getattr(delegate, "_live_hyp_indices", {})
+        states = {s.index: s for s in getattr(delegate, "_resolved_states", [])}
+        threshold = getattr(delegate, "live_confidence_threshold", .55)
+        consumed = getattr(self._matcher, "_hyp_cursor", 0)
+        tolerance = .08 + 1e-6
+        try:
+            if (self.sample_rate <= 0 or not 0 < endpoint_samples <= self._total_samples
+                    or not all(math.isfinite(v) for v in (window_start, window_seconds))
+                    or window_start < 0 or window_seconds <= 0
+                    or abs(window_start + window_seconds - endpoint_samples / self.sample_rate) > 1e-6
+                    or not len(window_words) == len(window_confs) == len(window_times)):
+                raise ValueError("Incomplete native revision view")
+            absolute = []
+            previous = -1.0
+            for word, score, (begin, end) in zip(window_words, window_confs, window_times):
+                if (not isinstance(word, str) or not word
+                        or not all(math.isfinite(v) for v in (score, begin, end))
+                        or not 0 <= score <= 1
+                        or not 0 <= begin <= end <= window_seconds + .08
+                        or begin < previous):
+                    raise ValueError("Invalid native revision view")
+                previous = begin
+                absolute.append((begin + window_start, end + window_start))
+        except (ValueError, TypeError):
+            self._pending_error_revisions.clear()
+            self._pending_gap_revisions.clear()
+            self._last_native_view = None
+            self._pending_native_reanchor = None
+            self._pending_error_events.clear()
+            return
+
+        def bounded_prefix_span(index, i, slot, old_begin, old_end, anchor_begin):
+            # A one-token error may omit a prefix: its sole emission then lies
+            # INSIDE the corrected multi-token word, not at its first frame.
+            # Identify that same occurrence using BOTH already matched neighbors.
+            # Retain the .08s frame tolerance; compensate only the common frame
+            # origin measured from the left neighbor, never an arbitrary drift.
+            left = states.get(index - 1)
+            left_slot = slots.get(index - 1)
+            if (i < 1 or abs(old_end - old_begin) > 1e-6
+                    or left is None or left.status != WordStatus.MATCHED
+                    or not left.spoken or not math.isfinite(left.confidence)
+                    or left.confidence < threshold or left_slot != slot - 1
+                    or not 0 <= left_slot < len(self._hypothesis_timings)
+                    or self._hypothesis[left_slot] != left.spoken
+                    or window_confs[i - 1] < threshold
+                    or _normalize(window_words[i - 1]) != _normalize(left.spoken)
+                    or _normalize(window_words[i + 1]) != _normalize(states[index + 1].spoken)
+                    or len({_normalize(window_words[j]) for j in (i - 1, i, i + 1)}) != 3):
+                return False
+            left_begin, left_end = self._hypothesis_timings[left_slot]
+            new_left_begin, new_left_end = absolute[i - 1]
+            begin, end = absolute[i]
+            next_begin, _ = absolute[i + 1]
+            shift = new_left_begin - left_begin
+            if (not all(math.isfinite(v) for v in (left_begin, left_end))
+                    or not window_start <= left_begin <= left_end
+                    or left_end + .08 > old_begin + 1e-6
+                    or abs(shift) > tolerance
+                    # Subtracting two float32 emission bounds accumulates a few
+                    # microseconds of rounding at long recording offsets.
+                    or abs(new_left_end - shift - left_end) > .08 + 1e-5
+                    or abs(next_begin - shift - anchor_begin) > tolerance
+                    or end - begin < .16 - 1e-6
+                    or not begin - shift <= old_begin <= end - shift
+                    or new_left_end + .08 > begin + 1e-6
+                    or end + .08 > next_begin + 1e-6):
+                return False
+            return not any(
+                j not in (i - 1, i, i + 1) and window_confs[j] >= threshold
+                and any(abs(bounds[0] - absolute[k][0]) <= tolerance
+                        for k in (i - 1, i, i + 1))
+                for j, bounds in enumerate(absolute)
+            )
+
+        eligible = set()
+        for index, state in states.items():
+            anchor = states.get(index + 1)
+            slot, following = slots.get(index), slots.get(index + 1)
+            if (state.status != WordStatus.ERROR or not state.spoken
+                    or not math.isfinite(state.confidence) or not threshold <= state.confidence <= 1
+                    or anchor is None or anchor.status != WordStatus.MATCHED
+                    or not anchor.spoken or anchor.confidence < threshold
+                    or slot is None or following != slot + 1
+                    or not 0 <= slot < following < consumed
+                    or following >= min(len(self._hypothesis), len(self._hypothesis_confs), len(self._hypothesis_timings))):
+                continue
+            old_begin, old_end = self._hypothesis_timings[slot]
+            anchor_begin, anchor_end = self._hypothesis_timings[following]
+            if (not all(math.isfinite(v) for v in (old_begin, old_end, anchor_begin, anchor_end))
+                    or not window_start <= old_begin <= old_end <= self._consumed_audio_end + tolerance
+                    or not old_begin + .08 <= anchor_begin + 1e-6
+                    or self._hypothesis[slot] != state.spoken
+                    or self._hypothesis[following] != anchor.spoken):
+                continue
+            candidates = []
+            for i in range(len(window_words) - 1):
+                begin, end = absolute[i]
+                next_begin, next_end = absolute[i + 1]
+                if (window_confs[i] < threshold or window_confs[i + 1] < threshold
+                        or not delegate._is_match(window_words[i], state.expected)
+                        or not delegate._is_match(window_words[i + 1], anchor.expected)
+                        or begin + .08 > next_begin + 1e-6
+                        or end > next_begin + tolerance
+                        or (right_context_seconds > 0
+                            and max(end, next_end) + .08 > window_start + window_seconds - right_context_seconds)):
+                    continue
+                same_first_frame = (
+                    abs(begin - old_begin) <= tolerance
+                    and abs(next_begin - anchor_begin) <= tolerance
+                    and max(begin, old_begin) <= min(end + .08, old_end + .08)
+                )
+                if not same_first_frame and not bounded_prefix_span(
+                        index, i, slot, old_begin, old_end, anchor_begin):
+                    continue
+                # A second strong word on either identifying emission frame
+                # makes the audio occurrence ambiguous, even if its text agrees.
+                if any(j not in (i, i + 1) and window_confs[j] >= threshold
+                       and (abs(bounds[0] - begin) <= tolerance
+                            or abs(bounds[0] - next_begin) <= tolerance)
+                       for j, bounds in enumerate(absolute)):
+                    continue
+                candidates.append(i)
+            if len(candidates) != 1:
+                continue
+            i = candidates[0]
+            eligible.add(index)
+            word = window_words[i]
+            previous = self._pending_error_revisions.get(index)
+            count = 1
+            if previous and previous[0] == word:
+                if endpoint_samples <= previous[1]:
+                    continue
+                count = previous[2] + 1
+            self._pending_error_revisions[index] = (word, endpoint_samples, count)
+            if count >= 2 and self._matcher.revise_live_error(index, word, window_confs[i]):
+                self._hypothesis[slot] = word
+                self._hypothesis_confs[slot] = window_confs[i]
+                self._hypothesis_timings[slot] = absolute[i]
+                self._pending_error_revisions.pop(index, None)
+        for index in set(self._pending_error_revisions) - eligible:
+            self._pending_error_revisions.pop(index, None)
+
+    def _revise_supported_timed_gaps(
+        self, window_words, window_confs, window_times, *, window_start,
+        window_seconds, right_context_seconds, endpoint_samples,
+    ) -> None:
+        """Repair one existing native-token gap using two independently decoded views."""
+        import math
+        from ml.alignment.streaming_matcher import WordStatus
+        delegate = getattr(self._matcher, "_delegate", self._matcher)
+        slots = getattr(delegate, "_live_hyp_indices", {})
+        states = {x.index: x for x in getattr(delegate, "_resolved_states", [])}
+        threshold = getattr(delegate, "live_confidence_threshold", .55)
+        tolerance = .08 + 1e-6
+        drift = .24 + 1e-6
+        try:
+            if (self.sample_rate <= 0 or not 0 < endpoint_samples <= self._total_samples
+                    or not all(math.isfinite(v) for v in (window_start, window_seconds))
+                    or window_start < 0 or window_seconds <= 0
+                    or abs(window_start + window_seconds - endpoint_samples / self.sample_rate) > 1e-6
+                    or not len(window_words) == len(window_confs) == len(window_times)):
+                raise ValueError("Incomplete native gap view")
+            absolute = []
+            previous = -1.
+            for word, score, (begin, end) in zip(window_words, window_confs, window_times):
+                if (not isinstance(word, str) or not word
+                        or not all(math.isfinite(v) for v in (score, begin, end))
+                        or not 0 <= score <= 1 or not 0 <= begin <= end <= window_seconds + .08
+                        or begin < previous):
+                    raise ValueError("Invalid native gap view")
+                previous = begin
+                absolute.append((begin + window_start, end + window_start))
+        except (ValueError, TypeError):
+            self._pending_gap_revisions.clear()
+            self._last_native_view = None
+            self._pending_native_reanchor = None
+            self._pending_error_events.clear()
+            return
+        eligible = set()
+        for index, state in states.items():
+            before, after = states.get(index - 1), states.get(index + 1)
+            left, right = slots.get(index - 1), slots.get(index + 1)
+            if (state.status != WordStatus.SKIPPED or state.spoken or state.confidence != 0
+                    or index in slots or before is None or after is None
+                    or before.status != WordStatus.MATCHED or after.status != WordStatus.MATCHED
+                    or any(not x.spoken or not math.isfinite(x.confidence) or not threshold <= x.confidence <= 1 for x in (before, after))
+                    or left is None or right != left + 2
+                    or not 0 <= left < right < getattr(self._matcher, "_hyp_cursor", 0)
+                    or right >= min(len(self._hypothesis), len(self._hypothesis_confs), len(self._hypothesis_timings))):
+                continue
+            slot = left + 1
+            if slot in slots.values() or not self._hypothesis[slot]:
+                continue
+            old = self._hypothesis_timings[left:right + 1]
+            if (not all(math.isfinite(v) for span in old for v in span)
+                    or any(a > b for a,b in old)
+                    or not window_start <= old[0][0] + .08 <= old[1][0] <= old[2][0] - .08 + 1e-6
+                    or old[0][1] > old[1][0] + tolerance or old[1][1] > old[2][0] + tolerance
+                    or old[2][1] > self._consumed_audio_end + tolerance
+                    or self._hypothesis[left] != before.spoken or self._hypothesis[right] != after.spoken):
+                continue
+            if any(j not in (left,slot,right) and confidence >= threshold
+                   and any(abs(span[0]-old[k][0]) <= tolerance for k in (0,1,2))
+                   for j,(span,confidence) in enumerate(zip(self._hypothesis_timings,self._hypothesis_confs))):
+                continue
+            candidates=[]
+            for i in range(1, len(window_words) - 1):
+                spans=absolute[i-1:i+2]
+                if (any(window_confs[j] < threshold for j in (i-1,i,i+1))
+                        or not all(delegate._is_match(window_words[j], expected) for j,expected in ((i-1,before.expected),(i,state.expected),(i+1,after.expected)))
+                        or abs(spans[1][0] - old[1][0]) > drift
+                        or spans[1][0] < old[0][1] - tolerance
+                        or spans[1][1] > old[2][0] + tolerance
+                        or any(abs(spans[j][0]-old[j][0]) > drift for j in (0,2))
+                        or max(spans[1][0],old[1][0]) > min(spans[1][1]+.08,old[1][1]+.08)
+                        or not spans[0][0]+.08 <= spans[1][0] <= spans[2][0]-.08+1e-6
+                        or spans[0][1] > spans[1][0]+tolerance or spans[1][1] > spans[2][0]+tolerance
+                        or max(b for a,b in spans)+.08 > window_start+window_seconds-right_context_seconds):
+                    continue
+                if any(j not in (i-1,i,i+1) and window_confs[j]>=threshold
+                       and any(abs(bounds[0]-span[0])<=tolerance for span in spans)
+                       for j,bounds in enumerate(absolute)):
+                    continue
+                candidates.append(i)
+            if len(candidates)!=1:
+                continue
+            eligible.add(index);i=candidates[0]
+            previous=self._pending_gap_revisions.get(index)
+            if previous and previous[:2] == (slot, old[1][0]) and endpoint_samples<=previous[2]:
+                continue
+            spans=tuple(absolute[i-1:i+2])
+            agrees=(previous is not None and previous[:2] == (slot,old[1][0])
+                    and all(abs(a[0]-b[0]) <= tolerance for a,b in zip(previous[4],spans))
+                    and max(previous[4][1][0],spans[1][0]) <= min(previous[4][1][1]+.08,spans[1][1]+.08))
+            count=previous[3]+1 if agrees else 1
+            self._pending_gap_revisions[index]=(slot,old[1][0],endpoint_samples,count,spans)
+            if count>=2 and self._matcher.revise_live_gap(index,slot,window_words[i],window_confs[i]):
+                self._hypothesis[slot]=window_words[i]
+                self._hypothesis_confs[slot]=window_confs[i]
+                self._hypothesis_timings[slot]=absolute[i]
+                self._pending_gap_revisions.pop(index,None)
+        for index in set(self._pending_gap_revisions)-eligible:
+            self._pending_gap_revisions.pop(index,None)
 
     def _diff_events(self, states) -> list[dict]:
         events: list[dict] = []
         for st in states:
+            if (_live_asr_engine() == "fastconformer_rnnt" and self._timed_evidence_seen and st.status.value == "error"
+                    and st.index not in self._confirmed_native_errors):
+                continue
             if self._last_status.get(st.index) == st.status.value:
                 continue
             self._last_status[st.index] = st.status.value
@@ -1211,6 +2159,10 @@ class StreamingRecitationSession:
             blueprint_status = (
                 "match" if st.status.value == "matched" else "error_skipped"
             )
+            evidence_confirmed = blueprint_status == "match" or (
+                st.status.value == "error" and bool(st.spoken) and
+                st.confidence >= getattr(self._matcher, "live_confidence_threshold", 0.55)
+            )
             events.append({
                 "type": "word",
                 "session_id": self.session_id,
@@ -1220,6 +2172,7 @@ class StreamingRecitationSession:
                 "expected": st.expected,
                 "spoken": st.spoken,
                 "confidence": round(st.confidence, 3),
+                "evidence_confirmed": evidence_confirmed,
                 "timestamp_ms": int(self.duration_seconds * 1000),
             })
         return events
@@ -1289,23 +2242,113 @@ class StreamingRecitationSession:
         ]
         return summary.tajweed_score / 100.0, issues
 
+    def _native_final_evidence_complete(self) -> bool:
+        """Audit native live witnesses and a fresh complete suffix, never stitched text."""
+        import math
+        from ml.alignment.streaming_matcher import WordStatus
+        if (self._is_stub or _live_asr_engine() != "fastconformer_rnnt"
+                or EVIDENCE_POLICY != "tier2" or self._last_native_view is None
+                or self._pending_error_revisions or self._pending_gap_revisions):
+            return False
+        delegate = getattr(self._matcher, "_delegate", self._matcher)
+        cursor = getattr(delegate, "_cursor", 0)
+        budget = getattr(self._matcher, "max_live_words", 0)
+        states = {x.index:x for x in getattr(delegate, "_resolved_states", [])}
+        slots = getattr(delegate, "_live_hyp_indices", {})
+        threshold = getattr(delegate, "live_confidence_threshold", .55)
+        if (not 0 < cursor <= min(len(self.reference_words),budget)
+                or set(states) != set(range(cursor))
+                or set(slots) != set(range(cursor))):
+            return False
+        previous_slot = -1
+        previous_time = -1.
+        for index in range(cursor):
+            state,slot = states[index],slots[index]
+            if (state.status != WordStatus.MATCHED or not state.spoken
+                    or not math.isfinite(state.confidence) or not threshold <= state.confidence <= 1
+                    or not previous_slot < slot < min(len(self._hypothesis),len(self._hypothesis_confs),len(self._hypothesis_timings))
+                    or self._hypothesis[slot] != state.spoken
+                    or self._hypothesis_confs[slot] != state.confidence
+                    or not delegate._is_match(state.spoken,self.reference_words[index])):
+                return False
+            begin,end = self._hypothesis_timings[slot]
+            if (not all(math.isfinite(v)for v in (begin,end))
+                    or not previous_time <= begin <= end <= self.duration_seconds+.08):
+                return False
+            previous_slot,previous_time = slot,begin
+        start,endpoint,words,scores,times = self._last_native_view
+        if (endpoint != self._total_samples or not 0 <= start < endpoint
+                or not 0 < len(words) == len(scores) == len(times) <= cursor
+                or (endpoint-start)/self.sample_rate > 21.
+                or not getattr(self,"_timed_evidence_seen",False)):
+            return False
+        suffix_start = cursor-len(words)
+        previous_time = -1.
+        for index,(word,score,(begin,end)) in enumerate(zip(words,scores,times)):
+            if (not word or not all(math.isfinite(v)for v in (score,begin,end))
+                    or not threshold <= score <= 1
+                    or not previous_time <= begin <= end <= (endpoint-start)/self.sample_rate+.08
+                    or not delegate._is_match(word,self.reference_words[suffix_start+index])):
+                return False
+            # RNNT emission timestamps move by up to three encoder frames
+            # between bounded contexts; they are not acoustic word boundaries.
+            # Still require overlapping spans at the same mapped occurrence.
+            slot=slots[suffix_start+index]
+            old_begin,old_end=self._hypothesis_timings[slot]
+            absolute_begin=begin+start/self.sample_rate
+            absolute_end=end+start/self.sample_rate
+            drift=.24+1e-6
+            if (old_begin < start/self.sample_rate-drift
+                    or abs(absolute_begin-old_begin)>drift
+                    or max(absolute_begin,old_begin)>min(absolute_end+drift,old_end+drift)):
+                return False
+            previous_time=begin
+        # Native suffix must account for every word through the current cursor;
+        # a hallucinated/foreign extra token or an unknown trailing word fails
+        # this audit rather than becoming independent final evidence.
+        return True
+
     async def finalize(self) -> dict:
         """End the session: persist audio + build the final result blob."""
         from ml.alignment.streaming_matcher import WordStatus
 
-        # If live transcription never produced a hypothesis (e.g. the forced
-        # final transcription on `stop` was slow and the client timed out, or the
-        # transcriber was the stub and produced nothing), do ONE full-audio
-        # transcription here so the verdicts aren't all "skipped" (0 of N). This
-        # guarantees a meaningful result whenever reference words exist.
-        if not self._last_hypothesis and self._transcriber is not None and self._pcm:
+        independent_finalizer = getattr(self._matcher, 'finalize_independent', None)
+        use_recording_evidence = not self._is_stub and independent_finalizer is not None
+        final_words: list[str] = []
+        final_confs: list[float] = []
+
+        # A fresh native suffix may audit already independent live witnesses.
+        # Otherwise retain the independent full-recording review. Stitched text
+        # is never submitted as if it were new recognition evidence.
+        native_complete = use_recording_evidence and self._native_final_evidence_complete()
+        if use_recording_evidence and self._pcm and not native_complete:
             try:
                 audio = self._decode_float()
-                words, confs = await asyncio.to_thread(
-                    self._transcriber, audio, self.sample_rate
-                )
-                if words:
-                    self._last_hypothesis = words
+                if _rms_energy(audio) >= SILENCE_RMS_THRESHOLD:
+                    words, confs = await asyncio.to_thread(
+                        _independent_recording_transcriber, audio, self.sample_rate
+                    )
+                    final_words, final_confs = list(words), list(confs)
+            except Exception as exc:  # pragma: no cover - model failures
+                logger.error("stream.finalize_transcribe_failed", session_id=self.session_id, error=str(exc))
+
+        # A missing legacy/stub hypothesis permits one decode of audible speech.
+        # Production evidence must remain independent of the prompted model;
+        # failed recognition and silence cannot be promoted into a verdict.
+        if not use_recording_evidence and not self._last_hypothesis and self._transcriber is not None and self._pcm:
+            try:
+                audio = self._decode_float()
+                if _rms_energy(audio) >= SILENCE_RMS_THRESHOLD:
+                    transcriber = (
+                        self._transcriber if self._is_stub
+                        else _independent_transcriber
+                    )
+                    words, confs = await asyncio.to_thread(
+                        transcriber, audio, self.sample_rate
+                    )
+                    self._hypothesis = list(words)
+                    self._hypothesis_confs = list(confs)
+                    self._last_hypothesis = self._hypothesis
             except Exception as exc:  # pragma: no cover - model failures
                 logger.error("stream.finalize_transcribe_failed", session_id=self.session_id, error=str(exc))
 
@@ -1317,15 +2360,30 @@ class StreamingRecitationSession:
             else audio_path
         )
 
-        states = (
-            self._matcher.finalize(self._last_hypothesis)
-            if self._matcher is not None
-            else []
-        )
+        if use_recording_evidence:
+            states = independent_finalizer(final_words, final_confs)
+        else:
+            states = (
+                self._matcher.finalize(self._last_hypothesis, self._hypothesis_confs)
+                if self._matcher is not None
+                else []
+            )
 
         word_verdicts = []
         matched = 0
+        evidence_confidences = []
         for st in states:
+            supported = (
+                st.status in (WordStatus.MATCHED, WordStatus.ERROR)
+                and bool(st.spoken)
+                and st.confidence >= getattr(self._matcher, 'live_confidence_threshold', 0.55)
+            )
+            if supported:
+                evidence_confidences.append(st.confidence)
+            elif not self._is_stub:
+                # The mobile review falls back to live pending status when an
+                # unconfirmed index is absent. Keep global indices unchanged.
+                continue
             is_correct = st.status == WordStatus.MATCHED
             if is_correct:
                 matched += 1
@@ -1334,6 +2392,7 @@ class StreamingRecitationSession:
                 "word_index": st.index,
                 "is_correct": is_correct,
                 "confidence": round(st.confidence, 3),
+                "evidence_confirmed": supported,
                 "expected_text": st.expected,
                 "actual_text": st.spoken,
                 "error_type": None if is_correct else st.status.value,
@@ -1345,21 +2404,25 @@ class StreamingRecitationSession:
                 "phoneme_errors": [],
             })
 
-        total = len(states)
+        total = len(word_verdicts)
         accuracy = (matched / total) if total else 0.0
-        # Live matching without a resolvable reference gives us nothing to score
-        # against → low confidence (mobile shows "no red marks", per trust rule).
-        confidence = 1.0 if total else 0.0
+        confidence = (
+            sum(evidence_confidences) / len(evidence_confidences)
+            if evidence_confidences else 0.0
+        )
 
         # Best-effort tajweed pass (Tarteel-style post-session "mistake
         # review"): one timed full-audio transcription feeds the acoustic
         # tajweed checks (ghunnah/qalqalah/madd — numpy only, no torch).
         # Never blocks the result on failure; stub sessions and very long
-        # sessions skip it.
+        # sessions skip it. Independent production word review also skips this
+        # prompted model pass: token emission times are not validated phoneme
+        # boundaries and do not support acoustic grading.
         tajweed_score = 0.0
         tajweed_issues: list[dict] = []
         if (
             not self._is_stub
+            and not use_recording_evidence
             and total
             and self._pcm
             and self.duration_seconds <= 300
@@ -1381,10 +2444,13 @@ class StreamingRecitationSession:
             "surah_number": self.surah,
             "ayah_number": self.ayah_from,
             "overall_score": round(accuracy, 4),
-            "pronunciation_score": round(accuracy, 4),
+            "pronunciation_score": 0.0 if use_recording_evidence else round(accuracy, 4),
+            "pronunciation_available": False,
             "tajweed_score": round(tajweed_score, 4),
+            "tajweed_available": False,
             "tajweed_issues": tajweed_issues,
-            "fluency_score": round(accuracy, 4),
+            "fluency_score": 0.0 if use_recording_evidence else round(accuracy, 4),
+            "fluency_available": False,
             "accuracy_score": round(accuracy, 4),
             "word_verdicts": word_verdicts,
             "reference_audio_url": self.reference_audio_url or None,

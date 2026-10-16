@@ -171,7 +171,8 @@ def test_loop_cadence_is_early_aware():
         "the loop is back to the fixed interval — the early pass cannot fire"
     )
     # ...and the threshold must come from the same helper, not a second copy.
-    assert "threshold = int(interval_sec * self.sample_rate)" in src
+    assert "threshold = self._next_interval_samples()" in src
+    assert "samples = self._next_interval_sec() * self.sample_rate" in src
     assert "EARLY_FIRST_PASS_SEC if early else TRANSCRIBE_INTERVAL_SEC" not in src, (
         "duplicate interval logic is back — the two sites can drift again"
     )

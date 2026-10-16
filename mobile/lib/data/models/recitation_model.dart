@@ -44,6 +44,7 @@ abstract class WordVerdict with _$WordVerdict {
     @JsonKey(name: 'word_index') required int wordIndex,
     @JsonKey(name: 'is_correct') required bool isCorrect,
     @JsonKey(name: 'confidence') @Default(1.0) double confidence,
+    @JsonKey(name: 'evidence_confirmed') @Default(false) bool evidenceConfirmed,
     @JsonKey(name: 'expected_text') String? expectedText,
     @JsonKey(name: 'actual_text') String? actualText,
     @JsonKey(name: 'error_type') String? errorType,

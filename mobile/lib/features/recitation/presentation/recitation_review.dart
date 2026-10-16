@@ -52,9 +52,9 @@ class RecitationReview {
 /// * [serverResult] — the authoritative `final` payload, if it arrived.
 ///
 /// Reach is the furthest point the reciter demonstrably got to: the live cursor,
-/// or just past the last word either the live stream or the server matched. A
-/// server `false` verdict alone never extends reach — that is exactly the
-/// "every unrecited word is error_skipped" signal this guards against.
+/// or just past the last word matched or explicitly confirmed as a spoken
+/// substitution. A server `false` verdict alone never extends reach — that is
+/// exactly the "every unrecited word is error_skipped" signal this guards against.
 RecitationReview buildRecitationReview({
   required List<String> words,
   required int liveCursor,
@@ -76,7 +76,13 @@ RecitationReview buildRecitationReview({
     }
   }
   for (final v in server.values) {
-    if (v.isCorrect && v.wordIndex + 1 > reach) reach = v.wordIndex + 1;
+    final confirmedError = v.evidenceConfirmed &&
+        v.confidence >= .55 &&
+        (v.actualText ?? '').trim().isNotEmpty &&
+        v.errorType == 'error';
+    if ((v.isCorrect || confirmedError) && v.wordIndex + 1 > reach) {
+      reach = v.wordIndex + 1;
+    }
   }
   reach = reach.clamp(0, n);
 
@@ -84,7 +90,8 @@ RecitationReview buildRecitationReview({
   final verdicts = <WordVerdict>[];
   for (var i = 0; i < reach; i++) {
     final sv = server[i];
-    final live = i < liveStatuses.length ? liveStatuses[i] : LiveWordStatus.pending;
+    final live =
+        i < liveStatuses.length ? liveStatuses[i] : LiveWordStatus.pending;
     // The server's final pass is authoritative behind the reach line; the live
     // verdict is the fallback when the final payload is missing that word.
     final LiveWordStatus status;

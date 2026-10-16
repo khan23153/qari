@@ -12,6 +12,7 @@ Two endpoints:
 
 import asyncio
 import json
+import re
 from typing import Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -26,6 +27,27 @@ logger = get_logger(__name__)
 router = APIRouter(tags=["websocket"])
 
 _redis: Optional[redis.Redis] = None
+
+
+def normalize_capture_diagnostics(value: object) -> dict:
+    """Accept only bounded technical values; never log arbitrary client text."""
+    if not isinstance(value, dict):
+        return {}
+    result = {}
+    version = value.get("app_version")
+    if isinstance(version, str) and re.fullmatch(r"[0-9]{1,5}(?:\.[0-9]{1,5}){1,3}", version):
+        result["app_version"] = version
+    for key, low, high in [("app_build", 1, 1000000), ("capture_rate", 8000, 192000),
+                           ("software_gain", 1, 10), ("dropped_frames", 0, 10000000)]:
+        item = value.get(key)
+        if type(item) is int and low <= item <= high:
+            result[key] = item
+    source = value.get("audio_source")
+    if source in ("MIC", "VOICE_RECOGNITION", "UNPROCESSED"):
+        result["audio_source"] = source
+    if type(value.get("resampling")) is bool:
+        result["resampling"] = value["resampling"]
+    return result
 
 
 def _parse_ayah_refs(payload: object) -> Optional[list[tuple[int, int]]]:
@@ -176,6 +198,7 @@ async def recitation_stream(websocket: WebSocket):
     # Bind ownership before acknowledging or accepting audio frames. Session
     # finalization merges this hash, preserving the verified owner field.
     r = _get_redis()
+    capture_diagnostics = normalize_capture_diagnostics(start.get("client_info"))
     try:
         await r.hset(
             f"qari:recitation:session:{session.session_id}",
@@ -187,6 +210,8 @@ async def recitation_stream(websocket: WebSocket):
                 "surah_number": str(session.surah),
                 "ayah_from": str(session.ayah_from),
                 "ayah_to": str(session.ayah_to),
+                **({"capture_diagnostics": json.dumps(capture_diagnostics)}
+                   if capture_diagnostics else {}),
             },
         )
         await r.expire(f"qari:recitation:session:{session.session_id}", 86400)
@@ -194,6 +219,9 @@ async def recitation_stream(websocket: WebSocket):
         logger.error("ws.stream.owner_storage_failed", session_id=session.session_id)
         await _safe_close(websocket, code=1011)
         return
+
+    if capture_diagnostics:
+        logger.info("stream.capture_diagnostics", session_id=session.session_id, **capture_diagnostics)
 
     await websocket.send_json(session.ready_payload())
     logger.info(
@@ -232,6 +260,24 @@ async def recitation_stream(websocket: WebSocket):
                 try:
                     payload = json.loads(text)
                 except json.JSONDecodeError:
+                    continue
+                if not isinstance(payload, dict):
+                    continue
+                if payload.get("type") == "capture_diagnostics":
+                    values = normalize_capture_diagnostics(payload)
+                    if values and any(capture_diagnostics.get(k) != v for k, v in values.items()):
+                        capture_diagnostics.update(values)
+                        logger.info("stream.capture_diagnostics", session_id=session.session_id,
+                                    **capture_diagnostics)
+                        try:
+                            await asyncio.wait_for(
+                                r.hset(f"qari:recitation:session:{session.session_id}",
+                                       mapping={"capture_diagnostics": json.dumps(capture_diagnostics)}),
+                                timeout=0.1,
+                            )
+                        except Exception:
+                            logger.warning("stream.capture_diagnostics_store_failed",
+                                           session_id=session.session_id)
                     continue
                 if payload.get("type") == "stop":
                     # Tell the background task to stop looping, then do one

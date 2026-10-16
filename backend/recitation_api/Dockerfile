@@ -13,6 +13,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY requirements.ml.txt .
 RUN pip install --no-cache-dir -r requirements.ml.txt
 
+# The optional decoder is selected by server configuration; preserve the
+# existing dependency versions while adding its two pinned runtime wheels.
+COPY requirements-fastconformer.txt .
+RUN pip install --no-cache-dir --no-deps -r requirements-fastconformer.txt
+
 COPY . .
 
 # ctranslate2 (used by faster-whisper) ships a shared lib flagged with an

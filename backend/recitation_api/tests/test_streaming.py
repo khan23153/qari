@@ -14,6 +14,18 @@ REFERENCE_ENTRIES = [
 ]
 
 
+def test_uncertain_middle_word_is_not_confirmed_mistake_event():
+    from ml.alignment.streaming_matcher import StreamingMatcher
+    session = ss.StreamingRecitationSession()
+    session._matcher = StreamingMatcher(REFERENCE)
+    states = session._matcher.evaluate(REFERENCE[:3], [.95, .2, .95])
+    events = session._diff_events(states)
+    middle = next(e for e in events if e['word_index'] == 1)
+    assert middle['evidence_confirmed'] is False
+    assert session._matcher._cursor == 3
+    assert next(e for e in events if e['word_index'] == 2)['status'] == 'match'
+
+
 @pytest.fixture
 def stub_stream(monkeypatch):
     """Force stub transcriber + a fixed reference so the WS is model-free."""
@@ -412,3 +424,43 @@ def test_missing_production_model_never_falls_back_to_duration_stub(monkeypatch)
         sess.load_reference()
     assert sess._transcriber is None
     assert sess._is_stub is True  # default flag, but no stub was installed
+
+
+def test_live_error_vocabulary_covers_other_surahs_and_standard_alef_spelling(monkeypatch):
+    from ml.tajweed.reference_store import AyahReference, ReferenceStore, WordReference
+    store = ReferenceStore()
+    store.add(AyahReference(surah=1, ayah=1, text='', normalized_text='', words=[
+        WordReference(word='الرحمن', text_with_tashkeel='ٱلرَّحْمَٰنِ')]))
+    store.add(AyahReference(surah=114, ayah=1, text='', normalized_text='', words=[
+        WordReference(word='الناس', text_with_tashkeel='ٱلنَّاسِ')]))
+    monkeypatch.setattr(ss, '_get_reference_store', lambda: store)
+    vocabulary = ss._get_live_error_vocabulary()
+    assert {'الرحمن', 'الرحمان', 'الناس'} <= vocabulary
+    assert 'اسقباعه' not in vocabulary
+    assert isinstance(vocabulary, frozenset)
+    assert ss._get_live_error_vocabulary() is vocabulary
+    replacement = ReferenceStore()
+    replacement.add(AyahReference(surah=1, ayah=1, text='', normalized_text='', words=[WordReference(word='بسم')]))
+    monkeypatch.setattr(ss, '_get_reference_store', lambda: replacement)
+    assert ss._get_live_error_vocabulary() == frozenset({'بسم'})
+
+
+def test_live_error_vocabulary_unavailable_cannot_confirm_mistake(monkeypatch):
+    def unavailable():
+        raise OSError('test reference store unavailable')
+    monkeypatch.setattr(ss, '_get_reference_store', unavailable)
+    assert ss._get_live_error_vocabulary() == frozenset()
+
+
+def test_live_normalizer_preserves_dagger_alef_and_uses_display_spelling(monkeypatch):
+    from ml.tajweed.reference_store import AyahReference, ReferenceStore, WordReference
+    assert ss._normalize('ٱلْعَـٰلَمِينَ') == 'العالمين'
+    assert ss._normalize('صِرَٰطَ') == 'صراط'
+    store = ReferenceStore()
+    store.add(AyahReference(surah=1, ayah=2, text='', normalized_text='', words=[
+        WordReference(word='العلمين', text_with_tashkeel='ٱلْعَـٰلَمِينَ')]))
+    monkeypatch.setattr(ss, '_get_reference_store', lambda: store)
+    display, normalized, _, entries = ss.resolve_reference_words(1, 2)
+    assert display == ['ٱلْعَـٰلَمِينَ']
+    assert normalized == ['العالمين']
+    assert entries == [{'text_with_tashkeel': 'ٱلْعَـٰلَمِينَ', 'clean_text': 'العالمين'}]

@@ -2,6 +2,7 @@
 
 import os
 import threading
+from copy import deepcopy
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import AsyncIterator
@@ -87,8 +88,9 @@ class _ConservativeLiveMatcher:
     voice:
 
     * **Alignment** delegates to ``StreamingMatcher``'s live DP aligner (anchor +
-      local window, Needleman-Wunsch — the approach Tarteel documents for its own
-      app). The previous implementation here walked ASR tokens one at a time with
+      local window, Needleman-Wunsch). This describes Qari's implementation;
+      Tarteel's current proprietary matcher is not established by public notes.
+      The previous implementation here walked ASR tokens one at a time with
       ``lookahead=0``, consuming every unmatched token as noise: as soon as the
       expected word's own token was missing (window-cut fragment, mangled
       article, a swallowed word) it ate everything after it and NEVER advanced
@@ -100,10 +102,11 @@ class _ConservativeLiveMatcher:
       could have been spoken in the measured active-speech time, so an ASR
       continuation can never highlight text the user has not recited yet.
 
-    Detailed errors are still produced at final review by a fresh matcher.
+    Supported substitutions may be reported live; uncertain gaps stay hidden.
+    Final review uses an independent copy of the configured matcher.
     """
 
-    def __init__(self, reference_words: list[str]) -> None:
+    def __init__(self, reference_words: list[str], *, delegate=None) -> None:
         from ml.alignment.streaming_matcher import StreamingMatcher
 
         self.reference = list(reference_words)
@@ -112,7 +115,14 @@ class _ConservativeLiveMatcher:
         self._cursor = 0
         self._hyp_cursor = 0
         self._states = []
-        self._delegate = StreamingMatcher(self.reference)
+        # load_reference has already configured ayah limits and the Quran
+        # error vocabulary. Replacing that matcher with default settings would
+        # silently remove both guards in the production-only wrapper.
+        self._delegate = delegate if delegate is not None else StreamingMatcher(self.reference)
+
+    @property
+    def live_confidence_threshold(self) -> float:
+        return self._delegate.live_confidence_threshold
 
     @property
     def _stall_passes(self) -> int:
@@ -139,15 +149,130 @@ class _ConservativeLiveMatcher:
         self._states = [state for state in states if state.index < limit]
         return list(self._states)
 
-    def finalize(self, hypothesis_words, confidences=None):
-        from ml.alignment.streaming_matcher import StreamingMatcher
+    def revise_live_error(self, index, spoken, confidence):
+        limit = min(len(self.reference), max(0, int(self.max_live_words)))
+        if not 0 <= index < limit:
+            return False
+        return self._delegate.revise_live_error(index, spoken, confidence)
 
-        # Final review is allowed to report errors/skips. Use a fresh matcher so
-        # conservative live decisions never contaminate the saved result.
-        return StreamingMatcher(self.reference).finalize(
+    def revise_live_gap(self, index, slot, spoken, confidence):
+        limit = min(len(self.reference), max(0, int(self.max_live_words)))
+        if not 0 <= index < limit:
+            return False
+        return self._delegate.revise_live_gap(index, slot, spoken, confidence)
+
+    def repair_native_word(self, index, spoken, confidence):
+        limit = min(len(self.reference), max(0, int(self.max_live_words)))
+        if not 0 <= index < limit:
+            return False
+        return self._delegate.repair_native_word(index, spoken, confidence)
+
+    def finalize(self, hypothesis_words, confidences=None):
+        # finalize resets alignment state. Copy the configured delegate so
+        # review retains all guards without mutating the live cursor/state.
+        # The final pass must respect the same measured-speech budget as live.
+        delegate = deepcopy(self._delegate)
+        limit = min(len(self.reference), max(0, int(self.max_live_words)))
+        delegate.reference = self.reference[:limit]
+        return delegate.finalize(
             hypothesis_words,
             confidences,
         )
+
+    def recover_native_anchor(self, index, slot, words, confidences):
+        delegate = self._delegate
+        saved = delegate.reference
+        delegate.reference = self.reference[:max(0, int(self.max_live_words))]
+        try:
+            recovered = delegate.recover_native_anchor(index, slot, words, confidences)
+        finally:
+            delegate.reference = saved
+        if recovered:
+            self._cursor, self._hyp_cursor = delegate._cursor, delegate._hyp_cursor
+            self._states = list(delegate._resolved_states)
+        return recovered
+
+    def finalize_independent(self, hypothesis_words, confidences):
+        """Combine confirmed live states with an independently decoded recording.
+
+        A stitched live hypothesis is not a second recording: overlapping
+        windows can duplicate words. Never re-score that text here. Opening
+        invocations are outside the selected reference, so establish its start
+        from a confident first word or two adjacent, distinct opening anchors.
+        """
+        from ml.alignment.streaming_matcher import WordStatus
+
+        delegate = deepcopy(self._delegate)
+        limit = min(len(self.reference), max(0, int(self.max_live_words)))
+        delegate.reference = self.reference[:limit]
+        threshold = self.live_confidence_threshold
+
+        def supported(state):
+            return (
+                0 <= state.index < limit
+                and state.status in (WordStatus.MATCHED, WordStatus.ERROR)
+                and bool(state.spoken)
+                and state.confidence >= threshold
+            )
+
+        # The live aligner retains real WordStates, including decoder scores.
+        # A final recognition failure cannot discard those earlier witnesses.
+        states = {
+            state.index: state for state in self._delegate._resolved_states
+            if supported(state)
+        }
+
+        def confident_match(hyp_index, ref_index):
+            return (
+                hyp_index < len(confidences)
+                and confidences[hyp_index] >= threshold
+                and delegate._is_match(
+                    hypothesis_words[hyp_index], delegate.reference[ref_index]
+                )
+            )
+
+        anchor = None
+        if limit:
+            for hyp_index in range(len(hypothesis_words)):
+                if confident_match(hyp_index, 0):
+                    anchor = (0, hyp_index)
+                    break
+            if anchor is None:
+                # Keep the same bounded opening-reference search as legacy
+                # final alignment. Only the invocation's hypothesis prefix
+                # may be arbitrarily long; it grants no reference progress.
+                opening_limit = min(limit, delegate.lookahead + 1)
+                for hyp_index in range(len(hypothesis_words) - 1):
+                    for ref_index in range(opening_limit - 1):
+                        if (
+                            delegate.reference[ref_index] != delegate.reference[ref_index + 1]
+                            and hypothesis_words[hyp_index] != hypothesis_words[hyp_index + 1]
+                            and confident_match(hyp_index, ref_index)
+                            and confident_match(hyp_index + 1, ref_index + 1)
+                        ):
+                            anchor = (ref_index, hyp_index)
+                            break
+                    if anchor is not None:
+                        break
+
+        if anchor is not None:
+            ref_start, hyp_start = anchor
+            delegate._final_reference_offset = ref_start
+            delegate.reference = delegate.reference[ref_start:]
+            fresh_states = delegate.finalize(
+                hypothesis_words[hyp_start:], confidences[hyp_start:],
+            )
+            for state in fresh_states:
+                state.index += ref_start
+                previous = states.get(state.index)
+                if supported(state) and (
+                    previous is None
+                    or (previous.status == WordStatus.ERROR
+                        and state.status == WordStatus.MATCHED)
+                ):
+                    states[state.index] = state
+
+        return [states[index] for index in sorted(states)]
 
 
 _original_stream_load_reference = (
@@ -164,7 +289,9 @@ def _load_reference_with_conservative_live_matcher(self) -> None:
         and not self._is_stub
         and self.reference_words
     ):
-        self._matcher = _ConservativeLiveMatcher(self.reference_words)
+        self._matcher = _ConservativeLiveMatcher(
+            self.reference_words, delegate=self._matcher,
+        )
         self._qari_active_speech_seconds = 0.0
 
 
@@ -179,16 +306,21 @@ _original_stream_maybe_transcribe = (
 
 async def _maybe_transcribe_with_recent_audio_gate(self, *, force: bool = False):
     """Gate repeated windows and cap live progress by actual active speech."""
+    if self._transcribe_lock.locked():
+        if not force:
+            return []
+        # A stop must drain the existing decode even when it has already
+        # consumed all received samples. Final review must not race its result.
+        async with self._transcribe_lock:
+            pass
     active_seconds = 0.0
-    if not self._is_stub and not force and self.sample_rate > 0:
+    if not self._is_stub and self.sample_rate > 0:
         total_samples = self._total_samples
         previous_samples = self._samples_at_last_transcribe
         new_samples = total_samples - previous_samples
-        cadence_samples = int(
-            _streaming_session.TRANSCRIBE_INTERVAL_SEC * self.sample_rate
-        )
+        cadence_samples = self._next_interval_samples()
 
-        if new_samples >= cadence_samples:
+        if force or new_samples >= cadence_samples:
             recent_audio = self._decode_float(
                 start_sample=previous_samples,
                 end_sample=total_samples,
@@ -232,9 +364,15 @@ async def _maybe_transcribe_with_recent_audio_gate(self, *, force: bool = False)
 
     events = await _original_stream_maybe_transcribe(self, force=force)
     if isinstance(matcher, _ConservativeLiveMatcher):
-        # Production live UI reveals confirmed words only. Red mistake markers
-        # belong to final review, where the full recording is considered.
-        return [event for event in events if event.get("status") == "match"]
+        # Confirmed correct words reveal; a supported spoken substitution may
+        # mark its word red while tracking continues. Missing/uncertain tokens
+        # never become live mistake markers.
+        return [
+            event for event in events
+            if event.get("status") == "match"
+            or (event.get("status") == "error_skipped"
+                and event.get("evidence_confirmed") is True)
+        ]
     return events
 
 
@@ -299,6 +437,17 @@ async def _finalize_with_silence_guard(self) -> dict:
             await self._persist(result, audio_path)
             return result
 
+        matcher = self._matcher
+        if isinstance(matcher, _ConservativeLiveMatcher):
+            # Stop can arrive before the first scheduled tick, or with a short
+            # trailing interval. Recompute once from saved PCM so final review
+            # neither loses real speech nor escapes the live duration limit.
+            self._qari_active_speech_seconds = active_seconds
+            matcher.max_live_words = min(
+                len(self.reference_words),
+                max(0, int(active_seconds * _LIVE_MAX_WORDS_PER_ACTIVE_SECOND + 0.5)),
+            )
+
     return await _original_stream_finalize(self)
 
 
@@ -342,19 +491,27 @@ def _warmup_ml() -> None:
     loop so ``/health`` and app readiness are NOT delayed.
     """
     try:
-        from app.services.streaming_session import _get_reference_store
+        from app.services.streaming_session import (
+            _get_reference_store, _get_live_error_vocabulary, _get_live_word_aliases,
+        )
 
         _get_reference_store()
+        _get_live_error_vocabulary()
+        _get_live_word_aliases()
         logger.info("warmup.refstore_done")
     except Exception as exc:  # pragma: no cover - optional ml deps
         logger.debug("warmup.refstore_failed", error=str(exc))
     try:
-        from ml.inference.faster_whisper_transcriber import get_transcriber
-
-        transcriber = get_transcriber()
-        transcriber.load()  # primary (prompted / V50) model
-        transcriber._model_verify_for()  # independent verification (live witness)
-        logger.info("warmup.models_done")
+        engine = _streaming_session._live_asr_engine()
+        if engine == "fastconformer_rnnt":
+            from ml.inference.fastconformer_transcriber import get_transcriber
+            get_transcriber().load()
+        else:
+            from ml.inference.faster_whisper_transcriber import get_transcriber
+            transcriber = get_transcriber()
+            transcriber.load()
+            transcriber._model_verify_for()
+        logger.info("warmup.models_done", engine=engine)
     except Exception as exc:  # pragma: no cover - model load failures
         logger.debug("warmup.model_failed", error=str(exc))
 

@@ -16,8 +16,13 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.Process
+import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.roundToInt
+import kotlin.math.sin
 
 /**
  * Microphone foreground service (type `microphone`).
@@ -41,9 +46,10 @@ class MicForegroundService : Service() {
         const val TARGET_RATE = 16000
         const val FALLBACK_RATE = 44100
 
-        fun start(context: Context) {
+        fun start(context: Context, captureId: String? = null) {
             try {
                 val intent = Intent(context, MicForegroundService::class.java)
+                    .putExtra("capture_id", captureId)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(intent)
                 } else {
@@ -66,6 +72,7 @@ class MicForegroundService : Service() {
         }
     }
 
+    private var captureId: String = ""
     private var reader: AudioRecord? = null
     private var readThread: Thread? = null
 
@@ -111,6 +118,7 @@ class MicForegroundService : Service() {
             // Android may redeliver start commands. Never create two AudioRecord
             // loops for the same service instance.
             if (!running) {
+                captureId = intent?.getStringExtra("capture_id") ?: ""
                 startCapture()
             }
         } catch (e: Exception) {
@@ -183,7 +191,7 @@ class MicForegroundService : Service() {
             }
             reader = ar
             running = true
-            status("capture started: rate=$rate resample=$resample source=$srcName gain=3x")
+            status("capture started: capture_id=$captureId rate=$rate resample=$resample source=$srcName gain=3x")
             val shortBuf = ShortArray(minBuf / 2)
             val resampler = if (resample) LinearResampler(rate, TARGET_RATE) else null
             val gain = SoftGain()
@@ -209,9 +217,10 @@ class MicForegroundService : Service() {
                         val n = ar.read(shortBuf, 0, shortBuf.size)
                         if (n > 0) {
                             dataTicks++
-                            // Boost first so the resampler interpolates on the
-                            // amplified signal (identical result either way, but
-                            // this keeps one clear amplification point).
+                            // Keep the established gain for quiet devices. This
+                            // is hard-clamped gain; it is not interchangeable
+                            // with applying gain after conversion when clipping
+                            // occurs.
                             gain.apply(shortBuf, n)
                             val bytes = if (resampler != null) {
                                 resampler.resample(shortBuf, n)
@@ -233,7 +242,7 @@ class MicForegroundService : Service() {
                         val now = System.currentTimeMillis()
                         if (now - lastDiagAt > 2000) {
                             lastDiagAt = now
-                            status("reading: rate=$rate source=$srcName zeroTicks=$zeroTicks dataTicks=$dataTicks dropped=$audioDropped")
+                            status("reading: capture_id=$captureId rate=$rate source=$srcName zeroTicks=$zeroTicks dataTicks=$dataTicks dropped=$audioDropped")
                         }
                     }
                 } catch (e: Exception) {
@@ -297,16 +306,14 @@ class MicForegroundService : Service() {
         }
     }
 
-    /** Preferred capture sources in priority order. VOICE_RECOGNITION applies
-     * the device's hardware/AGC input gain and is tuned for exactly this
-     * always-on-speech use case; UNPROCESSED intentionally bypasses ALL
-     * processing (incl. gain) and was producing mic levels ~20 dB too quiet
-     * (RMS 0.0015-0.0027 < server SILENCE_RMS_THRESHOLD 0.006 → every frame
-     * discarded as silence). MIC is the safe fallback. */
+    /** Try the general microphone path used by recorder apps first. Device
+     * processing differs by source; VOICE_RECOGNITION disables preprocessing
+     * by default, so it is retained as a fallback rather than assumed to supply
+     * AGC/noise suppression. The existing gain and resampler stay unchanged. */
     private fun buildAudioRecord(rate: Int, bufSize: Int): Pair<AudioRecord, String>? {
         val candidates = listOf(
-            "VOICE_RECOGNITION" to MediaRecorder.AudioSource.VOICE_RECOGNITION,
             "MIC" to MediaRecorder.AudioSource.MIC,
+            "VOICE_RECOGNITION" to MediaRecorder.AudioSource.VOICE_RECOGNITION,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                 "UNPROCESSED" to MediaRecorder.AudioSource.UNPROCESSED else null,
         ).filterNotNull()
@@ -416,9 +423,9 @@ class MicForegroundService : Service() {
     }
 }
 
-/** Fixed +9.5 dB software gain as a safety net for devices whose
- * VOICE_RECOGNITION input is still quiet (some OEMs report low input levels
- * even with AGC enabled). Clamps to int16 range so boosted speech never
+/** Existing fixed +9.5 dB software gain for devices with quiet input levels.
+ * Hardware preprocessing is source- and device-dependent; this software gain
+ * remains explicit. Clamps to int16 range so boosted speech never
  * wraps around. Applied AFTER hardware gain, BEFORE resampling. */
 class SoftGain(private val factor: Double = 3.0) {
     fun apply(buf: ShortArray, n: Int) {
@@ -429,24 +436,69 @@ class SoftGain(private val factor: Double = 3.0) {
     }
 }
 
-/** Simple linear-resampler for the 44.1 kHz → 16 kHz fallback. Good enough for
- * ASR (Whisper is fairly robust to mild resampling artifacts). */
+/** Stateful, band-limited PCM conversion for the 44.1 kHz capture path.
+ *
+ * The legacy class name is retained for callers. Before interpolating, a
+ * 95-tap Hann-windowed sinc filter rejects frequencies that would alias into
+ * the 16 kHz speech band. Its causal delay is 47 input samples (~1.1 ms).
+ * Filter history and rational output position persist across AudioRecord
+ * reads, so arbitrary read sizes cannot shorten or corrupt the recording.
+ */
 class LinearResampler(private val inRate: Int, private val outRate: Int) {
-    private val ratio = inRate.toDouble() / outRate.toDouble()
+    init {
+        require(inRate > 0 && outRate > 0)
+    }
+
+    private val coefficients = if (inRate == outRate) {
+        doubleArrayOf(1.0)
+    } else {
+        val count = 95
+        val cutoff = 0.45 * minOf(inRate, outRate).toDouble() / inRate
+        val taps = DoubleArray(count) { index ->
+            val offset = index - (count - 1) / 2.0
+            val sinc = if (offset == 0.0) 2.0 * cutoff else
+                sin(2.0 * PI * cutoff * offset) / (PI * offset)
+            sinc * (0.5 - 0.5 * cos(2.0 * PI * index / (count - 1)))
+        }
+        val sum = taps.sum()
+        DoubleArray(count) { taps[it] / sum }
+    }
+    private val history = DoubleArray(coefficients.size)
+    private var head = -1
+    private var inputIndex = -1L
+    private var nextOutputNumerator = 0L
+    private var previousFiltered = 0.0
 
     fun resample(input: ShortArray, n: Int): ByteArray {
-        val outLen = (n / ratio).toInt().coerceAtLeast(1)
-        val bb = ByteBuffer.allocate(outLen * 2).order(ByteOrder.LITTLE_ENDIAN)
-        for (i in 0 until outLen) {
-            val pos = i * ratio
-            val i0 = pos.toInt().coerceIn(0, n - 1)
-            val i1 = (i0 + 1).coerceIn(0, n - 1)
-            val frac = pos - i0
-            val s0 = input[i0].toInt()
-            val s1 = input[i1].toInt()
-            val s = (s0 + (s1 - s0) * frac).toInt().coerceIn(-32768, 32767)
-            bb.putShort(s.toShort())
+        require(n in 0..input.size)
+        if (n == 0) return ByteArray(0)
+        val expected = (n.toLong() * outRate / inRate + 2L).toInt()
+        val output = ByteArrayOutputStream(expected * 2)
+        for (index in 0 until n) {
+            inputIndex++
+            head = (head + 1) % history.size
+            history[head] = input[index].toDouble()
+            var filtered = 0.0
+            var position = head
+            for (coefficient in coefficients) {
+                filtered += coefficient * history[position]
+                position = if (position == 0) history.lastIndex else position - 1
+            }
+            while (true) {
+                val whole = nextOutputNumerator / outRate
+                val remainder = nextOutputNumerator % outRate
+                if (whole > inputIndex || (whole == inputIndex && remainder != 0L)) break
+                val value = if (whole == inputIndex) filtered else {
+                    val fraction = remainder.toDouble() / outRate
+                    previousFiltered + (filtered - previousFiltered) * fraction
+                }
+                val sample = value.roundToInt().coerceIn(-32768, 32767)
+                output.write(sample and 0xff)
+                output.write((sample ushr 8) and 0xff)
+                nextOutputNumerator += inRate
+            }
+            previousFiltered = filtered
         }
-        return bb.array()
+        return output.toByteArray()
     }
 }

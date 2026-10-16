@@ -1,10 +1,9 @@
 """Incremental word alignment for live Quran recitation tracking.
 
-Live tracking follows the approach Tarteel documented for its own app: ASR text
-is compared to the Quranic reference with *fuzzy string matching* (never
-waveform DTW), the individual words are aligned with a Needleman-Wunsch (DP)
-sequence alignment, and the search is anchored to the last known position,
-widening only when the tracker loses confidence.
+Qari compares ASR text with the Quranic reference using fuzzy string matching,
+aligns words with a local Needleman-Wunsch (DP) sequence alignment, and anchors
+the search to the last known position. This describes Qari's implementation;
+Tarteel's current proprietary matcher is not established by its public notes.
 
 The previous implementation used a one-way greedy cursor: it walked the
 hypothesis token stream once and never re-scanned it, consuming every
@@ -21,7 +20,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from functools import lru_cache
+from typing import Iterable, Optional
 
 from .phonetic import PHONETIC_MATCH_THRESHOLD, phonetic_similarity
 
@@ -78,6 +78,15 @@ def char_similarity(a: str, b: str) -> float:
 # genuinely distinct words collide (e.g. 'الذي' / 'الذين'), whereas an extra
 # alef is a systematic Quranic recitation/ASR confusion, not a different word.
 _ALEF_VARIANTS = frozenset("اٱآأإٰ")
+# Only emphasis pairs may combine with spelling normalization. A broad
+# phonetic comparison of stripped stems would merge distinct words.
+_EMPHATIC_PAIRS = frozenset(frozenset(pair) for pair in ("صس", "طت", "ضد", "ظذ"))
+# Established Quranic spelling families; generic alef deletion must not merge
+# other known words such as Allah/lillah or qal/qul.
+_ALEF_SPELLING_FAMILIES = frozenset(
+    frozenset(pair) for pair in (("رحمن", "رحمان"), ("صرط", "صراط"), ("بسم", "باسم"))
+)
+
 
 
 def _equal_modulo_one_alef(a: str, b: str) -> bool:
@@ -173,8 +182,21 @@ class StreamingMatcher:
         use_phonetic: bool = True,
         ayah_boundaries: Optional[list[dict]] = None,
         ayah_lookahead: int = AYAH_LOOKAHEAD,
+        known_error_words: Optional[Iterable[str]] = None,
+        word_aliases: Optional[dict[str, str]] = None,
     ) -> None:
         self.reference = list(reference_words)
+        self._known_error_words = (
+            frozenset(known_error_words) if known_error_words is not None else None
+        )
+        self._word_aliases = dict(word_aliases or {})
+        # Final review may slice the active reference after opening alignment.
+        # Keep complete selected identities for ambiguity checks and its offset
+        # for the existing global ayah coordinates.
+        self._selected_reference_identities = tuple(
+            self._word_aliases.get(word, word) for word in self.reference
+        )
+        self._final_reference_offset = 0
         self.match_threshold = match_threshold
         self.live_confidence_threshold = max(0.0, min(1.0, live_confidence_threshold))
         self.lookahead = max(0, lookahead)
@@ -204,6 +226,9 @@ class StreamingMatcher:
         self._hyp_cursor = 0
         self._resolved: dict[int, WordStatus] = {}
         self._resolved_states: list[WordState] = []
+        # Reference indices do not equal ASR slots (e.g. an opening invocation).
+        # Preserve the actual DP provenance for supported live witnesses.
+        self._live_hyp_indices: dict[int, int] = {}
         # Consecutive evaluate() passes where the anchor made no progress.
         # Drives the wide "search mode" (see _evaluate_live).
         self._stall_passes = 0
@@ -236,9 +261,9 @@ class StreamingMatcher:
     def _is_match(self, hypothesis: str, reference: str) -> bool:
         if not hypothesis or not reference:
             return False
+        hypothesis = self._word_aliases.get(hypothesis, hypothesis)
+        reference = self._word_aliases.get(reference, reference)
         if hypothesis == reference:
-            return True
-        if char_similarity(hypothesis, reference) >= self.match_threshold:
             return True
         # Quranic liaison: a word that loses its leading article inside the
         # recitation flow (e.g. reference 'صرط' spoken as the close token
@@ -246,17 +271,171 @@ class StreamingMatcher:
         # article-stripped forms are IDENTICAL this is a match, not a guess.
         if self._strip_article(hypothesis) == self._strip_article(reference):
             return True
-        # Quranic liaison via an EXTRA ALEF: the reciter merges words in flow and
-        # the ASR emits the connecting alef (reference 'صرط' heard as 'صراط',
-        # 'الرحمن' as 'الرحمان'). On a 3-4 letter word that single alef keeps the
-        # similarity at 0.75 — under the 0.80 bar — so the word could NEVER match
-        # and the tracker skipped it as a mistake. If the only difference is one
-        # alef it is the same word.
+        if frozenset((self._strip_article(hypothesis), self._strip_article(reference))) in _ALEF_SPELLING_FAMILIES:
+            return True
+        # Different known Quran words retain their identity, even when they
+        # differ by one alef (الله/لله, قال/قل). Explicit corpus aliases above
+        # already handle verified alternate spellings of the same word. An
+        # explicitly empty vocabulary means lookup failed: accept only the
+        # verified identities above rather than guessing semantic aliases.
+        if (self._known_error_words is not None
+                and (not self._known_error_words
+                     or hypothesis in self._known_error_words)):
+            return False
+        # An unknown emphasis spelling may still identify a different known
+        # word: native السمد represents الصمد, not the equally close الحمد.
+        # Consult the complete Quran vocabulary, never the selected reference,
+        # before permitting generic edit-distance or phonetic tolerance.
+        if self._known_error_words:
+            identities = set()
+            for index, letter in enumerate(hypothesis):
+                for pair in _EMPHATIC_PAIRS:
+                    if letter in pair:
+                        replacement = next(value for value in pair if value != letter)
+                        candidate = hypothesis[:index] + replacement + hypothesis[index + 1:]
+                        if candidate in self._known_error_words:
+                            identities.add(self._word_aliases.get(candidate, candidate))
+            if identities and identities != {reference}:
+                return False
+        # Unknown ASR spellings may omit a Quranic alef (صرط/صراط,
+        # الرحمن/الرحمان); retain this tolerance without merging known words.
         if _equal_modulo_one_alef(hypothesis, reference):
             return True
-        return self.use_phonetic and (
+        if char_similarity(hypothesis, reference) >= self.match_threshold:
+            return True
+        if self.use_phonetic and (
             phonetic_similarity(hypothesis, reference) >= self.phonetic_threshold
-        )
+        ):
+            return True
+        # Compose spelling variants with a narrow emphasis check, without
+        # admitting unrelated stems (e.g. musta'in versus mustaqim).
+        stems = [(self._strip_article(hypothesis), self._strip_article(reference))]
+        if (len(reference) > 4 and reference.startswith("ال")
+                and len(hypothesis) > 4 and hypothesis.startswith("ل")):
+            # The article's initial wasla may disappear in connected ASR text.
+            stems.append((hypothesis[1:], reference[2:]))
+        for heard, expected in stems:
+            if heard == expected:
+                return True
+            if not self.use_phonetic:
+                continue
+            # A real, different Quran word must not become a spelling alias
+            # through composed emphasis (e.g. سور versus الصور).
+            if (self._known_error_words is not None
+                    and (not self._known_error_words
+                         or hypothesis in self._known_error_words)):
+                continue
+            if (len(heard) == len(expected)
+                    and all(a == b or frozenset((a, b)) in _EMPHATIC_PAIRS
+                            for a, b in zip(heard, expected))
+                    and phonetic_similarity(heard, expected) >= self.phonetic_threshold):
+                return True
+        return False
+
+    def revise_live_error(self, index: int, spoken: str, confidence: float) -> bool:
+        """Upgrade one supported error; the session supplies same-audio proof."""
+        import math
+        if (not 0 <= index < len(self.reference)
+                or self._resolved.get(index) != WordStatus.ERROR
+                or index not in self._live_hyp_indices
+                or not math.isfinite(confidence)
+                or not self.live_confidence_threshold <= confidence <= 1
+                or not self._is_match(spoken, self.reference[index])):
+            return False
+        for state in self._resolved_states:
+            if state.index == index:
+                if (not state.spoken or not math.isfinite(state.confidence)
+                        or not self.live_confidence_threshold <= state.confidence <= 1):
+                    return False
+                state.status = WordStatus.MATCHED
+                state.spoken = spoken
+                state.confidence = confidence
+                self._resolved[index] = WordStatus.MATCHED
+                return True
+        return False
+
+    def revise_live_gap(self, index: int, slot: int, spoken: str, confidence: float) -> bool:
+        """Bind an existing unowned native placeholder; session proves its audio span."""
+        import math
+        if (not 0 < index < len(self.reference) - 1
+                or self._resolved.get(index) != WordStatus.SKIPPED
+                or index in self._live_hyp_indices
+                or slot in self._live_hyp_indices.values()
+                or self._live_hyp_indices.get(index - 1) != slot - 1
+                or self._live_hyp_indices.get(index + 1) != slot + 1
+                or self._resolved.get(index - 1) != WordStatus.MATCHED
+                or self._resolved.get(index + 1) != WordStatus.MATCHED
+                or not math.isfinite(confidence)
+                or not self.live_confidence_threshold <= confidence <= 1
+                or not self._is_match(spoken, self.reference[index])):
+            return False
+        state = next((x for x in self._resolved_states if x.index == index), None)
+        if state is None or state.status != WordStatus.SKIPPED or state.spoken or state.confidence != 0:
+            return False
+        state.status = WordStatus.MATCHED
+        state.spoken = spoken
+        state.confidence = confidence
+        self._resolved[index] = WordStatus.MATCHED
+        self._live_hyp_indices[index] = slot
+        return True
+
+    def repair_native_word(self, index: int, spoken: str, confidence: float) -> bool:
+        """Session proves two complete native triples at the original occurrence.
+
+        Keep the cumulative hypothesis and its ownership unchanged. A missing
+        token has no old slot to invent; native provenance is held separately.
+        """
+        import math
+        if (not 0 < index < min(self._cursor, len(self.reference) - 1)
+                or self._resolved.get(index) not in (WordStatus.ERROR, WordStatus.SKIPPED)
+                or self._resolved.get(index - 1) != WordStatus.MATCHED
+                or self._resolved.get(index + 1) != WordStatus.MATCHED
+                or not math.isfinite(confidence)
+                or not self.live_confidence_threshold <= confidence <= 1
+                or not self._is_match(spoken, self.reference[index])):
+            return False
+        state = next((value for value in self._resolved_states if value.index == index), None)
+        if state is None or state.status not in (WordStatus.ERROR, WordStatus.SKIPPED):
+            return False
+        state.status, state.spoken, state.confidence = WordStatus.MATCHED, spoken, confidence
+        self._resolved[index] = WordStatus.MATCHED
+        return True
+
+    def recover_native_anchor(self, index, slot, words, confidences) -> bool:
+        """Resume at two independently timed anchors inside the existing reach.
+
+        The session establishes two-view native PCM provenance. Unrecognized
+        intervening words remain unconfirmed; recovery never declares them errors.
+        """
+        import math
+        ceiling = min(len(self.reference), self._cursor + LIVE_SEARCH_REACH_WIDE,
+                      self._ayah_ceiling(self._cursor, len(self.reference)))
+        identity = lambda word: self._word_aliases.get(word, word)
+        if (self._cursor <= 0 or self._stall_passes < LIVE_LOW_CONF_STREAK
+                or self._resolved.get(self._cursor - 1) != WordStatus.MATCHED
+                or not self._cursor < index < ceiling - 1
+                or not self._hyp_cursor <= slot < min(len(words), len(confidences)) - 1
+                or identity(words[slot]) == identity(words[slot + 1])):
+            return False
+        for offset in (0, 1):
+            if (identity(words[slot + offset]) != identity(self.reference[index + offset])
+                    or not math.isfinite(confidences[slot + offset])
+                    or not self.live_confidence_threshold <= confidences[slot + offset] <= 1
+                    or index + offset in self._resolved):
+                return False
+        for missed in range(self._cursor, index):
+            self._resolved_states.append(WordState(missed, self.reference[missed], WordStatus.SKIPPED, '', 0.))
+            self._resolved[missed] = WordStatus.SKIPPED
+        for offset in (0, 1):
+            target, source = index + offset, slot + offset
+            self._resolved_states.append(WordState(target, self.reference[target], WordStatus.MATCHED,
+                words[source], confidences[source]))
+            self._resolved[target] = WordStatus.MATCHED
+            self._live_hyp_indices[target] = source
+        self._cursor = index + 2
+        self._hyp_cursor = slot + 2
+        self._stall_passes = 0
+        return True
 
     @staticmethod
     def _strip_article(word: str) -> str:
@@ -280,6 +459,8 @@ class StreamingMatcher:
         self,
         hypothesis_words: list[str],
         confidences: Optional[list[float]] = None,
+        *,
+        _recover_opening: bool = False,
     ) -> list[WordState]:
         """Align the recent ASR tokens to a local window of reference words.
 
@@ -339,13 +520,45 @@ class StreamingMatcher:
 
         def confidence(j: int) -> float:
             absolute = hyp_start + j
-            if confidences is not None and 0 <= absolute < len(confidences):
+            if confidences is None:
+                return 1.0  # Legacy callers provide trusted text without scores.
+            if 0 <= absolute < len(confidences):
                 return float(confidences[absolute])
-            return 1.0
+            return 0.0
 
         def paired(i: int, j: int) -> bool:
             return confidence(j) >= self.live_confidence_threshold and self._is_match(
                 hyp[j], ref_win[i]
+            )
+
+        if anchor == 0 and _recover_opening:
+            # An invocation is outside the selected reference. Once its first
+            # word is independently recognized with an exact corpus identity,
+            # do not make it pay for all preceding invocation/noise tokens.
+            # Preserve original hypothesis slots for native PCM provenance.
+            first = self._word_aliases.get(ref_win[0], ref_win[0])
+            for j, word in enumerate(hyp):
+                if (self.live_confidence_threshold <= confidence(j) <= 1
+                        and self._word_aliases.get(word, word) == first):
+                    hyp_start += j
+                    hyp = hyp[j:]
+                    k = len(hyp)
+                    break
+
+        def recover_stalled_opening() -> Optional[list[WordState]]:
+            # Preserve the ordinary DP and its adjacent opening-pair anchor.
+            # Retry only when it cannot establish a valid starting position.
+            if anchor != 0 or _recover_opening:
+                return None
+            first = self._word_aliases.get(ref_win[0], ref_win[0])
+            if not any(
+                j > 0 and self.live_confidence_threshold <= confidence(j) <= 1
+                and self._word_aliases.get(word, word) == first
+                for j, word in enumerate(hyp)
+            ):
+                return None
+            return self._evaluate_live(
+                hypothesis_words, confidences, _recover_opening=True
             )
 
         NEG = float("-inf")
@@ -377,6 +590,9 @@ class StreamingMatcher:
                     best = row[j]
                     best_i, best_j = i, j
         if best <= 0.0:
+            recovered = recover_stalled_opening()
+            if recovered is not None:
+                return recovered
             self._stall_passes += 1
             return list(self._resolved_states)
 
@@ -402,15 +618,63 @@ class StreamingMatcher:
 
         last_match_i = -1
         last_match_j = -1
+        matched_pairs = []
         for kind, ii, jj in ops:
             if kind == "pair" and paired(ii, jj):
                 last_match_i = ii
                 last_match_j = jj
+                matched_pairs.append((ii, jj))
         if last_match_i < 0:
             # Heard something, but nothing that confidently anchors to this
             # window: hold position (the next pass re-aligns with fresh audio).
+            recovered = recover_stalled_opening()
+            if recovered is not None:
+                return recovered
             self._stall_passes += 1
             return list(self._resolved_states)
+
+        # Before tracking starts, a lone later/shared word cannot establish
+        # position: opening invocations also contain "Allah" and would mark
+        # "bism" wrong before Al-Fatihah was reached. Require the first word
+        # or two adjacent, distinct confident pairs inside the existing window.
+        # Once anchored, ordinary one-word mistakes retain their live handling.
+        if anchor == 0 and matched_pairs[0][0] != 0:
+            adjacent_start = any(
+                next_i == prev_i + 1 and next_j == prev_j + 1
+                and ref_win[prev_i] != ref_win[next_i]
+                and hyp[prev_j] != hyp[next_j]
+                for (prev_i, prev_j), (next_i, next_j)
+                in zip(matched_pairs, matched_pairs[1:])
+            )
+            if not adjacent_start:
+                recovered = recover_stalled_opening()
+                if recovered is not None:
+                    return recovered
+                self._stall_passes += 1
+                return list(self._resolved_states)
+
+        # Only a one-word substitution bounded by a later confident match can
+        # identify a spoken mistake. A missing or uncertain ASR token remains
+        # unconfirmed even though the cursor can follow the later word.
+        substitutions = {}
+        gap_reference = []
+        gap_hypothesis = []
+        for kind, ii, jj in ops:
+            if kind == "pair" and paired(ii, jj):
+                if len(gap_reference) == len(gap_hypothesis) == 1:
+                    ri, hj = gap_reference[0], gap_hypothesis[0]
+                    if (confidence(hj) >= self.live_confidence_threshold
+                            and not self._is_match(hyp[hj], ref_win[ri])
+                            and (self._known_error_words is None
+                                 or hyp[hj] in self._known_error_words)):
+                        substitutions[ri] = hj
+                gap_reference = []
+                gap_hypothesis = []
+            else:
+                if ii >= 0:
+                    gap_reference.append(ii)
+                if jj >= 0:
+                    gap_hypothesis.append(jj)
 
         for kind, ii, jj in ops:
             if ii < 0 or ii > last_match_i:
@@ -419,6 +683,7 @@ class StreamingMatcher:
             if index in self._resolved:
                 continue
             if kind == "pair" and paired(ii, jj):
+                self._live_hyp_indices[index] = hyp_start + jj
                 self._resolved_states.append(
                     WordState(
                         index,
@@ -428,12 +693,17 @@ class StreamingMatcher:
                         confidence(jj),
                     )
                 )
+            elif ii in substitutions:
+                hj = substitutions[ii]
+                self._live_hyp_indices[index] = hyp_start + hj
+                self._resolved_states.append(
+                    WordState(index, reference[index], WordStatus.ERROR,
+                              hyp[hj], confidence(hj))
+                )
             else:
-                # Reference word the reciter moved past without a confident
-                # match — skipped / mispronounced. Reported live so it can be
-                # tinted red (real-time mistake signal). The final review
-                # re-scores the whole audio, so a noisy live call cannot corrupt
-                # the summary verdict.
+                # An unconfirmed recognition gap is distinct from a spoken
+                # substitution. Clients keep it neutral while the cursor can
+                # follow the later confirmed word; review is scored separately.
                 self._resolved_states.append(
                     WordState(index, reference[index], WordStatus.SKIPPED, "", 0.0)
                 )
@@ -469,6 +739,42 @@ class StreamingMatcher:
     # ------------------------------------------------------------------
     # Final review
     # ------------------------------------------------------------------
+    def _final_phrase_start(self, ref_index, hyp_index, words, confidences):
+        """Corroborate one bounded final position; never commit a phrase here."""
+        import math
+
+        size = 4
+        if hyp_index + size > len(words):
+            return None
+        identity = lambda word: self._word_aliases.get(word, word)
+        phrase = tuple(identity(word) for word in words[hyp_index:hyp_index + size])
+        if len(set(phrase)) != size:
+            return None
+        if confidences is not None and any(
+            slot >= len(confidences)
+            or not math.isfinite(float(confidences[slot]))
+            or not self.live_confidence_threshold <= float(confidences[slot]) <= 1
+            for slot in range(hyp_index, hyp_index + size)
+        ):
+            return None
+        selected = self._selected_reference_identities
+        if sum(selected[start:start + size] == phrase
+               for start in range(len(selected) - size + 1)) != 1:
+            return None
+        offset = self._final_reference_offset
+        ayah_end = self._ayah_ceiling(ref_index + offset, len(self.reference) + offset) - offset
+        # The first committed target stays inside the original exclusive
+        # eight-word ceiling. The four native words corroborate its identity;
+        # they may extend beyond that word ceiling, but not the ayah/speech
+        # limit. Subsequent words still use ordinary one-word final alignment.
+        target_end = min(ref_index + LIVE_SEARCH_REACH_WIDE, ayah_end, len(self.reference))
+        for target in range(ref_index + 1, target_end):
+            if target + size > min(ayah_end, len(self.reference)):
+                continue
+            if tuple(identity(word) for word in self.reference[target:target + size]) == phrase:
+                return target
+        return None
+
     def _evaluate_full(
         self,
         hypothesis_words: list[str],
@@ -483,11 +789,37 @@ class StreamingMatcher:
         window_end = reference_count
 
         def confidence(index: int) -> float:
-            if confidences is not None and 0 <= index < len(confidences):
+            if confidences is None:
+                return 1.0  # Legacy callers supply trusted text without scores.
+            if 0 <= index < len(confidences):
                 return float(confidences[index])
-            return 1.0
+            return 0.0
+
+        def continuation_score(ref_index: int, hyp_index: int) -> int:
+            ref_end = min(reference_count, ref_index + self.window_size)
+            hyp_end = min(hypothesis_count, hyp_index + self.window_size)
+
+            @lru_cache(maxsize=None)
+            def score(ri: int, hj: int) -> int:
+                if ri >= ref_end or hj >= hyp_end:
+                    return 0
+                if not confidence(hj) >= self.live_confidence_threshold:
+                    # An uncertain token may be an insertion or a missed word.
+                    # It contributes zero evidence; later confident pairs can
+                    # still distinguish the competing bounded continuations.
+                    return max(score(ri, hj + 1), score(ri + 1, hj + 1))
+                if self._is_match(hypothesis_words[hj], self.reference[ri]):
+                    return 1 + score(ri + 1, hj + 1)
+                return 0
+
+            return score(ref_index, hyp_index)
 
         while i < window_end and j < hypothesis_count:
+            # Uncertain recognition is neither a match nor a spoken mistake,
+            # and cannot establish a later position in the reference.
+            if not confidence(j) >= self.live_confidence_threshold:
+                j += 1
+                continue
             spoken = hypothesis_words[j]
             expected = self.reference[i]
 
@@ -504,7 +836,8 @@ class StreamingMatcher:
             if skip_to is not None:
                 for index in range(i, skip_to):
                     self._resolved_states.append(
-                        WordState(index, self.reference[index], WordStatus.SKIPPED)
+                        WordState(index, self.reference[index], WordStatus.SKIPPED,
+                                  confidence=0.0)
                     )
                 self._resolved_states.append(
                     WordState(
@@ -519,20 +852,62 @@ class StreamingMatcher:
                 j += 1
                 continue
 
+            next_pair = (
+                i + 1 < window_end and j + 1 < hypothesis_count
+                and confidence(j + 1) >= self.live_confidence_threshold
+                and self._is_match(hypothesis_words[j + 1], self.reference[i + 1])
+            )
             insertion_search_end = j + 1 + self.lookahead
             insertion_to = self._find_hyp(
                 expected,
                 hypothesis_words,
                 j + 1,
                 insertion_search_end,
+                confidences,
             )
-            if insertion_to is not None:
+            # Compare bounded continuations, not just a shared word/pair. An
+            # inserted invocation has the stronger following reference sequence;
+            # a later repeated phrase must not erase intervening confirmed text.
+            insertion_context = (
+                insertion_to is not None
+                and continuation_score(i, insertion_to) > continuation_score(i + 1, j + 1)
+            )
+            if insertion_to is not None and (not next_pair or insertion_context):
                 j = insertion_to
                 continue
 
-            self._resolved_states.append(
-                WordState(i, expected, WordStatus.ERROR, spoken, confidence(j))
-            )
+            if next_pair:
+                known = self._known_error_words is None or spoken in self._known_error_words
+                self._resolved_states.append(WordState(
+                    i, expected, WordStatus.ERROR if known else WordStatus.SKIPPED,
+                    spoken if known else '', confidence(j) if known else 0.0,
+                ))
+                i += 1
+                j += 1
+                continue
+
+            # Preserve every supported ordinary continuation above before
+            # consulting a unique stronger phrase after an alignment stall.
+            recovery = self._final_phrase_start(i, j, hypothesis_words, confidences)
+            if recovery is not None:
+                for index in range(i, recovery):
+                    self._resolved_states.append(
+                        WordState(index, self.reference[index], WordStatus.SKIPPED, '', 0.0)
+                    )
+                i = recovery
+                continue
+
+            if self._known_error_words is None or spoken in self._known_error_words:
+                self._resolved_states.append(
+                    WordState(i, expected, WordStatus.ERROR, spoken, confidence(j))
+                )
+            else:
+                # High decoder confidence does not make a garbled token proof
+                # of a spoken substitution. Preserve the reference position
+                # as an unconfirmed gap and let later words establish progress.
+                self._resolved_states.append(
+                    WordState(i, expected, WordStatus.SKIPPED, '', 0.0)
+                )
             i += 1
             j += 1
 
@@ -556,8 +931,14 @@ class StreamingMatcher:
         hypothesis: list[str],
         start: int,
         end: int,
+        confidences: Optional[list[float]] = None,
     ) -> Optional[int]:
         for index in range(start, min(len(hypothesis), end)):
+            if confidences is not None and not (
+                index < len(confidences)
+                and float(confidences[index]) >= self.live_confidence_threshold
+            ):
+                continue
             if self._is_match(hypothesis[index], word):
                 return index
         return None
@@ -573,6 +954,7 @@ class StreamingMatcher:
         self._hyp_cursor = 0
         self._resolved.clear()
         self._resolved_states.clear()
+        self._live_hyp_indices.clear()
         self.evaluate(hypothesis_words, confidences, full=True)
         state_by_index = {state.index: state for state in self._resolved_states}
         final_states: list[WordState] = []
@@ -584,7 +966,7 @@ class StreamingMatcher:
                     expected=expected,
                     status=self._resolved.get(index, WordStatus.SKIPPED),
                     spoken=state.spoken if state is not None else None,
-                    confidence=state.confidence if state is not None else 1.0,
+                    confidence=state.confidence if state is not None else 0.0,
                 )
             )
         return final_states

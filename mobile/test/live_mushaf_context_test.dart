@@ -17,13 +17,15 @@ import 'mushaf_text_helpers.dart';
 void main() {
   setUpAll(() async {
     await (FontLoader('KFGQPCUthmanicHafs')
-          ..addFont(rootBundle.load('assets/fonts/KFGQPCUthmanicHafs-Regular.otf')))
+          ..addFont(
+              rootBundle.load('assets/fonts/KFGQPCUthmanicHafs-Regular.otf')))
         .load();
   });
 
   for (final page in [1, 3, 8]) {
     for (final theme in [MushafTheme.minimal, MushafTheme.night]) {
-      testWidgets('live page $page in ${theme.id} hides unreached words and retains review geometry',
+      testWidgets(
+          'live page $page in ${theme.id} hides unreached words and retains review geometry',
           (tester) async {
         tester.view.physicalSize = const Size(360, 740);
         tester.view.devicePixelRatio = 1;
@@ -39,7 +41,8 @@ void main() {
           final printed = layout[ayah.reference]!;
           // The corpus includes a trailing verse-number token. The printed
           // layout counts only Arabic words; markers are supplied separately.
-          words.addAll(ayah.words.take(printed.words.length).map((w) => w.text));
+          words
+              .addAll(ayah.words.take(printed.words.length).map((w) => w.text));
           lines.addAll(printed.words.map((w) => w.line));
           boundaries.add(words.length - 1);
           labels.add(ayah.ayahNumber.toString());
@@ -91,12 +94,13 @@ void main() {
             expect(inkOf(tester, words.last, last: true), theme.ghostInk);
             expect(inkOf(tester, words[5]), theme.mismatchInk);
             expect(underlineCount(tester, theme.mismatchInk), 1);
-            expect(mushafUnits(tester).every((s) => s.style!.color!.a > 0), isTrue);
+            expect(mushafUnits(tester).every((s) => s.style!.color!.a > 0),
+                isTrue);
           } else {
             expect(inkOf(tester, words[2])!.a, 0);
-            expect(inkOf(tester, words[5])!.a, 0);
+            expect(inkOf(tester, words[5]), theme.mismatchInk);
             expect(inkOf(tester, words.last, last: true)!.a, 0);
-            expect(underlineCount(tester, theme.mismatchInk), 0);
+            expect(underlineCount(tester, theme.mismatchInk), 1);
           }
           for (final label in labels) {
             expect(inkOf(tester, ayahMarkerText(label))!.a, 1);
@@ -107,9 +111,11 @@ void main() {
                 as RenderRepaintBoundary;
             await tester.runAsync(() async {
               final image = await boundary.toImage(pixelRatio: 2);
-              final data = await image.toByteData(format: ui.ImageByteFormat.png);
+              final data =
+                  await image.toByteData(format: ui.ImageByteFormat.png);
               final mode = review ? 'review' : 'live';
-              final file = File('build/review/hifz-$mode-$page-${theme.id}.png');
+              final file =
+                  File('build/review/hifz-$mode-$page-${theme.id}.png');
               await file.parent.create(recursive: true);
               await file.writeAsBytes(data!.buffer.asUint8List());
               image.dispose();

@@ -896,6 +896,8 @@ mixin _$WordVerdict {
   bool get isCorrect;
   @JsonKey(name: 'confidence')
   double get confidence;
+  @JsonKey(name: 'evidence_confirmed')
+  bool get evidenceConfirmed;
   @JsonKey(name: 'expected_text')
   String? get expectedText;
   @JsonKey(name: 'actual_text')
@@ -933,6 +935,8 @@ mixin _$WordVerdict {
                 other.isCorrect == isCorrect) &&
             (identical(other.confidence, confidence) ||
                 other.confidence == confidence) &&
+            (identical(other.evidenceConfirmed, evidenceConfirmed) ||
+                other.evidenceConfirmed == evidenceConfirmed) &&
             (identical(other.expectedText, expectedText) ||
                 other.expectedText == expectedText) &&
             (identical(other.actualText, actualText) ||
@@ -957,6 +961,7 @@ mixin _$WordVerdict {
       wordIndex,
       isCorrect,
       confidence,
+      evidenceConfirmed,
       expectedText,
       actualText,
       errorType,
@@ -967,7 +972,7 @@ mixin _$WordVerdict {
 
   @override
   String toString() {
-    return 'WordVerdict(word: $word, wordIndex: $wordIndex, isCorrect: $isCorrect, confidence: $confidence, expectedText: $expectedText, actualText: $actualText, errorType: $errorType, errorDescription: $errorDescription, referenceAudioUrl: $referenceAudioUrl, userAudioUrl: $userAudioUrl, phonemeErrors: $phonemeErrors)';
+    return 'WordVerdict(word: $word, wordIndex: $wordIndex, isCorrect: $isCorrect, confidence: $confidence, evidenceConfirmed: $evidenceConfirmed, expectedText: $expectedText, actualText: $actualText, errorType: $errorType, errorDescription: $errorDescription, referenceAudioUrl: $referenceAudioUrl, userAudioUrl: $userAudioUrl, phonemeErrors: $phonemeErrors)';
   }
 }
 
@@ -982,6 +987,7 @@ abstract mixin class $WordVerdictCopyWith<$Res> {
       @JsonKey(name: 'word_index') int wordIndex,
       @JsonKey(name: 'is_correct') bool isCorrect,
       @JsonKey(name: 'confidence') double confidence,
+      @JsonKey(name: 'evidence_confirmed') bool evidenceConfirmed,
       @JsonKey(name: 'expected_text') String? expectedText,
       @JsonKey(name: 'actual_text') String? actualText,
       @JsonKey(name: 'error_type') String? errorType,
@@ -1007,6 +1013,7 @@ class _$WordVerdictCopyWithImpl<$Res> implements $WordVerdictCopyWith<$Res> {
     Object? wordIndex = null,
     Object? isCorrect = null,
     Object? confidence = null,
+    Object? evidenceConfirmed = null,
     Object? expectedText = freezed,
     Object? actualText = freezed,
     Object? errorType = freezed,
@@ -1032,6 +1039,10 @@ class _$WordVerdictCopyWithImpl<$Res> implements $WordVerdictCopyWith<$Res> {
           ? _self.confidence
           : confidence // ignore: cast_nullable_to_non_nullable
               as double,
+      evidenceConfirmed: null == evidenceConfirmed
+          ? _self.evidenceConfirmed
+          : evidenceConfirmed // ignore: cast_nullable_to_non_nullable
+              as bool,
       expectedText: freezed == expectedText
           ? _self.expectedText
           : expectedText // ignore: cast_nullable_to_non_nullable
@@ -1162,6 +1173,7 @@ extension WordVerdictPatterns on WordVerdict {
             @JsonKey(name: 'word_index') int wordIndex,
             @JsonKey(name: 'is_correct') bool isCorrect,
             @JsonKey(name: 'confidence') double confidence,
+            @JsonKey(name: 'evidence_confirmed') bool evidenceConfirmed,
             @JsonKey(name: 'expected_text') String? expectedText,
             @JsonKey(name: 'actual_text') String? actualText,
             @JsonKey(name: 'error_type') String? errorType,
@@ -1180,6 +1192,7 @@ extension WordVerdictPatterns on WordVerdict {
             _that.wordIndex,
             _that.isCorrect,
             _that.confidence,
+            _that.evidenceConfirmed,
             _that.expectedText,
             _that.actualText,
             _that.errorType,
@@ -1212,6 +1225,7 @@ extension WordVerdictPatterns on WordVerdict {
             @JsonKey(name: 'word_index') int wordIndex,
             @JsonKey(name: 'is_correct') bool isCorrect,
             @JsonKey(name: 'confidence') double confidence,
+            @JsonKey(name: 'evidence_confirmed') bool evidenceConfirmed,
             @JsonKey(name: 'expected_text') String? expectedText,
             @JsonKey(name: 'actual_text') String? actualText,
             @JsonKey(name: 'error_type') String? errorType,
@@ -1229,6 +1243,7 @@ extension WordVerdictPatterns on WordVerdict {
             _that.wordIndex,
             _that.isCorrect,
             _that.confidence,
+            _that.evidenceConfirmed,
             _that.expectedText,
             _that.actualText,
             _that.errorType,
@@ -1260,6 +1275,7 @@ extension WordVerdictPatterns on WordVerdict {
             @JsonKey(name: 'word_index') int wordIndex,
             @JsonKey(name: 'is_correct') bool isCorrect,
             @JsonKey(name: 'confidence') double confidence,
+            @JsonKey(name: 'evidence_confirmed') bool evidenceConfirmed,
             @JsonKey(name: 'expected_text') String? expectedText,
             @JsonKey(name: 'actual_text') String? actualText,
             @JsonKey(name: 'error_type') String? errorType,
@@ -1277,6 +1293,7 @@ extension WordVerdictPatterns on WordVerdict {
             _that.wordIndex,
             _that.isCorrect,
             _that.confidence,
+            _that.evidenceConfirmed,
             _that.expectedText,
             _that.actualText,
             _that.errorType,
@@ -1298,6 +1315,7 @@ class _WordVerdict implements WordVerdict {
       @JsonKey(name: 'word_index') required this.wordIndex,
       @JsonKey(name: 'is_correct') required this.isCorrect,
       @JsonKey(name: 'confidence') this.confidence = 1.0,
+      @JsonKey(name: 'evidence_confirmed') this.evidenceConfirmed = false,
       @JsonKey(name: 'expected_text') this.expectedText,
       @JsonKey(name: 'actual_text') this.actualText,
       @JsonKey(name: 'error_type') this.errorType,
@@ -1321,6 +1339,9 @@ class _WordVerdict implements WordVerdict {
   @override
   @JsonKey(name: 'confidence')
   final double confidence;
+  @override
+  @JsonKey(name: 'evidence_confirmed')
+  final bool evidenceConfirmed;
   @override
   @JsonKey(name: 'expected_text')
   final String? expectedText;
@@ -1375,6 +1396,8 @@ class _WordVerdict implements WordVerdict {
                 other.isCorrect == isCorrect) &&
             (identical(other.confidence, confidence) ||
                 other.confidence == confidence) &&
+            (identical(other.evidenceConfirmed, evidenceConfirmed) ||
+                other.evidenceConfirmed == evidenceConfirmed) &&
             (identical(other.expectedText, expectedText) ||
                 other.expectedText == expectedText) &&
             (identical(other.actualText, actualText) ||
@@ -1399,6 +1422,7 @@ class _WordVerdict implements WordVerdict {
       wordIndex,
       isCorrect,
       confidence,
+      evidenceConfirmed,
       expectedText,
       actualText,
       errorType,
@@ -1409,7 +1433,7 @@ class _WordVerdict implements WordVerdict {
 
   @override
   String toString() {
-    return 'WordVerdict(word: $word, wordIndex: $wordIndex, isCorrect: $isCorrect, confidence: $confidence, expectedText: $expectedText, actualText: $actualText, errorType: $errorType, errorDescription: $errorDescription, referenceAudioUrl: $referenceAudioUrl, userAudioUrl: $userAudioUrl, phonemeErrors: $phonemeErrors)';
+    return 'WordVerdict(word: $word, wordIndex: $wordIndex, isCorrect: $isCorrect, confidence: $confidence, evidenceConfirmed: $evidenceConfirmed, expectedText: $expectedText, actualText: $actualText, errorType: $errorType, errorDescription: $errorDescription, referenceAudioUrl: $referenceAudioUrl, userAudioUrl: $userAudioUrl, phonemeErrors: $phonemeErrors)';
   }
 }
 
@@ -1426,6 +1450,7 @@ abstract mixin class _$WordVerdictCopyWith<$Res>
       @JsonKey(name: 'word_index') int wordIndex,
       @JsonKey(name: 'is_correct') bool isCorrect,
       @JsonKey(name: 'confidence') double confidence,
+      @JsonKey(name: 'evidence_confirmed') bool evidenceConfirmed,
       @JsonKey(name: 'expected_text') String? expectedText,
       @JsonKey(name: 'actual_text') String? actualText,
       @JsonKey(name: 'error_type') String? errorType,
@@ -1451,6 +1476,7 @@ class __$WordVerdictCopyWithImpl<$Res> implements _$WordVerdictCopyWith<$Res> {
     Object? wordIndex = null,
     Object? isCorrect = null,
     Object? confidence = null,
+    Object? evidenceConfirmed = null,
     Object? expectedText = freezed,
     Object? actualText = freezed,
     Object? errorType = freezed,
@@ -1476,6 +1502,10 @@ class __$WordVerdictCopyWithImpl<$Res> implements _$WordVerdictCopyWith<$Res> {
           ? _self.confidence
           : confidence // ignore: cast_nullable_to_non_nullable
               as double,
+      evidenceConfirmed: null == evidenceConfirmed
+          ? _self.evidenceConfirmed
+          : evidenceConfirmed // ignore: cast_nullable_to_non_nullable
+              as bool,
       expectedText: freezed == expectedText
           ? _self.expectedText
           : expectedText // ignore: cast_nullable_to_non_nullable
