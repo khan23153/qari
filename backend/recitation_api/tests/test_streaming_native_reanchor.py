@@ -50,6 +50,12 @@ def seeded_session(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_captured_two_view_anchors_recover_without_revealing_unrecognized_gap(monkeypatch):
+    # The saved recognition belongs to its exact recorded PCM origins, not
+    # newly selected windows. Frame-grid policy has its own real-audio tests.
+    origins = {round(row['endpoint_seconds']*16000): round(row['window_start']*16000)
+               for row in DATA['views']}
+    monkeypatch.setattr(ss.StreamingRecitationSession, '_select_audio_window_start',
+        lambda self,total,default_start,**kwargs:origins[total])
     s = seeded_session(monkeypatch)
     d = s._matcher._delegate
     def forbidden(*_): raise AssertionError('Reference-conditioned recognition forbidden')

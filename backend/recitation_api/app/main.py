@@ -161,6 +161,12 @@ class _ConservativeLiveMatcher:
             return False
         return self._delegate.revise_live_gap(index, slot, spoken, confidence)
 
+    def repair_native_word(self, index, spoken, confidence):
+        limit = min(len(self.reference), max(0, int(self.max_live_words)))
+        if not 0 <= index < limit:
+            return False
+        return self._delegate.repair_native_word(index, spoken, confidence)
+
     def finalize(self, hypothesis_words, confidences=None):
         # finalize resets alignment state. Copy the configured delegate so
         # review retains all guards without mutating the live cursor/state.
