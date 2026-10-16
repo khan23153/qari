@@ -161,6 +161,12 @@ class _ConservativeLiveMatcher:
             return False
         return self._delegate.revise_live_gap(index, slot, spoken, confidence)
 
+    def repair_native_word(self, index, spoken, confidence):
+        limit = min(len(self.reference), max(0, int(self.max_live_words)))
+        if not 0 <= index < limit:
+            return False
+        return self._delegate.repair_native_word(index, spoken, confidence)
+
     def finalize(self, hypothesis_words, confidences=None):
         # finalize resets alignment state. Copy the configured delegate so
         # review retains all guards without mutating the live cursor/state.
@@ -172,6 +178,19 @@ class _ConservativeLiveMatcher:
             hypothesis_words,
             confidences,
         )
+
+    def recover_native_anchor(self, index, slot, words, confidences):
+        delegate = self._delegate
+        saved = delegate.reference
+        delegate.reference = self.reference[:max(0, int(self.max_live_words))]
+        try:
+            recovered = delegate.recover_native_anchor(index, slot, words, confidences)
+        finally:
+            delegate.reference = saved
+        if recovered:
+            self._cursor, self._hyp_cursor = delegate._cursor, delegate._hyp_cursor
+            self._states = list(delegate._resolved_states)
+        return recovered
 
     def finalize_independent(self, hypothesis_words, confidences):
         """Combine confirmed live states with an independently decoded recording.
@@ -238,6 +257,7 @@ class _ConservativeLiveMatcher:
 
         if anchor is not None:
             ref_start, hyp_start = anchor
+            delegate._final_reference_offset = ref_start
             delegate.reference = delegate.reference[ref_start:]
             fresh_states = delegate.finalize(
                 hypothesis_words[hyp_start:], confidences[hyp_start:],

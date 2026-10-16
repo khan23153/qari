@@ -7,18 +7,34 @@ from tests.test_native_error_event_confirmation import session_with_substitution
 def session(monkeypatch):
  monkeypatch.setattr(ss,'_live_asr_engine',lambda:'fastconformer_rnnt');monkeypatch.setattr(ss.settings,'ml_use_stub',False);return session_with_substitution()
 
-def test_ordinary_window_is_unchanged_without_unresolved_evidence(session):
+def test_ordinary_window_stays_short_without_unresolved_evidence(session):
  session._matcher._delegate._resolved_states=[]
- assert session._select_audio_window_start(40*16000,round(32.5*16000),early=False,force=False)==round(32.5*16000)
+ assert session._select_audio_window_start(40*16000,round(32.5*16000),early=False,force=False)==round(32.48*16000)
 
 def test_recent_native_error_gets_bounded_grid_aligned_context(session):
- assert session._select_audio_window_start(round(20.3*16000),round(12.8*16000),early=False,force=False)==0
+ assert session._select_audio_window_start(round(20.3*16000),round(12.8*16000),early=False,force=False)==round(.24*16000)
+
+def test_correcting_one_word_does_not_cut_context_before_the_next_word(session):
+ assert session._select_audio_window_start(10*16000,round(2.5*16000),early=False,force=False)==0
+ session._matcher._delegate._resolved_states=[]
+ assert session._select_audio_window_start(11*16000,round(3.5*16000),early=False,force=False)==0
+ assert session._select_audio_window_start(40*16000,round(32.5*16000),early=False,force=False)==round(32.48*16000)
+
+def test_resolved_missing_token_does_not_latch_a_long_context(session):
+ from ml.alignment.streaming_matcher import WordStatus
+ d=session._matcher._delegate
+ state=next(s for s in d._resolved_states if s.index==1)
+ state.status=WordStatus.SKIPPED;state.spoken='';state.confidence=0.
+ d._live_hyp_indices.pop(1)
+ assert session._select_audio_window_start(10*16000,round(2.5*16000),early=False,force=False)==0
+ d._resolved_states=[]
+ assert session._select_audio_window_start(11*16000,round(3.5*16000),early=False,force=False)==round(3.44*16000)
 
 def test_stale_error_does_not_make_later_windows_expensive(session):
- assert session._select_audio_window_start(40*16000,round(32.5*16000),early=False,force=False)==round(32.5*16000)
+ assert session._select_audio_window_start(40*16000,round(32.5*16000),early=False,force=False)==round(32.48*16000)
 
 def test_stop_uses_at_most_21_seconds_without_reference_text(session):
- assert session._select_audio_window_start(round(125.5335*16000),round(118.0335*16000),early=False,force=True)==105*16000
+ assert session._select_audio_window_start(round(125.5335*16000),round(118.0335*16000),early=False,force=True)==round(105.52*16000)
 
 def test_short_recording_and_first_pass_preserve_pcm_bounds(session):
  assert session._select_audio_window_start(3*16000,0,early=False,force=True)==0
