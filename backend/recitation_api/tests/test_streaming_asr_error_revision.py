@@ -97,6 +97,9 @@ def test_later_received_pcm_does_not_change_the_native_snapshot_endpoint():
 async def test_unusable_native_view_breaks_confirmation_in_actual_decode_path(monkeypatch,interruption):
  from ml.inference.transcript import TimedTranscript
  from tests.test_streaming import _pcm_seconds
+ # These captured views belong to their original PCM windows; test failure
+ # recovery independently of the separately tested context selection policy.
+ monkeypatch.setattr(ss.StreamingRecitationSession,'_select_audio_window_start',lambda self,total,default_start,**kwargs:default_start)
  s=session_with_error();s._qari_active_speech_seconds=6.;s._samples_at_last_transcribe=round(18.6*16000);s._transcriber=lambda *_:([],[])
  first,last=DATA['views'];good=lambda r:TimedTranscript(r['words'],r['confidences'],r['timings'])
  bad=([],[])
