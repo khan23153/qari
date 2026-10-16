@@ -64,6 +64,9 @@ services:
       context: ../backend/recitation_api
       dockerfile: Dockerfile
     restart: unless-stopped
+    # Contain an inference memory failure before it exhausts the VPS.
+    mem_limit: 6g
+    memswap_limit: 6g
     environment:
       <<: *auth-environment
       QARI_REDIS_URL: redis://redis:6379/1
