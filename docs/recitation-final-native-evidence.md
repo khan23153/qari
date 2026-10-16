@@ -31,3 +31,17 @@ UI, models, confidence thresholds and bounded recording review remain unchanged.
 This repairs evidence retention, not general model accuracy. The Baqarah
 recording still contains many ASR mismatches and uncertain words. A decoder's
 disagreement is not proof that the speaker made a recitation mistake.
+
+## Repeated text and forward progress
+
+A stored 16.8-second phone session exposed shifted initial RNNT
+timestamps. The stitched tail contained `الرحمن الرحيم` again, and native pair
+recovery used it to skip the unheard `الحمد لله رب العالمين` and reveal the same
+phrase at a later reference position.
+
+Live DP and native pair recovery now reject a forward jump whose entire matched
+phrase already appears among earlier, contiguous confirmed reference words.
+Accepted spelling variants and unmatched inserted ASR tokens cannot supply a
+new occurrence. Normal expected-position repeats remain valid; distinct following
+reference context can establish the later position within the existing search
+bounds. This prevents false progress; it does not implement repetition warnings.

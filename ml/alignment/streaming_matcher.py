@@ -401,6 +401,19 @@ class StreamingMatcher:
         self._resolved[index] = WordStatus.MATCHED
         return True
 
+    def _reuses_completed_phrase(self, index, words) -> bool:
+        """An earlier reading cannot identify a jump across an unheard gap."""
+        if index <= self._cursor or len(words) < 2:
+            return False
+        identity = lambda word: self._word_aliases.get(word, word)
+        phrase = tuple(identity(word) for word in words)
+        for start in range(self._cursor - len(phrase) + 1):
+            if (all(self._resolved.get(start + offset) == WordStatus.MATCHED
+                    for offset in range(len(phrase)))
+                    and tuple(identity(word) for word in self.reference[start:start + len(phrase)]) == phrase):
+                return True
+        return False
+
     def recover_native_anchor(self, index, slot, words, confidences) -> bool:
         """Resume at two independently timed anchors inside the existing reach.
 
@@ -415,7 +428,8 @@ class StreamingMatcher:
                 or self._resolved.get(self._cursor - 1) != WordStatus.MATCHED
                 or not self._cursor < index < ceiling - 1
                 or not self._hyp_cursor <= slot < min(len(words), len(confidences)) - 1
-                or identity(words[slot]) == identity(words[slot + 1])):
+                or identity(words[slot]) == identity(words[slot + 1])
+                or self._reuses_completed_phrase(index, words[slot:slot + 2])):
             return False
         for offset in (0, 1):
             if (identity(words[slot + offset]) != identity(self.reference[index + offset])
@@ -630,6 +644,18 @@ class StreamingMatcher:
             recovered = recover_stalled_opening()
             if recovered is not None:
                 return recovered
+            self._stall_passes += 1
+            return list(self._resolved_states)
+
+        # A short rereading (or shifted native timing of that old reading)
+        # supplies the same text as a later ayah. Wait for distinct following
+        # context rather than skipping unheard words to that repeated phrase.
+        if (all(bi == ai + 1
+                for (ai, aj), (bi, bj) in zip(matched_pairs, matched_pairs[1:]))
+                and self._reuses_completed_phrase(
+                    win_start + matched_pairs[0][0],
+                    [ref_win[ii] for ii, _ in matched_pairs],
+                )):
             self._stall_passes += 1
             return list(self._resolved_states)
 
