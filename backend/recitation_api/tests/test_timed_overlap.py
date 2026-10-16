@@ -264,3 +264,141 @@ def test_future_second_token_cannot_be_trimmed_as_past_context():
     )
     assert words == ['قل', 'هو', 'الله', 'الله', 'الصمد']
     assert times[-2:] == [(4.2, 4.4), (4.6, 4.8)]
+
+
+def test_consumed_yatim_article_variant_is_not_a_second_audio_occurrence():
+    # Captured from Duha at PCM endpoint57.6s. The earlier decode omitted al-.
+    words, confs, times = ss._stitch_timed_hypothesis(
+        ['فاغني', 'فم', 'يتيم'], [.993230314, .456420013, .870173309],
+        [(49.399999619, 50.199998856), (51.599999857, 54.799999905),
+         (55.439999771, 55.999999714)],
+        ['فاغني', 'فاما', 'اليتيم', 'فلا'],
+        [.806, .649, .709034503, .986609323],
+        [(12.479999542, 13.359999657), (14.63999939, 15.119999886),
+         (18.399999619, 19.039999008), (19.760000229, 19.760000229)],
+        consumed=3, consumed_end=55.999999714, window_start=37,
+        window_seconds=20.6, confidence_threshold=.55, right_context_seconds=.24,
+    )
+    assert words == ['فاغني', 'فم', 'يتيم', 'فلا']
+    assert confs == [.993230314, .456420013, .870173309, .986609323]
+    assert times[-1] == (56.760000229, 56.760000229)
+
+
+def test_later_article_variant_has_its_own_audio_occurrence():
+    words, _, _ = ss._stitch_timed_hypothesis(
+        ['يتيم'], [.9], [(1., 1.4)],
+        ['اليتيم', 'فلا'], [.9, .9], [(2., 2.4), (3., 3.2)],
+        consumed=1, consumed_end=1.4, window_start=0, window_seconds=4,
+        confidence_threshold=.55, right_context_seconds=.24,
+    )
+    assert words == ['يتيم', 'اليتيم', 'فلا']
+
+
+@pytest.mark.parametrize('a,b', [('الله', 'لله'), ('فابي', 'فاوي'), ('تقهر', 'تنهر')])
+def test_stitch_identity_does_not_alias_distinct_critical_words(a, b):
+    assert not ss._words_similar(a, b)
+
+
+def test_non_article_alwanehu_and_wa_annahu_remain_distinct():
+    assert not ss._words_similar('ألوانه', 'وأنه')
+    words, _, _ = ss._stitch_timed_hypothesis(
+        ['ألوانه'], [.9], [(1., 1.4)],
+        ['وأنه'], [.9], [(1.42, 1.46)],
+        consumed=1, consumed_end=1.4, window_start=0, window_seconds=2,
+        confidence_threshold=.55, right_context_seconds=.24,
+    )
+    assert words == ['ألوانه', 'وأنه']
+
+
+@pytest.mark.parametrize('a,b', [('اللهم', 'لهم'), ('التقى', 'تقي')])
+def test_wasla_lam_does_not_merge_a_different_word(a, b):
+    assert not ss._words_similar(a, b)
+    words, _, _ = ss._stitch_timed_hypothesis(
+        [a], [.9], [(1., 1.4)], [b], [.9], [(1.42, 1.46)],
+        consumed=1, consumed_end=1.4, window_start=0, window_seconds=2,
+        confidence_threshold=.55, right_context_seconds=.24,
+    )
+    assert words == [a, b]
+
+
+@pytest.mark.parametrize('a,b', [('اليتيم', 'يتيم'), ('السايل', 'سايل')])
+def test_reviewed_article_identity_is_symmetric(a, b):
+    assert ss._words_similar(a, b)
+    assert ss._words_similar(b, a)
+
+
+def _stitch_captured_sail_revision(*, weak_anchor=False, later_repeat=False):
+    # Actual Duha64.8→65.7s. A weak Waamma lies between two strong past words.
+    shift = 4. if later_repeat else 0.
+    return ss._stitch_timed_hypothesis(
+        ['تقهر', 'وانا', 'السايل'], [.870438, .434, .802],
+        [(57.600000381, 58.079999924), (59.379999924, 61.219999924),
+         (61.859999924, 64.019999924)],
+        ['تقهر', 'واما', 'السايل', 'فلا'],
+        [.2 if weak_anchor else .928, .923, .805, .868],
+        [(12.63999939, 13.43999958), (14.319999695, 16.559999466),
+         (16.879999161+shift, 19.600000381+shift),
+         (19.760000229+shift, 19.760000229+shift)],
+        consumed=3, consumed_end=64.019999924, window_start=45,
+        window_seconds=25. if later_repeat else 20.7,
+        confidence_threshold=.55, right_context_seconds=.24,
+    )
+
+
+def test_two_strong_past_occurrences_prevent_sail_duplication_across_a_weak_gap():
+    words, confs, _ = _stitch_captured_sail_revision()
+    assert words == ['تقهر', 'وانا', 'السايل', 'فلا']
+    assert confs == [.870438, .434, .802, .868]
+
+
+@pytest.mark.parametrize('kind', ['weak_anchor', 'later_repeat'])
+def test_unproven_sail_revision_cannot_remove_a_new_occurrence(kind):
+    words, _, _ = _stitch_captured_sail_revision(**{kind: True})
+    assert words == ['تقهر', 'وانا', 'السايل', 'السايل', 'فلا']
+
+
+@pytest.mark.parametrize('kind', ['shared_frame', 'weak_past', 'changed_anchor', 'drift', 'short_span', 'crossing'])
+def test_two_anchor_stitch_rejects_unproven_or_ambiguous_occurrences(kind):
+    prefix = ['تقهر', 'وانا', 'السايل']
+    scores = [.9, .4, .9]
+    past = [(0., .4), (.5, .7), (1., 2.)]
+    words = ['تقهر', 'واما', 'السايل', 'فلا']
+    confs = [.9, .9, .9, .9]
+    times = [(.04, .44), (.52, .72), (1.04, 2.6), (2.8, 2.9)]
+    if kind == 'shared_frame':
+        words.insert(3, 'لفظ'); confs.insert(3, .9); times.insert(3, (1.04, 2.6))
+    if kind == 'weak_past': scores[0] = .2
+    if kind == 'changed_anchor': words[0] = 'تنهر'
+    if kind == 'drift': times[2] = (1.12, 2.6)
+    if kind == 'short_span': past[2] = (1., 1.08)
+    if kind == 'crossing': past[1] = (.5, 1.2)
+    stitched, _, _ = ss._stitch_timed_hypothesis(
+        prefix, scores, past, words, confs, times, consumed=3,
+        consumed_end=past[-1][1], window_start=0, window_seconds=3.6,
+        confidence_threshold=.55, right_context_seconds=.24,
+    )
+    assert stitched.count('السايل') == 2
+
+
+def test_two_past_anchor_proof_still_retains_a_genuine_following_repeat():
+    words, _, _ = ss._stitch_timed_hypothesis(
+        ['تقهر', 'وانا', 'السايل'], [.9, .4, .9],
+        [(0., .4), (.5, .7), (1., 2.)],
+        ['تقهر', 'واما', 'السايل', 'السايل', 'فلا'], [.9] * 5,
+        [(.04, .44), (.52, .72), (1.04, 2.6), (2.8, 3.), (3.2, 3.3)],
+        consumed=3, consumed_end=2., window_start=0, window_seconds=4.,
+        confidence_threshold=.55, right_context_seconds=.24,
+    )
+    assert words == ['تقهر', 'وانا', 'السايل', 'السايل', 'فلا']
+
+
+def test_two_anchor_stitch_cannot_use_one_shared_identifying_frame():
+    words, _, _ = ss._stitch_timed_hypothesis(
+        ['تقهر', 'وانا', 'السايل'], [.9, .4, .9],
+        [(1., 1.), (1., 1.), (1., 1.3)],
+        ['تقهر', 'واما', 'السايل'], [.9, .4, .9],
+        [(1.04, 1.04), (1.04, 1.04), (1.04, 1.9)],
+        consumed=3, consumed_end=1.3, window_start=0, window_seconds=3.,
+        confidence_threshold=.55, right_context_seconds=.24,
+    )
+    assert words.count('السايل') == 2
