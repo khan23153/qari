@@ -618,3 +618,34 @@ def test_missing_vocabulary_preserves_established_spelling_family():
 def test_legacy_unspecified_vocabulary_keeps_old_alef_tolerance():
     matcher = StreamingMatcher(['قال'])
     assert matcher._is_match('قل','قال')
+
+
+def test_live_hypothesis_slots_include_opening_invocation_and_substitution():
+ ref=['قل','هو','الله','احد'];m=StreamingMatcher(ref,known_error_words=set(ref)|{'الصمد'})
+ hyp=['بسم','الله','الرحمن','الرحيم','قل','هو','الصمد','احد']
+ m.evaluate(hyp,[.95]*len(hyp))
+ m.evaluate(hyp,[.95]*len(hyp))
+ assert m._live_hyp_indices=={0:4,1:5,2:6,3:7}
+ assert m._resolved[2]==WordStatus.ERROR
+ before=(m._cursor,m._hyp_cursor,len(m._resolved_states))
+ assert m.revise_live_error(2,'الله',.97)
+ assert m._resolved[2]==WordStatus.MATCHED
+ assert (m._cursor,m._hyp_cursor,len(m._resolved_states))==before
+ assert not m.revise_live_error(2,'الصمد',.99)
+
+
+@pytest.mark.parametrize('score',[.2,float('nan'),float('inf'),1.1])
+def test_live_error_revision_rejects_weak_or_invalid_confidence(score):
+ ref=['قل','الله','احد'];m=StreamingMatcher(ref,known_error_words=set(ref)|{'الصمد'})
+ m.evaluate(['قل','الصمد','احد'],[.95]*3)
+ assert not m.revise_live_error(1,'الله',score)
+ assert m._resolved[1]==WordStatus.ERROR
+
+
+@pytest.mark.parametrize('old_score',[float('nan'),float('inf'),1.1])
+def test_revision_requires_a_valid_original_error_witness(old_score):
+ m=StreamingMatcher(['قل','الله','احد'],known_error_words={'قل','الله','احد','الصمد'})
+ m.evaluate(['قل','الصمد','احد'],[.95]*3)
+ next(s for s in m._resolved_states if s.index==1).confidence=old_score
+ assert not m.revise_live_error(1,'الله',.99)
+ assert m._resolved[1]==WordStatus.ERROR

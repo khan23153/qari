@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import math
 import os
+import unicodedata
 from pathlib import Path
 import threading
 
@@ -32,6 +33,32 @@ MODEL_SHA256 = {
 
 def resolve_model_dir(model_dir: str | None = None) -> str:
     return model_dir or os.environ.get('QARI_FASTCONFORMER_MODEL_DIR') or DEFAULT_MODEL_DIR
+
+
+def _join_split_waw(transcript: TimedTranscript) -> TimedTranscript:
+    """Join an independently decoded conjunction without increasing confidence."""
+    words, confidences, timings = [], [], []
+    for word, confidence, timing in zip(
+        transcript.words, transcript.confidences, transcript.timings,
+    ):
+        letters = [char for char in word if char != '\u0640' and unicodedata.category(char).startswith('L')]
+        arabic = bool(letters) and all(
+            0x0600 <= ord(char) <= 0x06FF
+            and unicodedata.category(char)[0] in {'L', 'M'}
+            for char in word
+        )
+        if (words and words[-1] == 'و' and arabic and len(letters) >= 2
+                and 0 <= timing[0] - timings[-1][1] <= .8 + 1e-6):
+            words[-1] += word
+            # Retain the weaker native component score. A strong following
+            # word cannot promote an uncertain conjunction above the guard.
+            confidences[-1] = min(confidences[-1], confidence)
+            timings[-1] = (timings[-1][0], timing[1])
+        else:
+            words.append(word)
+            confidences.append(confidence)
+            timings.append(timing)
+    return TimedTranscript(words, confidences, timings)
 
 
 def decode_result(result) -> TimedTranscript:
@@ -90,7 +117,7 @@ def decode_result(result) -> TimedTranscript:
                 log_parts.append(score)
                 time_parts.append(stamp)
     flush()
-    return TimedTranscript(words, confidences, timings)
+    return _join_split_waw(TimedTranscript(words, confidences, timings))
 
 
 class FastConformerTranscriber:
