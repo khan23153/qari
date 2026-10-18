@@ -421,6 +421,34 @@ class StreamingMatcher:
         self._resolved[index] = WordStatus.MATCHED
         return True
 
+    def repair_native_span(self, start, words, confidences) -> bool:
+        """Atomically upgrade 2–3 consumed gaps; session proves original audio."""
+        import math
+        try:
+            count = len(words)
+            end = start + count
+            states = {state.index: state for state in self._resolved_states}
+            if (not 2 <= count <= 3 or len(confidences) != count
+                    or not 0 < start < end < min(self._cursor, len(self.reference))
+                    or self._resolved.get(start - 1) != WordStatus.MATCHED
+                    or self._resolved.get(end) != WordStatus.MATCHED):
+                return False
+            for index, word, score in zip(range(start, end), words, confidences):
+                if (index not in states
+                        or self._resolved.get(index) not in (WordStatus.SKIPPED, WordStatus.ERROR)
+                        or states[index].status not in (WordStatus.SKIPPED, WordStatus.ERROR)
+                        or not math.isfinite(score) or not self.live_confidence_threshold <= score <= 1
+                        or not self._is_match(word, self.reference[index])):
+                    return False
+            for index, word, score in zip(range(start, end), words, confidences):
+                states[index].status = WordStatus.MATCHED
+                states[index].spoken = word
+                states[index].confidence = score
+                self._resolved[index] = WordStatus.MATCHED
+            return True
+        except (TypeError, ValueError, IndexError, OverflowError):
+            return False
+
     def _reuses_completed_phrase(self, index, words) -> bool:
         """An earlier reading cannot identify a jump across an unheard gap."""
         if index <= self._cursor or len(words) < 2:
