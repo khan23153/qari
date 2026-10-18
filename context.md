@@ -1,6 +1,6 @@
 # Qari — working context and VPS handoff
 
-Last updated: **2026-10-18, 19:45 UTC**; runtime was rechecked healthy at19:34. Later progress is appended below. Paths refer to this VPS.
+Last updated: **2026-10-18, 22:34 UTC**. Later progress and exact evidence are appended below. Paths refer to this VPS.
 This file records verified runtime state, historical evidence and unfinished work
 separately. It contains no passwords, API tokens, OAuth codes or signing secrets.
 
@@ -926,3 +926,12 @@ only; actual phoneme_mis targets retain vowels/geminates. Entire current backend
 +ML+API suite **977passed,1optional skip,2warnings in54.64s**, exit0.
 Task2runner tests writtenfirst andRED inprogress. Kaggletraining stillNOTstarted;
 preparing/testingaudio-only extraction/finitecheckpointreportingbefore submission.
+
+## 2026-10-18 22:34 UTC — bounded GPU experiment submission preparation
+
+- Kaggle login is working in `qari-conformer-kaggle-cli` (Kaggle2.2.4/Python3.12); account `telethonfool`, verified30GPUhours remaining. HostCLI1.7.4.5 did not support the new token format; that was a tooling failure, not proof of bad credentials. Private cached authentication locations are documented above; no secrets are copied here.
+- Isolated branch `fix/pronunciation-gpu-training-20261018`, worktree `/tmp/qari-pronunciation-gpu-20261018`, basedPR36`efba180`. Core commit `02bb80b`; original live model and backend unchanged.
+- First full runner suite988passed/1skipped. Reviewer found one Important issue: dependency installation was outside the whole-job timeout and defaultSIGALRM bypassed failure metadata. One fix pass adds a standard-library deadline covering bootstrap and processing, bounded dependency subprocess, inherited deadline, terminal failure metadata; three real timeout/success tests pass. Focused suite31passed. Fresh reviewed whole suite991passed/1skipped,2warnings in55.11s.
+- Private frozen encoder dataset `telethonfool/qari-frozen-encoder-20261018` ready, datasetId12691275; downloaded provider metadata confirmsisPrivate=true; only five original model assets plus hash manifest are included. No learner audio or credentials. Model SHA unchanged`b47c0fc7cd202c24ad4c7816e29d06c7d37c3761c1dcc91690796227df01dfa0`.
+- Planned private kernel `telethonfool/qari-phoneme-ctc-20261018` is NOT yet submitted/training. Packet `/tmp/qari-conformer-training-20261009/phoneme-ctc-20261018`; build/decisions/tests under `/home/innocent/qari-training-artifacts/pronunciation-human-data-20261018`.
+- Research only: independently split actual synthetic altered-phone targets, frozen audio encoder, temporal CTC head; Jessica and normalized reference groups held out. Min4096train/512validation, caps8192/512/1536pervoice; no expected text decoder. Deadline7100s and provider7200s cap. No qualification or deployment claim until human-labeled errors, correct speech, original CPU encoder and guards pass.
