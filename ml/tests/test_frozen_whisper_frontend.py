@@ -3,12 +3,23 @@ import hashlib
 from pathlib import Path
 import numpy as np
 import pytest
-from faster_whisper.feature_extractor import FeatureExtractor as Original
 from ml.training.frozen_whisper_frontend import FeatureExtractor as Frozen
 
 
 @pytest.mark.parametrize('kind', ['silence', 'voice_band', 'short_impulse'])
 def test_original_frontend_features_preserved(kind):
+    # Other legacy tests install a lightweight faster_whisper module stub.
+    # Load only the optional installed frontend file, avoiding package side effects.
+    import importlib.metadata
+    import importlib.util
+    try:
+        package=importlib.metadata.distribution('faster-whisper')
+    except importlib.metadata.PackageNotFoundError:
+        pytest.skip('Original frontend comparison requires optional faster-whisper')
+    path=package.locate_file('faster_whisper/feature_extractor.py')
+    spec=importlib.util.spec_from_file_location('original_frontend_comparison',path)
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    Original=module.FeatureExtractor
     audio = np.zeros(16000, dtype=np.float32)
     if kind == 'voice_band':
         t=np.arange(16000, dtype=np.float32)/16000
