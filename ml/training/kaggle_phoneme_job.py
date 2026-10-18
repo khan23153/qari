@@ -321,6 +321,7 @@ def main(*, deadline=None):
     import ctranslate2
     from datasets import Audio, load_dataset
     from faster_whisper import WhisperModel
+    from ml.training.frozen_whisper_frontend import FeatureExtractor as FrozenFrontend
     from ml.training.phoneme_ctc_pilot import feature_identity
 
     parser = argparse.ArgumentParser(description=__doc__)
@@ -342,6 +343,7 @@ def main(*, deadline=None):
             raise RuntimeError('Requested native INT8/FP32 CUDA compute is unsupported')
         model = WhisperModel(str(args.encoder), device='cuda', device_index=0,
                              compute_type='int8_float32', cpu_threads=2, local_files_only=True)
+        model.feature_extractor = FrozenFrontend()
         identity = feature_identity(args.encoder, model.feature_extractor)
         identity.update(encoder_files=hashes, device='cuda:0', compute_type='int8_float32',
                         gpu_name=torch.cuda.get_device_name(0),
