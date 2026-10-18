@@ -9,8 +9,8 @@ import wave
 from pathlib import Path
 
 
-def release_checks(results: dict) -> dict:
-    return {
+def release_checks(results: dict, *, pronunciation_report: dict | None = None) -> dict:
+    checks = {
         "phone_recall": results["phone_fatihah"]["matched"] >= 27,
         "reference_fatihah_recall": results["reference_fatihah"]["matched"] >= 27,
         "reference_ikhlas_recall": results["reference_ikhlas"]["matched"] >= 14,
@@ -22,9 +22,20 @@ def release_checks(results: dict) -> dict:
         "wrong_surah_no_completion": results["wrong_surah"]["max_cursor"] < 29
             and results["wrong_surah"]["matched"] <= 7,
     }
+    claims = [row for row in results.values() if row.get("pronunciation_available")]
+    if claims or pronunciation_report is not None:
+        from ml.evaluation.pronunciation import qualified_for_model
+        model_ids = {row.get("pronunciation_model_sha256") for row in claims}
+        checks["pronunciation_evidence_qualified"] = (
+            len(model_ids) == 1
+            and qualified_for_model(pronunciation_report, next(iter(model_ids)))
+        )
+    return checks
 
 
-async def evaluate(model: Path, fixture_root: Path, source_root: Path) -> dict:
+
+async def evaluate(model: Path, fixture_root: Path, source_root: Path, *,
+                   pronunciation_report: dict | None = None) -> dict:
     os.environ.update({
         "QARI_JWT_SECRET_KEY": "isolated-model-evaluation-key-no-production-access",
         "QARI_ENVIRONMENT": "test", "QARI_ML_USE_STUB": "false",
@@ -53,8 +64,15 @@ async def evaluate(model: Path, fixture_root: Path, source_root: Path) -> dict:
         ("reference_ikhlas", 112, 4, ikhlas),
     ]
     results = {}
+    async def discard_record(*args, **kwargs):
+        return None
+
     for name, surah, ayah_to, data in cases:
         session = StreamingRecitationSession(surah=surah, ayah_to=ayah_to)
+        # Keep real final verdict computation without writing fixture WAVs or
+        # session records, even when this process inherits deployment settings.
+        session._write_wav = lambda: None
+        session._persist = discard_record
         session.load_reference()
         events = []
         max_cursor = 0
@@ -63,18 +81,25 @@ async def evaluate(model: Path, fixture_root: Path, source_root: Path) -> dict:
             events.extend(await session.maybe_transcribe())
             max_cursor = max(max_cursor, session._matcher._cursor)
         events.extend(await session.maybe_transcribe(force=True))
+        max_cursor = max(max_cursor, session._matcher._cursor)
         matches = {e["word_index"] for e in events if e["status"] == "match"}
         confirmed_errors = {e["word_index"] for e in events
                             if e["status"] == "error_skipped" and e.get("evidence_confirmed") is True}
+        final = await session.finalize()
         results[name] = {
+            "pronunciation_available": final.get("pronunciation_available", False),
+            "pronunciation_model_sha256": final.get("pronunciation_model_sha256"),
             "matched": len(matches), "word_count": len(session.reference_words),
             "cursor": session._matcher._cursor, "events": len(events),
             "max_cursor": max(max_cursor, session._matcher._cursor),
             "confirmed_errors": len(confirmed_errors),
         }
         print(json.dumps({"case": name, **results[name]}), flush=True)
-    checks = release_checks(results)
+    checks = release_checks(results, pronunciation_report=pronunciation_report)
+    pronunciation_qualified = checks.get("pronunciation_evidence_qualified", False)
     return {"pass": all(checks.values()), "checks": checks, "cases": results,
+            "scope": "word_tracking_and_phonemic_pronunciation" if pronunciation_qualified else "word_tracking_only",
+            "pronunciation_qualified": pronunciation_qualified,
             "vps_latency_verified": False}
 
 
@@ -84,6 +109,10 @@ if __name__ == "__main__":
     p.add_argument("--fixtures", type=Path, required=True)
     p.add_argument("--source", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--pronunciation-report", type=Path,
+                   help="Held-out acoustic qualification JSON bound to the runtime's pronunciation model hash")
     args = p.parse_args()
-    report = asyncio.run(evaluate(args.model, args.fixtures, args.source))
+    pronunciation_report = json.loads(args.pronunciation_report.read_text()) if args.pronunciation_report else None
+    report = asyncio.run(evaluate(args.model, args.fixtures, args.source,
+                                  pronunciation_report=pronunciation_report))
     args.output.write_text(json.dumps(report, indent=2) + "\n")

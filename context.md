@@ -1,6 +1,6 @@
 # Qari — working context and VPS handoff
 
-Last verified: **2026-10-18, 15:29 UTC**; later progress is appended below. Paths refer to this VPS.
+Last updated: **2026-10-18, 19:37 UTC**; runtime was rechecked healthy at19:34. Later progress is appended below. Paths refer to this VPS.
 This file records verified runtime state, historical evidence and unfinished work
 separately. It contains no passwords, API tokens, OAuth codes or signing secrets.
 
@@ -27,7 +27,25 @@ work remains in its separate unqualified worktree. Summary UI source distinguish
 matched/unconfirmed words and unavailable pronunciation, but **no new APK was
 released**: existing signing certificates differ and a compatible release key is
 not configured. Existing APKs use the deployed backend without reinstalling.
-See sections3,6,8,11 and the final progress entry for exact state and next work.
+Current pronunciation investigation is isolated on `fix/acoustic-pronunciation-20261018`
+in `/tmp/qari-lexical-precision-20261018`. Actual public labelled audio reproduces
+false acceptance: all16 contributor-labelled vowel-error targets were matched,
+and3of8 expert-labelled incorrect full-ayah recordings were fully word-matched.
+The existing native phonetic model also misses errors; it is not qualified to grade.
+A new frozen-encoder CTC pilot completed40epochs on95 synthetic training clips with
+32 unseen-voice/text-group validation clips. Best synthetic phoneme error33.55%;
+this is feasibility evidence only. Corrected-cache rerun also completed40epochs with the same best33.55% error,
+510.35MiB memory peak and no OOM. Latest complete test suite: **960passed,1optional
+skip**. All36 human inference diagnostics completed; phoneme errors remain and no
+pronunciation candidate qualifies. **No experimental model is deployed.**
+
+Corrected human phoneme labels are currently gated on Hugging Face and the VPS has
+no persisted HF login. The user was asked to accept access to
+`IqraEval/Iqra_Extra_IS26` and `IqraEval/IqraEval_Test_GT`, then run in their own terminal:
+`python3 /home/innocent/qari-training-artifacts/pronunciation-qualification-20261018/hf_login.py`.
+It prompts secretly and stores a READ token privately; never paste it into chat.
+Public synthetic data cannot replace human pronunciation qualification. See
+section11 and the final progress entry for exact state and next work.
 
 ## 1. What the user wants
 
@@ -428,6 +446,35 @@ that closing phrase must not become Quran match evidence. User previously allowe
 trimming an opening A'udhu invocation for a specific Fatiha comparison; do not
 silently trim or fabricate arbitrary later test audio.
 
+### October18 pronunciation pilot assets
+
+- Source worktree: `/tmp/qari-lexical-precision-20261018`, branch
+  `fix/acoustic-pronunciation-20261018`; the new files are
+  `ml/training/phoneme_ctc_pilot.py`, `ml/evaluation/pronunciation.py`, their tests,
+  and `ml/evaluation/evaluate_phone_live.py` qualification integration.
+- Evidence directory: `/home/innocent/qari-training-artifacts/pronunciation-qualification-20261018/`.
+  `labelled-cases.json` and `labelled-native-results.json` contain the36 contributor
+  clips; `expert-cases.json` and `expert-native-results.json` contain14 full-ayah
+  expert-labelled clips. `pronunciation-baseline-rejected.json` records baseline
+  false acceptance. Public source labels have their stated limitations.
+- Experimental weights: `ctc-pilot-v2/experimental-head.pt`; report
+  `ctc-pilot-v2/pilot-report.json`, `pilot-decision.json`, logs
+  `ctc-pilot-v2.log`, resource samples `ctc-pilot-v2-memory.json`, exit marker
+  `ctc-pilot-v2-exit.json`. V1 is preserved only for audit.
+- Pilot source: public `IqraEval/Iqra_TTS` at
+  `97d27c2a575739e7aaffee2518d6817d203829c9`.128clips downloaded,95train/32validation
+  after one shared reference group was excluded. Validation uses Jessica voice;
+  training uses Amer, Callum and Nabil. No user recording trains.
+- Candidate uses only frozen audio encoding from `models/qari-ct2-base` and a small
+  newly trained CTC head. Original encoder files are read-only; no text decoder is
+  called. It is **unqualified**, and all candidate weights remain outside live models.
+- `qualified-code-full-suite.log`: final960passed/1skip suite. `optional-dependency-green.log`:
+  24pilot tests pass with faster-whisper unavailable, matching CI dependency scope.
+  `runtime-recheck.json`: local recitation200, public core200 with application UA,
+  healthy original0c7562b and no bounded-log ASR failures. Default Python urllib
+  user agent gets403; application/browser user agents get200. This observation
+  does not establish a tunnel outage, and no tunnel restart was needed.
+
 ## 10. VPS resources, tools and authenticated access
 
 Observed October18: **aarch64, 2 logical CPUs, about11.65GiB RAM**, approximately
@@ -448,7 +495,7 @@ that is not proof of an active GPU session or current quota.
 | Kaggle historical account/job | **telethonfool**, e.g. `telethonfool/qari-conformer-quran-fp32-20261009`; old terminal logs exist |
 | Kaggle helper | `/tmp/qari-conformer-training-20261009/kaggle_version_status.py` reads token via hidden prompt; never place token in a shell argument or context file |
 | Hugging Face | No default `hf`/`huggingface-cli` or persistent `~/.cache/huggingface/token` was found; historical token use is not current authenticated access |
-| HF private helper | `/tmp/qari-training-submit-20261008/hf_own_models.py` uses hidden input; do not run a blocking login flow without current need |
+| HF private helper | `/home/innocent/qari-training-artifacts/pronunciation-qualification-20261018/hf_login.py` uses hidden input, verifies identity and access, stores token0600; user action pending |
 | Cloudflare | Existing tokenized tunnel container is running; dashboard/CLI account login has not been independently verified here. Do not print container args/env |
 | Docker/FFmpeg | `/usr/bin/docker`, `/usr/bin/ffmpeg` |
 | Flutter SDK | `/home/innocent/flutter/bin/flutter` |
@@ -461,12 +508,19 @@ Do not replace the connected Drive account or log out again unless requested.
 
 ## 11. Next work, in priority order
 
-1. Obtain independently reviewed correct/incorrect pronunciation labels from the
-   preserved51 tester WAV/results. The user cannot identify exact changed words;
-   do not ask the same question again or blame a speaker for ASR disagreement.
-2. Qualify a distinct acoustic detector for vowels, shadda, makhraj and tajweed.
-   Text equality and expected-reference alignment alone cannot establish these.
-   Measure false acceptance and false accusation separately across speakers.
+1. Await the pending secure HF access action for corrected human phoneme labels.
+   Do not repeat requests for unknown tester word/time, reuse exposed chat tokens,
+   or train on the51 held-out tester WAVs. Existing36 contributor-labelled and14
+   expert-labelled public probes reproduce false acceptance but are insufficient
+   for a reliable word-level pronunciation release.
+2. Complete the corrected-cache synthetic pilot, inspect held-out phoneme error
+   and human diagnostics, and preserve the rejection decision when unqualified.
+   Then train/qualify a distinct acoustic detector using corrected human labels.
+   Measure missed errors, false accusation, abstention and speaker/surah coverage;
+   the new `ml/evaluation/pronunciation.py` gate is separate from word recall.
+   Short vowels/consonants/shadda are a bounded phonemic scope; full tajweed
+   needs its own labels and qualification. No expected-reference text may stand
+   in for actual spoken phonemes or acoustic ground truth.
 3. Improve actual recognition/context selection on Baqarah, repeated phone Fatiha
    and old Duha. Keep confidence/speech/word/ayah/source-time guards. Do not restore
    fuzzy correctness to increase match counts, or train on held-out recordings.
@@ -479,7 +533,8 @@ Do not replace the connected Drive account or log out again unless requested.
    do not silently replace the stable APK with a newly debug-signed build. The only
    found local keystore is Flutter's unrelated engine test fixture.
 6. Preserve PR34/PR35 and completed qualification evidence. Current backend is deployed;
-   no need to repeat training, corpus lookup, completed tests or old OAuth login.
+   retain current pilot artifacts and avoid repeating completed corpus lookups,
+   tests or old Drive OAuth login.
    For future deployment verify both image revision and mountedML hashes; rollback
    must restore/pin oldML as well as image. Never forcepush/reset the diverged live
    branch. Current models, API/tunnel credentials and release APKs are unchanged.
@@ -636,3 +691,84 @@ Privatequalification:900backend/ML/APIpass1skip1warning;14cachedactualnativePCMr
 **Remaining, do notclaimallerrorsfixed**: (1) Adaegi/grammar/shortvowel/shadda/tajweed falseacceptance lacks teacherlabelled heldout qualification; textualASRconfidence cannotcertifyit. Existingphone-level Zipformerdiagnostics are unqualified and makeerrors oncleanwords. (2) RepeatedFatiha still27live/28finalof29; finalactualASRمنهم forعليهم isamodel mismatch, not certifiedspeakermistake. Four recoveredwordscanappear late: privateconfirmation26.1s fornativeemissions around17.4–23.1s; do notclaimdelayeliminated. (3) Baqarahstill150live/167finalof230, oldDuha39/40 andYaSin724/725; donotforcepass orlowerguards. (4) Separate repetitionwarning remainsunqualified. (5) PR34UIwordingtestedbutAPKreleaseblockedbycompatible signingkey; stableAPKunchanged.
 
 PR35 https://github.com/khan23153/qari/pull/35 is the follow-up basedonPR34; bothCIjobs(coreAPIandrecitation/ML)passed oncodecommit. Documentation-only successor may becheckoutHEAD whileimage/source revision stays0c7562b. Userrequested continuedcontextupdates; lateststateisthisentry andthetopsections, historicalprogressisnotcurrentruntime.
+
+
+## Pronunciation investigation resumed — 2026-10-18T18:45:33.887932+00:00
+
+User explicitly requested full resolution, so priority is now acoustic adaegi/harakat falseacceptance. Production0c7562b remains unchanged. New isolated branchfix/acoustic-pronunciation-20261018 in /tmp/qari-lexical-precision-20261018; evidence /home/innocent/qari-training-artifacts/pronunciation-qualification-20261018. Existing Zipformer251-token model and corpus pinned to upstream2f261746, no newmodeldownload. Public upstream docsconfirm short-vowel probability comparison is distinct from ASR text and thresholdheuristics are not calibrated correctness probabilities. Its actederror recordings areprivate; notavailable. IqraEval/QuranMB.v2 accessible butfirstrowsonlyID/audio, no truephonemelabels; cannotservegroundtruthlocally. Found CC-BY-4.0 MuazAhmad7/Surah_Ikhlas-Labeled_Dataset revision973b5ef1d1532bcbe7e9a5a5b0dce125cc4d0dac with1506metadata rows/1500audiofiles and errorword/explanation inclharakat; contributorlabels, not independentlyteacherverifiedhere. Boundeddownload/16kresampling for vowelerrors andcorrectcontrols underway withsourcePCMhashes, speakerdev/heldsplit, no trainingoruseraudioaugmentation. RetaSygoldenexpertfilter timedout; noexpertlabelsubset claimed. Need demonstrate actualbaselinefalseaccept then compare independentnativephones. No productcode/deploy/thresholdchange yet.
+
+
+## Acoustic falseacceptance evidence and bounded pilot — 2026-10-18T19:20:47.188230+00:00
+
+P3=/home/innocent/qari-training-artifacts/pronunciation-qualification-20261018.36contributor-labelled Ikhlasclips(16error/20correct) actuallyran originalnativeASR+existingpinnedZipformer, all36uniquePCM.16/16labellederrorwordswerelexicallymatched; naivephonetic-equality alsofalseacceptedall16, including12/12inheldspeakerpartition. Noexperimentalphoneticmodelqualified. Sourceannotationsnotindependentlyrelabelledandupstreamtrainingoverlapunknown. P3/labelled-native-results.json, pronunciation-baseline-rejected.json, evaluation-labels.json preservefulloutputs. LowcontextsyllableCTCreset experimentunstableoncorrectclips, rejected; local-phones-results.json/log. Privatepeak836.89MiB/noOOM.
+
+Independent RetaSyexpertgoldenmetadata:24pages/2400rowsyield22goldens;14fullayahfixtures(6correct/8incorrect) acrossseveralsurahs ranbothnativeengines.3/8incorrectutterancesgotallwordslexicallymatched; naivephonetic-equality alsoacceptsoneexpertincorrectclipanddisagreeswith4/6expertcorrectclips. Labelsareutterancelevel, so donotclaimlocalisedwordaccuracy. P3/expert-cases.json, expert-native-results.json, expert-summary.json. PartialAyatalKursiclipswereexcludedwithreason.
+
+Newrepositorycodecurrentlyonlyisolatedbranchfix/acoustic-pronunciation-20261018. Addedhumanlabelledpronunciationqualificationseparatefromwordrecall; defaultengineeringgates100bad100good,5speakers3surahs,20bad20goodpervowel/gemination/consonantclass, recall.90/precision.98/FPR.02/coverage.95 perclassandaggregate, knownspeaker/PCMholdoutinventories andtestedbundleSHA. UnknownupstreamtrainingmustremainNone, neverpretendemptyknowninventory. Addedforce-passmaxcursorcapturebeforefinalize topreventtransientcompletionbeinghidden. Initialfull925testspassed; laterreviewfixeshave38focusedpass; newpilot17focusedpass, freshfullsuitepending. AllreviewfindingsbeingfixedbyRED/GREENregressions; nograde/modelclaimfrompytestcounts.
+
+HFVPSloginmissing; IqraEval/Iqra_Extra_IS26andIqraEval_Test_GTarecurrentlygated. SecureownterminalhelperP3/hf_login.py useshiddenreadtokenand0600cache, neverpastecredentialsintoChat/git; userquestionpending. KaggleAPIauthalsofailsinsideexistingCLIcontainer. PublicIqra_TTSandIqra_trainmetadataavailable; syntheticactualphoneme_misexists, humanmispronunciationlabelaccessstillpending.
+
+Boundedresearchpilotprepared: bypassexistingWhisperbase textdecoder; frozen512D/20msaudioencoder withnewsmallCTCphonehead usingonlyexplicitphoneme_mis frompublicsyntheticIqra_TTS. Max128shortclips,3trainingvoices+Jessica validationvoice, canonicalreferencegroupsdisjoint; noheldoutuserrecordings train. Nativeencodeofknown4sclipverifiedshape1x1500x512, actual203framesretained; Whisperrequires3000melinputframes, paddedencoderframesareexcluded. Spec/planin docs/superpowers/{specs,plans}/2026-10-18-acoustic-phoneme-pilot.md. CurrentTTSfixturepreparationrunning; traininghasNOTstarted. P3/run_ctc_pilot.py willrun3500MiB/noextraSwap,2CPU/nice19, noGPU, withlivelog+memorymonitor. Candidateisexperimental, neverautopromoted; finalhumanphonemelabelqualificationrequired. Productionremains0c7562bunchanged; noAPK/sourceUI/model/tunnelchanges.
+
+
+## Frozen-encoder pilot started — 2026-10-18T19:23:57.149905+00:00
+
+128publicsyntheticIqra_TTSclips prepared(32eachAmer/Callum/Jessica/Nabil), immutabledataset97d27c2a575739e7aaffee2518d6817d203829c9; phoneme_misusedasalteredphones, canonicalphoneme_refneverfallback. DataoutsidegitP3/tts-pilot-cases.json andtts-pilot-16k; nosourceuseraudio.56focusedtestsPASS(gate38+pilot18), inclrealPyTorchCTC oneepochfakeencodersmokeprovesencoderonly/no transcribecalls andnoqualificationclaim. Fullbackend/ML/APIruninprogress(P3/final-full-suite.log). Independentwholebranchreviewrequested. ActualboundedCPUtrainingstarted withP3/run_ctc_pilot.py, containerqari-phoneme-head-pilot-20261018, logfileP3/ctc-pilot.log, metricsP3/ctc-pilot/pilot-report.json, resourceP3/ctc-pilot-memory.json. Featureextractionfirst(Whisperbaseencoderonly,notV50), then40epochs smallframeCTChead.3500MiB/noextraSwap,2CPUs/nice19; noGPUneededforpilot. No modelpromotion, humanqualificationpendingHFuseraccess. Needcontinuewatchinglogs/resourcesuntilexit; donotabandonjoborcallittraineduntilactualepochoutputandexit0.
+
+
+## Acoustic pilot first result and review corrections — 2026-10-18 19:30 UTC
+
+First bounded pilot finished40epochs, exit0:95trainingclips/32Jessica validationclips after1reference-overlap removal. Greedy syntheticPER156.42% beforetraining tobest33.55%, final33.78%; finaltrainloss.02037. No unknownvalidationphones; peak609.90MiB, noOOM. This is syntheticfeasibility only, not qualifiedhumanpronunciation; no productionpromotion. Review found frontendcache omitted actualpreprocessor_config.json and releaseevaluator finalizecouldpersistfixtureaudio/Redisrecords. Bothreproducedin8REDtests thenfixed: completefrontendfile/effectiveparameter cacheidentity withfixed16k/160hop/80melvalidation; evaluationsessionssuppressaudio/recordpersistencewhilekeepingactualfinalverdicts. Also boundWAVframesbeforeallocation andreportvalidationCTCloss, absentifunknownphonepreventsfullscoring.60focusedtestsPASS. Pilotv1usesoldcacheidentity, preservedforaudit; rerunv2willusecorrectedidentityandfreshfeatures, not relabelv1results. Fullsuitebeforefix954pass1skip; freshpostfixsuitepending. Production0c7562bunchanged.
+
+
+## Reviewed code verification — 2026-10-18 19:31 UTC
+
+Both important independent review findings fixed and all8regressions nowGREEN. Focused tests60pass; fresh entire backend/recitation_api/tests + ml/tests + api/tests: **960passed,1optional skip,2dependency warnings in55.43s**, exit0. Full log P3/reviewed-full-suite.log; red/green evidence P3/review-fixes-{red,green}.log; review record P3/code-review-final.txt. Corrected-cache pilotv2 currentlyextracting127features; originalpilotfinishedwith0OOM. Productioncontainerrechecked19:30healthy,0restart/OOM, original0c7562b. HFtokenfileabsent; no useraccessreplyyet. Usertestrecordings nottrained or uploaded.
+
+
+## Pronunciation pilot decision — 2026-10-18 19:37 UTC
+
+Corrected-cache v2 finished all40epochs with exit0.95training clips and32 held
+Jessica clips; one reference-group overlap was removed before training. Best
+synthetic greedy phoneme error was **33.55% at epoch16**, validation CTC loss1.4374.
+At epoch40 training loss fell to.02037 while validation loss rose to2.0073 and
+error remained33.78%: more epochs on this small sample did not solve validation.
+The best checkpoint is retained, not the last checkpoint. Native encoder, config,
+preprocessor config, frontend source and effective timing are fingerprinted in
+`ctc-pilot-v2/pilot-report.json`; v2 resource peak510.35MiB, no OOM.
+
+Fresh human diagnostic then ran all36 previously held-out labelled clips with
+**no training or expected-phone prompt**, exit0, peak445.94MiB and no OOM.
+`pilot-human-diagnostic.json/log/done` and `pilot-human-f-contexts.json` preserve
+outputs. Concrete limitations: error-labelled ID14V4F still emits `k u f u w a`,
+while correct-labelled ID4V4T/ID5V4T emit `k u f w a n`, dropping the target vowel.
+Some clips lose `f` entirely. These are model transcriptions, not assertions about
+what a speaker actually pronounced; no per-phone human truth is available here.
+A missing or incorrect model phone must not become a confident user accusation.
+Candidate is therefore **REJECTED for production grading**, not force-passed.
+Full decision: `pilot-decision.json`. No live model/threshold/UI changes.
+
+Code's final complete suite after optional-dependency portability correction:
+**960passed,1optional skip,2dependency warnings in55.87s**, exit0, log
+`qualified-code-full-suite.log`. Without faster-whisper installed, all24 pilot
+unit tests also pass; genuine RED6failures are preserved in
+`optional-dependency-red.log`, then GREEN in `optional-dependency-green.log`.
+Both earlier important independent review findings are fixed; feature identity
+uses the actual extractor class source while keeping pure unit tests independent
+of inference installation. This preserves v2's numeric frontend and cache key,
+verified by human inference loading its exact feature bundle successfully.
+
+Core public health200 with application/browser UA; default Python urllib UA403.
+Local recitation health200, Docker healthy,0restart/OOM; original deployed backend
+revision0c7562b remains. Last10000 log lines since deploy contain zero
+stream.transcribe_failed/loop_transcribe_failed/finalize_failed events.
+`runtime-recheck.json` records this bounded observation; no claim of logs beyond
+that bound. Tunnel/edge are running and were not restarted.
+
+Actual next dependency is corrected human spoken-phone data. HF login is still
+absent and access to gated IqraEval/Iqra_Extra_IS26 + IqraEval_Test_GT is pending
+user's account action. Secure helper path and access pages are above; no token is
+in git/context. Do not repeat the unknown tester word/time question, train on
+held-out user audio, lower existing confidence guards, or promote this pilot.
+The full pronunciation/recognition goal is **NOT COMPLETE**. Tested qualification
+code and the bounded pilot are being committed on the isolated branch for review.
