@@ -494,9 +494,9 @@ that is not proof of an active GPU session or current quota.
 | Google Drive CLI | `/home/innocent/.local/bin/rclone`; remote **`qari-training:`**; authenticated `rclone about` succeeded Oct18 |
 | Drive config | `/home/innocent/.config/rclone/rclone.conf`; private OAuth data; historical user-owned account verified Oct9 with readonly scope after old account disconnected |
 | Drive data | Historical folders `QariVPS-Backup` and `qari_ml`; recovered archives are in `/tmp/qari-drive-recovery-20261009/` |
-| Kaggle CLI | `/home/innocent/kaggle-cli/bin/kaggle`; not on default PATH. Current host authenticated `kernels list --mine` **failed**, so do not claim an active login |
+| Kaggle CLI | **Authenticated as telethonfool** via existing qari-conformer-kaggle-cli container, Kaggle2.2.4/Python3.12.15. Host1.7.4.5 cannot use new access tokens; use container CLI |
 | Kaggle historical account/job | **telethonfool**, e.g. `telethonfool/qari-conformer-quran-fp32-20261009`; old terminal logs exist |
-| Kaggle helper | `/tmp/qari-conformer-training-20261009/kaggle_version_status.py` reads token via hidden prompt; never place token in a shell argument or context file |
+| Kaggle helper | P4/kaggle_login_private.py uses hidden input, verifies telethonfool and caches token0600 at ~/.kaggle/access_token and CLI container private home. No credentials in job/input packets |
 | Hugging Face | Authenticated as **Shaikhaffan** on Oct18 at19:43 using hidden input; private `~/.cache/huggingface/token` mode0600. Both needed gated datasets return403 until that account receives access |
 | HF private helper | `/home/innocent/qari-training-artifacts/pronunciation-qualification-20261018/hf_login.py` uses hidden input, verifies identity and access, stores token0600; login complete, gated dataset access pending |
 | Cloudflare | Existing tokenized tunnel container is running; dashboard/CLI account login has not been independently verified here. Do not print container args/env |
@@ -828,3 +828,101 @@ pilot24pass. All40-epoch runs and36human diagnostics completed with exit0/noOOM.
 `P3/run-summary.json` and `experimental-bundle.json` index exact code/model/evidence
 identity. Complete pronunciation goal remains unfinished, candidate unqualified,
 production0c7562b unchanged. No APK or live model was released from this pilot.
+
+
+## Continued without waiting for gated data — 2026-10-18 21:54 UTC
+
+User explicitly requested continued work until full resolution. Authenticated HF
+access rechecked21:47; both corrected-label repositories remain403. Investigating
+public alternatives instead of repeating that blocker. New evidence directory:
+/home/innocent/qari-training-artifacts/pronunciation-human-data-20261018.
+
+Public QDAT-Bench (obadx/qdat_bench) revision53d7221da573b2b9e92d9542507564ae1b88fd30
+has159human recordings, one per reciter, one shared ayah (Ma'idah5:109), with
+phonetic transcript and observed madd/noon/qalqalah annotations. Metadata fetched,
+audio not downloaded yet. This is a limited-scope alternative, not a replacement
+for multi-surah word-level ground truth. Source:
+https://huggingface.co/datasets/obadx/qdat_bench .
+
+Other public Iqra mirrors contain canonical phonetizer targets and cannot
+substitute for actual erroneous spoken phones. MON3EMPASHA Arabic mispronunciation
+word dataset has binary labels but no realized phones/clear annotation provenance;
+not accepted as human-phone truth. Official Iqra trained checkpoints are615MB
+and require additional upstream dependencies; current disk free903MiB with512MiB
+reserve. Existing Muaalem FP32 graph remains but its external data weights are
+absent, so do not claim it is currently runnable. Android INT8 candidate876MB
+would violate reserve and is not downloaded. No cache/container/model data deleted.
+
+A small public candidate fryad-yaseen/quran-phoneme-ctc-tiny-v2 was downloaded
+for private diagnostic only (32914622bytes, immutable75c2dae862b8703feb75f0c9984273a343677e8d,
+sha256e00e996f9e8c2760cdb6d42e5a5b9163f0a951919d312645701e0d3421959f1d).
+Architecture inspected with weights_only=True before use; license/training
+provenance are not yet sufficient for deployment. It could test whether a
+pretrained phoneme head improves the synthetic-only pilot's human errors without
+new encoder training. Original production models and backend0c7562b unchanged.
+
+
+## Public phonetic candidate running — 2026-10-18 22:00 UTC
+
+Tiny33MBcandidate rejected before decoding because no published ID-to-phone map
+exists in its repo; never guess vocabulary order. Its newly downloaded weights
+were removed afterSHAverification, preserving metadata/rejection record to avoid
+filling VPS disk. Public TBOGamer22/wav2vec2-quran-phonetics downloaded instead:
+revision65c3ab93446f2f1041a18082433a911e5e154a9d, standard Wav2Vec2ForCTC with
+complete40-ID vocabulary, nativeblank37, Apache2.0. All weight tensors loaded
+strictly into existing runtime, no missing/random parameters. Source model trained
+on isolated Quran words, so comparing whole short ayahs against original-native
+word crops; no expected transcript enters phonetic inference.
+
+P4=/home/innocent/qari-training-artifacts/pronunciation-human-data-20261018.
+Actual probe P4/run_word_phone.py / probe_word_phone.py, container
+qari-word-phone-probe-20261018, networknone/2500MiBtotalmemory/1CPU/nice19,
+logs word-phone.log, output word-phone-results.json, resources word-phone-memory.json.
+First whole-ayah outputs are poor as expected for word-trained model; crop output
+still pending. No human correctness decisions or productionchanges made.
+Model377635736bytes; disk530MiBfree above512MiBreserve. Do not download another
+model or corpus while this candidate occupies that reserve. Dataset source labels
+and all user recordings remain excluded from training. Needfinish/assess probe.
+
+
+## Kaggle access restored; larger training preparation — 2026-10-18 22:12 UTC
+
+The earlier Kaggle login failure was partly a tooling diagnosis error: host
+CLI1.7.4.5 lacks KAGGLE_API_TOKEN support and fails locally before contacting Kaggle.
+Existing qari-conformer-kaggle-cli container has Python3.12.15/Kaggle2.2.4/SDK0.1.37;
+the same previously authorized token authenticates correctly there as **telethonfool**.
+Legacy kernel default session isCOMPLETE (explicitversion1 returned404, not authfailure).
+Credential is now cached0600 at /home/innocent/.kaggle/access_token and inside the
+existing CLI container's private home. No token is in code, arguments, output or
+this file. Private helper P4/kaggle_login_private.py uses getpass/hiddenstdin and
+verifies the expected training account; existing differing credentials are backed
+up privately before replacement. Current authoritative CLI is the container.
+
+Actual quota query: **GPU0used/30hours remaining; TPU0used/20remaining**, refresh
+2026-10-24. No current training job is claimed started yet. Plan now scales audio-
+only frozen-original-encoder training to8192actual altered public TTS clips plus
+512heldJessica clips, with15% reference-group holdout and1536pervoice trainingcap.
+New isolated worktree /tmp/qari-pronunciation-gpu-20261018, branch
+fix/pronunciation-gpu-training-20261018, basedPR36. Written spec/plan under
+docs/superpowers/{specs,plans}/2026-10-18-gpu-phoneme-training.md. Core split and
+padding-safe temporal head tests written first; RED run inprogress. Only frozen
+original model files will be uploaded privately; no user audio or credentials.
+
+Public word-phonetic candidate probe finished36cases, exit0, peak823.40MiB/noOOM.
+Both wholeayah and original-native word crops failed to separate annotated vowel
+errors reliably (wrong andcorrect clips oftenbothdecodedkufuu). Rejected, allraw
+outputs/modelidentity retained P4/word-phone-results.json andword-phone-decision.json.
+Its newly downloaded377635736-byte weights were removed after exactSHA verification
+to reclaimdisk; metadata retained. Current originalproductionmodels untouched.
+
+
+## Larger training core verified — 2026-10-18 22:17 UTC
+
+Isolated GPUtraining branch coreTDD:17 meaningful failures to17pass. New head
+masks padding before every temporal convolution; tests prove real-frame logits
+are invariant to unrelated batch peers and poisoned padded tails, with finiteCTC
+gradients. Reference grouping unifies presentation/diacritics for leakage checks
+only; actual phoneme_mis targets retain vowels/geminates. Entire current backend
++ML+API suite **977passed,1optional skip,2warnings in54.64s**, exit0.
+Task2runner tests writtenfirst andRED inprogress. Kaggletraining stillNOTstarted;
+preparing/testingaudio-only extraction/finitecheckpointreportingbefore submission.
