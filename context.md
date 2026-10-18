@@ -1,8 +1,26 @@
 # Qari — working context and VPS handoff
 
-Last verified: **2026-10-18, 11:47 UTC**; later progress is appended below. Paths refer to this VPS.
+Last verified: **2026-10-18, 12:25 UTC**; later progress is appended below. Paths refer to this VPS.
 This file records verified runtime state, historical evidence and unfinished work
 separately. It contains no passwords, API tokens, OAuth codes or signing secrets.
+
+## Current outcome — read first
+
+The strict lexical repair is deployed at **afe3dc63abcfca5eaaba789b9df8195085cca59e**.
+It prevents similar-but-different ASR text from earning a correctness verdict;
+sequence placement and native occurrence/confidence guards remain separate.
+**866 backend tests,193 Flutter tests and8 public paced WSS cases pass.**
+Full Ya-Sin yielded724/725; the removed old green had expected ننكسه but native
+text نركزه. This was an incorrect textual acceptance, not a verified speaker error.
+
+**Pronunciation/grammar grading is still unresolved.** ASR/normalization loses
+short vowels and shadda; high word confidence cannot certify adaegi or tajweed.
+Baqarah and repeated-phone recognition still have misses. Full repetition-warning
+work remains in its separate unqualified worktree. Summary UI source distinguishes
+matched/unconfirmed words and unavailable pronunciation, but **no new APK was
+released**: existing signing certificates differ and a compatible release key is
+not configured. Existing APKs use the deployed backend without reinstalling.
+See sections3,6,8,11 and the final progress entry for exact state and next work.
 
 ## 1. What the user wants
 
@@ -108,11 +126,11 @@ Repository: `khan23153/qari`.
 | --- | --- |
 | Live checkout | `/home/innocent/qari` |
 | Local live branch | `deploy/aiquranic-domain` |
-| Live commit/image revision | **`d84454a3c12a918eb3eefa0465d4b2519ec90ba8`** |
+| Backend source/image revision | **`afe3dc63abcfca5eaaba789b9df8195085cca59e`** |
 | Running recitation container | `infra-recitation-api-1` |
-| Image ID | `sha256:d39d8470b5ede8017dee3d557c3947863ff5c18a0cf6321dd18375876304ff00` |
-| Qualified image tag | `infra-recitation-api:completed-phrase-guard-20261016` |
-| Running since | Oct 16 11:22:59 UTC |
+| Image ID | `sha256:e2fd5f3959afd20b4f76d1a96815b469abe642ad56e491312c1e963bc88eb80e` |
+| Qualified image tag | `infra-recitation-api:lexical-precision-20261018` |
+| Running since | Oct 18 12:18:48 UTC |
 | Health/restarts/OOM | healthy; 0 restarts; not OOM-killed |
 | Memory/swap ceiling | 6 GiB / 6 GiB total; host has no swap |
 | Live source bind mount | host `ml/` → `/app/ml:ro` |
@@ -123,8 +141,9 @@ Repository: `khan23153/qari`.
 
 Running SHA256 values, independently rechecked October 18:
 
-- `app.services.streaming_session`: `e8c3a33bd5d5eb439062d46277620e0eb0b21b9c3a811195c2b143cf6740e80a`
-- `ml.alignment.streaming_matcher`: `7abf91bf735cdf8322679c52b33d4f6bbb3cd7b960decbbe768597214253692d`
+- `app.services.streaming_session`: `27b778f91fcad4f4fe54dac1399cd390fcba03b0601eb4032f9138e995e42721`
+- `ml.alignment.streaming_matcher`: `850be9d1ea298e4a023c8cbdfb5757ef00da68470bb8c57636bdb3a3cab6d1bb`
+- Exact raw spelling manifest: `703c5c9b3c03e1d2ac2b548a2cb1abd56966cd0f080432d912d5727d7d726ac0`
 - `_remember_native_repetitions` is **absent** from the running container.
 
 PR [18](https://github.com/khan23153/qari/pull/18) is merged and its original
@@ -135,6 +154,8 @@ evidence and completed-phrase guard fixes, is also **merged**. GitHub `main`
 was observed at `8ef92bdf1aacd474bbf26544f4a5854dc9af2265` on October 18.
 Do not assume the deployed branch equals remote main. The local live branch
 has diverged from its same-named remote; do not force-push or reset it blindly.
+
+Current repair PR: https://github.com/khan23153/qari/pull/34. Public qualification passed8cases. Models are unchanged; deployed source is afe3dc6. The checkout may have a later documentation-only commit; compare image revision and source hashes for backend identity.
 
 ## 4. Backend topology, models and recognition policy
 
@@ -150,7 +171,7 @@ is not interchangeable with the live WebSocket service.
 - Redis: `infra-redis-1`; recitation metadata/results in Redis DB **1**.
 - Database: `infra-postgres-1`, not publicly published.
 - Current core, recitation, Redis and PostgreSQL services were healthy; tunnel
-  and edge were running. No restart was needed for the October 18 audit.
+  and edge were running. Only recitation-api was recreated at12:18UTC for the tested repair; tunnel/edge/core were not restarted.
 - An idle legacy Kaggle CLI container exists: `qari-conformer-kaggle-cli`.
   Old diagnostic containers include failures/exit137 and are not production
   services or evidence that training is running. Do not delete their evidence.
@@ -174,17 +195,16 @@ All three are mounted below `/app/models`. Current policy:
 - Independent final review uses sequential, nonoverlapping **30s** RNNT chunks
   for recordings longer than **240s**, avoiding an oversized encoder allocation.
 - Model loading is offline (`HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`).
-- Temporary **`QARI_STREAM_DEBUG=1`** is still enabled via
-  `/home/innocent/qari-training-artifacts/phone-fatihah-repeat-20261016/debug-compose-override.yml`.
-  Base Compose sets it to 0. Restore the base configuration after useful captures,
-  at an idle time; do not interrupt an ongoing recitation.
+- **`QARI_STREAM_DEBUG=0`** restored at the idle rollout via
+  `/home/innocent/qari-training-artifacts/lexical-precision-20261018/production-compose.yml`.
+  The old Oct16 debug override is historical, not active.
+- Production uses strict_word_identity=true, legacy word aliases disabled. Exact printed-token spelling lookup has660forms. Approximate placement keeps original DPweights but cannot award MATCHED. Final exact rereading recovery skips native insertions only with confirmed prior source and two strict following words.
 
 `GET https://aiquranic.com/health` checks **core API only**. It does not prove the
 recognition model or WebSocket works. On October 18, core public/local health and
 local recitation health returned 200 with an explicit health-check User-Agent.
 Default Python User-Agent public requests initially received403; the subsequent
-explicit User-Agent check succeeded. Public recognition was not freshly replayed
-in this audit; earlier paced public replay evidence is documented below.
+explicit User-Agent check succeeded. New public paced recognition checks passed8cases after the12:18rollout; see appended progress and lexicalprecision/public-final-summary.json. Publichealth remains core-only; actual WSS was tested separately.
 
 ## 5. Main files and data flow
 
@@ -230,9 +250,13 @@ tester used the same hardware or that zero dropped frames proves clean audio.
 | Long final recording could exhaust memory | Existing bounded sequential30s review and6GiB live service limit; retain these |
 | Repeated speech warning | **Not deployed / not finished**; see next section |
 | Grammar/short vowel/makhraj/tajweed errors marked correct | **Unresolved**; lexical recognition is not qualified pronunciation grading |
-| Different unknown ASR words accepted through broad fuzzy/phonetic tolerance | **Unresolved**, with concrete saved result pairs in Oct18 audit |
+| Different unknown ASR words accepted through broad fuzzy/phonetic tolerance | **Fixed in afe3dc6**: strict correctness separate from approximate placement; printed spelling conversion660exactforms |
+| Exact repeated4word phrase shifted final review to wrong later words | **Fixed in afe3dc6** with bounded confirmed rereading insertion; warning events remain separate/unfinished |
+| Incomplete recognized subset could show100% / ambiguous pronunciation claim | UI source fixed and tested in PR34; **APK not released** because compatible signing key is unavailable |
 
-Qualified evidence for **deployed d844**, not for the unfinished repetition branch:
+Current afe3dc6: **866backend tests pass,1optional skip;193Flutter tests pass**. All14recording/controlcases qualified; fullYaSin724/725 with941freshnativecalls, old725thwas falsegreen ننكسه←نركزه. Other13cases reused exact PCM-matched native decodes with unchanged model/normalizer fingerprints. Baqarah148live166final/230; repeatphone23live28final/29 remain recognition limitations. Public paced WSS qualification passed8cases, including bothmodes, byte-identical savedPCM, allayahmarkers, missing/wrongword, silence/noise/wrongsurah.
+
+Historical evidence for **d844 before this repair**, not the current strict policy or unfinished repetition branch:
 
 - Complete recitation API + `ml/tests` + `api/tests`: **804 passed, 1 skipped**
   (optional NeMo runtime), 2 dependency/deprecation warnings.
@@ -331,6 +355,7 @@ Candidate branch evidence and **blocking issues**:
   `https://aiquranic.com/v1/app/download`; distinguish it from pilot77.
 - Other files: `releases/app-release.apk`, `app-mic-pilot.apk`, `qari-mic-test-v76.apk`.
 - Backend code changes do not prove a new APK/model was trained or downloaded.
+- Oct18 summary UI fixes are committed/tested in PR34 but not released. Existing APK publicsigners differ: see lexicalprecision/existing-apk-public-signers.json. No compatible release signingkey was found in VPSconfig or repo secrets. Do not replace stable75 or pilot77 with an incompatible debug-signed APK.
 
 ## 9. Historical model/training/recovery work
 
@@ -426,37 +451,28 @@ Do not replace the connected Drive account or log out again unless requested.
 
 ## 11. Next work, in priority order
 
-1. **Preserve and label the new tester evidence.**51 audio/results are already
-   copied. Review representative high-match recordings in both modes with a
-   qualified Quran reciter; obtain exact expected-vs-spoken labels for intentional
-   harakat/makhraj/shadda/madd errors. No exact label is currently available.
-2. **Tighten demonstrably overbroad lexical acceptance with regression tests.**
-   Start with saved Kafirun/Qaflun and Kitab/Khitam pairs; inspect `_is_match`,
-   known-vocabulary guards and phonetic similarity. Keep validated Quran spelling
-   aliases and held-out correct-speaker recall. Unknown close text without
-   independent acoustic evidence should not receive an unconditional correctness
-   claim. Test both modes, wrong speech, silence and legitimate near spellings.
-3. **Separate lexical tracking from pronunciation correctness.** Keep availability
-   flags honest. Inspect green/checkmark/“correct” copy so it does not promise
-   an unavailable pronunciation assessment. A normalized text match or selected
-   expected reference must never be the only acoustic correctness witness.
-4. **Design/evaluate a distinct acoustic error detector** using diacritized or
-   phone-level evidence plus independently labeled correct/incorrect minimal
-   pairs and speakers. Retain low-delay lexical tracking. Measure false acceptance
-   and false accusation separately; keep unknowns unconfirmed. Do not claim a
-   confidence-threshold increase alone fixes lost-vowel information.
-5. **Finish repetition branch safely:** chunk-local source validation tests/fix,
-   final repeat-at-Stop controls, save and diagnose full Ya-Sin failure, review,
-   complete suites and bounded fresh/public replays. Do not ship current candidate.
-6. Keep testing existing difficult clips: old Duha Fa-aawaa, Baqarah remaining
-   recognition failures, multiple speakers, inserted/wrong-surah speech and silence.
-   Never blame a speaker based on ASR disagreement or train on held-out test clips.
-7. When a candidate qualifies, commit/push an isolated branch and PR, deploy only
-   the recitation service with the existing configuration, then verify the actual
-   running image label **and bind-mounted source hashes**. An image tag alone is
-   insufficient proof of deployment or rollback.
-8. Review APK code75-vs77 distribution/update metadata separately; preserve
-   package identity and user recordings. No new APK build was triggered Oct18.
+1. Obtain independently reviewed correct/incorrect pronunciation labels from the
+   preserved51 tester WAV/results. The user cannot identify exact changed words;
+   do not ask the same question again or blame a speaker for ASR disagreement.
+2. Qualify a distinct acoustic detector for vowels, shadda, makhraj and tajweed.
+   Text equality and expected-reference alignment alone cannot establish these.
+   Measure false acceptance and false accusation separately across speakers.
+3. Improve actual recognition/context selection on Baqarah, repeated phone Fatiha
+   and old Duha. Keep confidence/speech/word/ayah/source-time guards. Do not restore
+   fuzzy correctness to increase match counts, or train on held-out recordings.
+4. Finish the separate repetition-warning worktree: fix chunk-local provenance
+   validation, review final-at-Stop controls and resolve its fullYaSin regression
+   before deploying. The Oct18 exact rereading placement repair emits no warning.
+5. Publish the tested summary UI only after compatible signing is resolved. Repo
+   secrets are empty, VPS release key.properties is absent, and75/76/77 public
+   APK signer certificates differ. Preserve installed app data and package identity;
+   do not silently replace the stable APK with a newly debug-signed build. The only
+   found local keystore is Flutter's unrelated engine test fixture.
+6. Preserve PR34 and completed qualification evidence. Current backend is deployed;
+   no need to repeat training, corpus lookup, completed tests or old OAuth login.
+   For future deployment verify both image revision and mountedML hashes; rollback
+   must restore/pin oldML as well as image. Never forcepush/reset the diverged live
+   branch. Current models, API/tunnel credentials and release APKs are unchanged.
 
 ## 12. Useful commands and operational cautions
 
@@ -563,3 +579,17 @@ Final design retains original DP placement weights2/-2; scoring alternatives0,.5
 Final recognition qualification COMPLETE:14cases, no transcribe/loop/final failures. FullYaSin **724live/724final of725**,941fresh unprompted native calls; missing index578 ننكسه had previously been wrongly accepted with actualASR نركزه (priorreviewJSON proves it). No genuinely identical decoded word lost there. Baqarah148live166final/230,21model-reported substitutions,43unconfirmed; original181included14different-text falsegreens and1genuine واذا not recovered. Clean phone Fatiha29/29final (latest28live,old29live), partial4only, Ikhlas15/15, newDuha40/40, oldDuha39/40, repeatphone23live28final/29. Silence/noise/wrong-surah0matches0verdicts; omittedلاnotconfirmed and wrongspokencontrolnotcompleted. First13cases used exact cached actual-model windows with inputPCMbytes and unchangedSS/rawmanifest/model checks; YaSinall941callsfresh. Privatepeakabout2GiB,0OOM, limit3500MiB/noextraSwap. AllcasescurrentSS/matcher/rawdatahashes frozen. Report qualification-summary.json and final-recognition-qualification.json underlexicalprecisionartifactdirectory.
 
 Additional UI bug reproducedRED→GREEN: a reached unconfirmedword couldleave100% scoreoveronlyevaluatedwords; summarynowshowsmatched/reachedfractionplusN unconfirmed instead. Pendingunreachedsuffixexcluded. All3summarywidgettestsandtargetedanalysispass; newfullFlutterreruninprogress. PublicAPKcertinspectionproves75,76,77use3different publicsignercertificates. GitHubsecretlistempty; VPSreleasekeyconfigabsent (onlyunrelatedFlutterenginefixturekeystorefound). DoNOTpromoteanewdebugsignedAPKoverexistinginstallsoraskuserstouninstall/losetheirdata. SummarysourceisreadybutAPKreleasependingcompatiblekey; backendrepaircanbenefitexistingAPK. Productionstillolduntiltestedrollout.
+
+
+## Progress — 2026-10-18T12:18:45.892077+00:00
+
+Final pre-rollout gates PASS: **866backend tests+1optional skip,193Flutter tests**, new summary targeted analyzerclean;14realrecording/negativecontrolqualificationcomplete, fullYaSin941freshcalls724/725. Candidate imagebuilt with revisionafe3dc6 and3sourcehashes matchqualification; models/thresholds/wordayahguardsunchanged. Recitation-only idle rollout now planned with pinned oldmatcher rollback because MLisbindmounted. Turn off temporary verboseQARI_STREAM_DEBUG at rollout. PublicWSS modes/audiointegrity/negativecontrolsstillpending; no claimproductioncompleteuntilthosefinish.
+
+
+## Progress — 2026-10-18T12:25:42.161969+00:00
+
+DEPLOYED AND VERIFIED bounded lexical repair: **afe3dc63abcfca5eaaba789b9df8195085cca59e**, imagesha256:e2fd5f3959afd20b4f76d1a96815b469abe642ad56e491312c1e963bc88eb80e, containerinfra-recitation-api-1 started12:18:48UTC. Actualimage label and packagedSS/bindmountedmatcher/rawmanifest hashes match14casequalification. ExistingDockerCompose recitation-only rollout,6GiB memory/6GiB total memory+swap, originalmodels/.55confidence/.006RMS/activity/ayah/provenance/30schunkguards retained; debug0. Rollbackoldimage tag infra-recitation-api:rollback-lexical-precision-20261018 plus rollback-compose.yml pins oldmatcher. Otherservices/tunnel/edge not restarted.
+
+Complete validation **866backendpass1optionalSkip2warnings;193Flutterpass;newwidget/testanalyzerclean**. PublicpacedWSS8casesPASS: HifzFatiha29/29, TilawatIkhlas15/15, partialFatiha4only, silence/noise/wrongsurah0matches0verdicts, missingلا7/8 (لاnotinvented), wrongspokencontrol6/8 withlaterprogress. Allreadyayahmarkerspresent, everywire/finalMATCHEDstrictidentity, nativeconfidencepreserved, all8owner-audioGETPCMbyteidentical. Phonefirstwordevent~1.28s fromfixtureplaybackstart; this is saved-PCM replay, not newdevice latency or acousticaccuracy qualification. Initialsilence-only assertion requiredexplicitfalse optionalflags; actualclientdefaultsabsentflagstofalse. Preserved initialreport, correctedharnesscontract and fresh6ssilenceretestPASS; no backend sourcechange. Corepublic/localrecitationhealth200, Dockerhealthy0restarts0OOM; no stream.transcribe_failed/loop_transcribe_failed/finalfailures in deployedlogs. Publicsampledpeak~1.18GiB vs6GiBceiling.
+
+Artifacts: deployment.json, qualification-summary.json, final-recognition-qualification.json, public-final-summary.json, public-qualification.json, public-silence-recheck.json, deployed-log-redacted.json, final-qualified-memory.json, public-qualified-memory.json under /home/innocent/qari-training-artifacts/lexical-precision-20261018/. All credentials redacted. No newAPK or trainingjob started; sourceUIreleasependingkey. Remaining: unqualifiedadaegi/grammar/tajweed, actualASRmisses onBaqarah/repeatphone/oldDuha, separate repetition-warningcandidate. Overallrecognition/pronunciationgoal is NOT claimedcomplete.
