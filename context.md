@@ -1,0 +1,538 @@
+# Qari — working context and VPS handoff
+
+Last verified: **2026-10-18, 11:47 UTC**; later progress is appended below. Paths refer to this VPS.
+This file records verified runtime state, historical evidence and unfinished work
+separately. It contains no passwords, API tokens, OAuth codes or signing secrets.
+
+## 1. What the user wants
+
+- Qari is a Flutter Quran app with a Python backend, live at `https://aiquranic.com`.
+- User selects a surah/page, recites continuously, and expects accurate word tracking
+  with low delay, including recognition of repetitions and deliberate mistakes.
+- Both Hifz and Tilawat are being tested by multiple people using the shared APK.
+- Hifz must reveal **confirmed words only**. Every ayah marker remains visible.
+  Mistakes and unreached text belong in the review/summary; do not reveal an
+  unconfirmed word just because the cursor passed it.
+- Incorrect or repeated speech must not complete a page. Silence/wrong surah must
+  not invent progress. Keep the current confidence and speech-activity guards.
+- App is free and must have **no ads**. The earlier “paid later” wording was
+  ambiguous; do not infer approval for a paid feature or change model licensing.
+- Avoid memory crashes. Do not replace models or launch large training/downloads
+  simply because a test failed. Do not train on the user's held-out test recordings.
+- User prefers autonomous investigation and concrete results over repeated approval
+  questions. They cannot remember the exact older repetition session or the exact
+  word/time from the latest deliberate pronunciation tests. Do not repeatedly ask.
+
+## 2. Latest report and what the logs actually establish
+
+On October 18 the user reported that testers intentionally changed grammar or
+pronunciation/adaegi, but Qari still marked the word correct. They tested both
+Hifz and Tilawat. The exact changed word/surah/time is **unknown**.
+
+Audit directory: `/home/innocent/qari-training-artifacts/tester-audit-20261018/`.
+
+| Evidence | Observation |
+| --- | --- |
+| Available recitation log window | Oct 16 11:23 through Oct 17 16:47 UTC |
+| All session starts in that window | 71; includes 5 known automated public checks |
+| Sessions with app capture diagnostics | 66: **39 memorization/Hifz, 27 tracking/Tilawat** |
+| App version/build in those diagnostics | `1.0.49`, build `77` |
+| Surah starts represented | 1, 2, 96, 103, 106, 109, 112; pages may include further surahs |
+| Retained session results and audio | **51**, copied before metadata expires |
+| Results claiming pronunciation/tajweed assessment | **0**; availability flags are false |
+| Results containing word-error verdicts | 17; these are decoder/matcher verdicts, not teacher labels |
+| Results with no evaluated words | 12; stopping early/no recognition is not automatically a mistake |
+| ASR failure events in the audited window | No `stream.transcribe_failed`, `stream.loop_transcribe_failed` or final transcription failures found |
+| Other connection event | One `ws.stream.disconnected` |
+
+Important files in the audit directory:
+
+- `recitation-log-redacted.json`: allowlisted per-pass text, cursors and events.
+- `log-overview.json`, `audit-findings.json`: session/mode/event counts.
+- `retained-session-results.json`: retained metadata and full result payloads;
+  ownership identifiers were excluded from metadata.
+- `session-audit-summary.json`: per-session counts, times, modes and reported errors.
+- `audio/<session-uuid>.wav`: **actual saved phone recordings**, not synthesized fixtures.
+- `pronunciation-policy-proof.json`: running-code normalization counterexamples.
+- `accepted-text-variant-audit.json`:35 distinct expected/accepted-text pairs;
+  includes valid orthographic variants and suspicious lexical acceptances.
+- `running-source-proof.json`, `host-inventory-redacted.json`:
+  running source hashes and deployment/resource inventory.
+- `cli-access-checks.json`, `verified-health-checks.json`:
+  current authenticated-read/health checks.
+- `artifact-directory-index.json`: complete top-level historical artifact directory index.
+
+**Actual confirmed limitation:** live acceptance is primarily lexical ASR matching,
+not a qualified acoustic pronunciation assessment. The production normalizer strips
+harakat, including short-vowel distinctions. Directly executing the running code
+shows `أنعمتَ` and `أنعمتُ` both become `انعمت`; `إيّاكَ` and `إيّاكِ` both become
+`اياك`. These are text-only demonstrations of information loss, not proof of what
+a particular tester said. The matcher also has spelling/article/alef/phonetic
+tolerances. ASR can output the expected written word despite a spoken error.
+High decoder confidence is not calibrated proof of correct pronunciation.
+
+Therefore **a green word currently means accepted recognized text**, not verified
+makhraj, harakat, shadda, madd, tajweed or grammar. The backend already returns
+`pronunciation_available=false` and `tajweed_available=false`; do not invent scores.
+The specific reported acoustic false acceptance remains unverified without a
+known altered-word label or qualified review of the saved audio.
+
+**Separate concrete matcher issue found in saved results:** some mismatched native
+texts were nevertheless marked `is_correct=true`. Examples include `الكافرون` →
+`القافلون` (4 results), `الكافرون` → `الطافلون` (1), `الكتاب` → `الختام` (1),
+`اهدنا` → `اهدينا` (2), and `المغضوب` → `المغدوم` (2). Do not classify all35
+pairs as errors: `الرحمان`/`الرحمن` and Quran spelling variants are expected.
+These saved verdicts establish overpermissive **text acceptance** as a concrete
+debugging target; they do not establish whether each mismatch originated in the
+speaker or the decoder. Preserve the linked actual recordings and create separate
+negative regression cases for distinct words versus valid spelling aliases.
+
+Examples useful for follow-up, all on October 17 UTC:
+
+- `58f2b8a7-1313-4f41-9274-1c46cd8fddd7`, 13:47, Fatiha/Hifz:
+  29/29 lexical matches, 29.013s; pronunciation not assessed.
+- `62736b18-0881-4f3a-811a-7753f8386b0a`, 16:46, Fatiha/Hifz:
+  21 accepted words, 27.632s; the remaining eight were unconfirmed, not a full pass.
+- `7ab7e04b-27f2-4f79-abdb-b9aa32c34be5`, 12:10, Baqarah/tracking,
+  selected page 127 words: 125 matches, one reported `يكذبون` → `يكسبون`,
+  one unconfirmed. This demonstrates a surfaced lexical mismatch, not verified
+  acoustic correctness of all other words.
+- Some Fatiha sessions switched speech to Ikhlas or repeated earlier phrases;
+  inspect raw native text before treating their red verdicts as speaker mistakes.
+
+## 3. Exactly what is deployed
+
+Repository: `khan23153/qari`.
+
+| Item | Verified value |
+| --- | --- |
+| Live checkout | `/home/innocent/qari` |
+| Local live branch | `deploy/aiquranic-domain` |
+| Live commit/image revision | **`d84454a3c12a918eb3eefa0465d4b2519ec90ba8`** |
+| Running recitation container | `infra-recitation-api-1` |
+| Image ID | `sha256:d39d8470b5ede8017dee3d557c3947863ff5c18a0cf6321dd18375876304ff00` |
+| Qualified image tag | `infra-recitation-api:completed-phrase-guard-20261016` |
+| Running since | Oct 16 11:22:59 UTC |
+| Health/restarts/OOM | healthy; 0 restarts; not OOM-killed |
+| Memory/swap ceiling | 6 GiB / 6 GiB total; host has no swap |
+| Live source bind mount | host `ml/` → `/app/ml:ro` |
+| Reference bind mount | `backend/recitation_api/reference_data` → `/app/reference_data:ro` |
+| Model bind mount | host `models/` → `/app/models:ro` |
+| Saved audio volume | `/var/lib/docker/volumes/infra_qari_audio/_data` → `/tmp/qari_audio` |
+| Private recitation port | `127.0.0.1:8001` |
+
+Running SHA256 values, independently rechecked October 18:
+
+- `app.services.streaming_session`: `e8c3a33bd5d5eb439062d46277620e0eb0b21b9c3a811195c2b143cf6740e80a`
+- `ml.alignment.streaming_matcher`: `7abf91bf735cdf8322679c52b33d4f6bbb3cd7b960decbbe768597214253692d`
+- `_remember_native_repetitions` is **absent** from the running container.
+
+PR [18](https://github.com/khan23153/qari/pull/18) is merged and its original
+overlap-confidence fix commit `9cfd52355fae472db702d6e9225b80915acb8c4b`
+is an ancestor of the live checkout. PR
+[33](https://github.com/khan23153/qari/pull/33), containing the final native
+evidence and completed-phrase guard fixes, is also **merged**. GitHub `main`
+was observed at `8ef92bdf1aacd474bbf26544f4a5854dc9af2265` on October 18.
+Do not assume the deployed branch equals remote main. The local live branch
+has diverged from its same-named remote; do not force-push or reset it blindly.
+
+## 4. Backend topology, models and recognition policy
+
+Deployment configuration: `infra/docker-compose.yml`, private values in
+`infra/.env`, edge routing in `infra/Caddyfile.edge`.
+Public HTTPS reaches the manually configured Cloudflare tunnel (`qari-tunnel`)
+and Caddy (`qari-edge`). Core API, recitation API, Redis and PostgreSQL are Docker
+services. `infra-inference-worker-1` is the separate batch worker; its code/image
+is not interchangeable with the live WebSocket service.
+
+- Core API: `infra-core-api-1`, local port `127.0.0.1:8010`.
+- Recitation API: `infra-recitation-api-1`, local port `127.0.0.1:8001`.
+- Redis: `infra-redis-1`; recitation metadata/results in Redis DB **1**.
+- Database: `infra-postgres-1`, not publicly published.
+- Current core, recitation, Redis and PostgreSQL services were healthy; tunnel
+  and edge were running. No restart was needed for the October 18 audit.
+- An idle legacy Kaggle CLI container exists: `qari-conformer-kaggle-cli`.
+  Old diagnostic containers include failures/exit137 and are not production
+  services or evidence that training is running. Do not delete their evidence.
+
+Current production models, unchanged during the October 18 audit:
+
+| Host path | Role |
+| --- | --- |
+| `models/qari-fastconformer-pcd-rnnt-int8` | **Active**, original independent RNNT recognizer; encoder/decoder/joiner ONNX + tokens |
+| `models/qari-ct2-base` | Independent Whisper/base fallback/diagnostic; model.bin SHA256 `b47c0fc7cd202c24ad4c7816e29d06c7d37c3761c1dcc91690796227df01dfa0` |
+| `models/qari-v50-ct2` | Historical prompt-conditioned oracle; must **not** establish live speech correctness |
+
+All three are mounted below `/app/models`. Current policy:
+
+- `QARI_ML_USE_STUB=false`, `QARI_LIVE_ASR_ENGINE=fastconformer_rnnt`.
+- `QARI_EVIDENCE_POLICY=tier2`: independent unprompted recognition.
+- Word confidence threshold **0.55**, silence RMS **0.006**.
+- Native right context **0.24s**; RNNT interval **0.9s**, startup **0.6s**.
+- Measured-active-speech progress cap **2.4 words/sec**.
+- Bounded live search: normal 3 words, widened 8 words, existing ayah guards.
+- Independent final review uses sequential, nonoverlapping **30s** RNNT chunks
+  for recordings longer than **240s**, avoiding an oversized encoder allocation.
+- Model loading is offline (`HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`).
+- Temporary **`QARI_STREAM_DEBUG=1`** is still enabled via
+  `/home/innocent/qari-training-artifacts/phone-fatihah-repeat-20261016/debug-compose-override.yml`.
+  Base Compose sets it to 0. Restore the base configuration after useful captures,
+  at an idle time; do not interrupt an ongoing recitation.
+
+`GET https://aiquranic.com/health` checks **core API only**. It does not prove the
+recognition model or WebSocket works. On October 18, core public/local health and
+local recitation health returned 200 with an explicit health-check User-Agent.
+Default Python User-Agent public requests initially received403; the subsequent
+explicit User-Agent check succeeded. Public recognition was not freshly replayed
+in this audit; earlier paced public replay evidence is documented below.
+
+## 5. Main files and data flow
+
+Paths below are relative to `/home/innocent/qari` unless absolute:
+
+| File | Purpose |
+| --- | --- |
+| `backend/recitation_api/app/api/routes/websocket.py` | Start message, capture diagnostics, binary PCM reception, outgoing word/final events |
+| `backend/recitation_api/app/services/streaming_session.py` | PCM buffers, energy/cadence/windowing, ASR, confidence/timing stitching, native evidence and final verdicts |
+| `backend/recitation_api/app/main.py` | Conservative production matcher, measured-speech/silence guards, independent final merge, warmup |
+| `ml/inference/fastconformer_transcriber.py` | Original RNNT native decoder |
+| `ml/inference/transcript.py` | `TimedTranscript`, retaining native word confidence and emission bounds |
+| `ml/alignment/streaming_matcher.py` | Live bounded alignment/cursor and final substitutions/skips |
+| `ml/alignment/native_evidence.py` | Strict two-view original-occurrence proof for word repair |
+| `ml/alignment/phonetic.py` | Text-derived phonetic similarity; **not an acoustic pronunciation scorer** |
+| `ml/inference/asr.py` | General ASR/Arabic normalization; comparison is diacritic-insensitive |
+| `backend/recitation_api/app/schemas/recitation.py` | Mobile-shaped final result/word verdict contract |
+| `mobile/lib/data/services/streaming_recitation_service.dart` | Phone capture/resampling, WebSocket start/audio/stop; mode mapping |
+| `mobile/lib/features/recitation/presentation/pages/live_recitation_page.dart` | Live reveal, final summary, recording/history actions |
+| `mobile/lib/features/recitation/presentation/recitation_review.dart` | Final-vs-live verdict merge, reached/unreached handling |
+| `mobile/lib/data/models/recitation_model.dart` | Availability flags, word verdict/error descriptions |
+| `mobile/lib/core/constants/app_constants.dart` | Domain/base URL configuration |
+
+Trace: received audio bytes → mono PCM16 at16kHz → RMS/activity → independent native
+ASR words, confidence and source times → timed stitching → bounded matcher cursor
+and native corroboration → confirmed WebSocket word events → independent final
+recording review → final WordVerdicts → mobile summary. Debug `tier2` text is
+truncated; stitched `hyp` can contain duplicates from timing revisions. Neither
+duplicated stitched text nor a decoder's disagreement alone proves a user mistake.
+
+App diagnostics commonly show capture44.1kHz, software gain3, MIC input, software
+resampling to16kHz and dropped_frames0. Verify each session; do not assume every
+tester used the same hardware or that zero dropped frames proves clean audio.
+
+## 6. Fixes already applied and their limits
+
+| Fix/evidence | Current status |
+| --- | --- |
+| Overlapping words retained stale first confidence, e.g .2 despite later .95 | Fixed by original `9cfd523...`/PR18, present in production |
+| Quran orthographic aliases, known-word identity, native timing/gap/error repair, bounded live search | Multiple earlier qualified fixes are in current history; inspect tests/docs rather than removing guards |
+| Final weak word lost stronger original native witnesses | `352156b...`, deployed and in PR33. Strict final-only unique-anchor/source-time proof, no extra live ASR |
+| Shifted initial `الرحمن الرحيم` timing caused false jump past unheard Alhamd phrase | `d84454a...`, deployed. Completed phrase cannot identify an ambiguous forward jump |
+| Long final recording could exhaust memory | Existing bounded sequential30s review and6GiB live service limit; retain these |
+| Repeated speech warning | **Not deployed / not finished**; see next section |
+| Grammar/short vowel/makhraj/tajweed errors marked correct | **Unresolved**; lexical recognition is not qualified pronunciation grading |
+| Different unknown ASR words accepted through broad fuzzy/phonetic tolerance | **Unresolved**, with concrete saved result pairs in Oct18 audit |
+
+Qualified evidence for **deployed d844**, not for the unfinished repetition branch:
+
+- Complete recitation API + `ml/tests` + `api/tests`: **804 passed, 1 skipped**
+  (optional NeMo runtime), 2 dependency/deprecation warnings.
+- Full Ya-Sin recording: cached replay verified every actual PCM window/end point,
+  **941 original native calls, 725/725 live and final**. This is a matching replay,
+  not a new phone capture or fresh inference benchmark.
+- Fresh original-model Baqarah1–20: **163 live, 181 final matches /230**;
+  **20 ASR mismatch verdicts, 29 uncertain/missing words** remain. These are not
+  certified speaker mistakes. Peak private RSS approximately2.26GiB; no OOM.
+- Public paced old phone16.82s recording: only4 opening words, no false later
+  Rahman/Rahim reveal. Public full33.32s Fatiha:29/29.
+- Public silence and Fatiha spoken while selecting Ya-Sin:0 matches and0 errors.
+- These checks do **not** validate intentional pronunciation-error detection.
+
+Evidence roots:
+`qari-training-artifacts/phone-fatihah-repeat-20261016/`,
+`qari-training-artifacts/baqarah-native-repair-20261016/`,
+`qari-training-artifacts/live-gap-repair-20261016/`.
+
+## 7. Unfinished repetition work — preserve it, do not claim shipped
+
+Existing isolated worktree: **`/tmp/qari-live-gap-repair-20261016`**.
+Branch: **`fix/recitation-repetition-20261016`**, based on deployed `d84454a`.
+Changes are **uncommitted** and preserved. Root live ML files were not modified.
+
+New/changed worktree files:
+
+- `ml/alignment/streaming_matcher.py`: final-only insertion handling for an extra
+  exact1–4-word copy, with original matched phrase and following context.
+- `ml/alignment/native_repetition.py`: two consecutive confident mature native
+  views must prove distinct original occurrences of a uniquely identifiable phrase.
+- `backend/recitation_api/app/services/streaming_session.py`: retain proofs,
+  independent final corroboration, existing `error_type='repetition'` review
+  verdicts; keep live reveal unchanged. Preserve absolute times across long chunks.
+- `backend/recitation_api/tests/test_native_repetition.py`,
+  `tests/test_bounded_recording_review.py`,
+  `tests/fixtures/fatihah_native_repetition.json`.
+- `ml/tests/test_final_repetition_alignment.py`.
+- `mobile/test/repetition_review_test.dart`: existing APK contract compatibility;
+  **no mobile product-code change** was needed for that contract.
+
+Actual repeat recordings on October16:
+
+- `61eb2bf0-2e59-4a56-9742-2e30ced8a635`, 11:29:24.16s, first10/29 accepted;
+ 19 unreached. Native ASR contains the repeated Alhamd phrase.
+- `e15f9469-7f5e-4e96-b541-c39b0691eb51`, 11:30:38.96s, actual app27/29.
+ Repeated `الحمد لله رب العالمين`. Independent full decode recognizes correct
+ `اياك` (.930) and `نعبد` (.996), but final alignment assigns them earlier
+ `الرحيم`/`مالك`. This final matcher bug was reproduced.
+- `0786e2cd-af82-4c2e-8b80-eee02baf397d`, 11:31:38.68s, actual app29/29.
+
+Preserved audio: `phone-fatihah-repeat-20261016/phone-<UUID>.wav`.
+Actual server results: `fresh-phone-sessions-1129-1132.json`.
+Private .3s-feed replay differs in cadence: repeated case26/29, normal29/29.
+Do not overwrite actual app counts with these diagnostic replay counts.
+
+Candidate branch evidence and **blocking issues**:
+
+- Captured case TDD first failed, then passed; subsequent complete candidate
+  suite: `repetition-reviewed-full-suite.log`, **830 passed, 1 skipped**.
+- Flutter focused review/Hifz checks:21 passed in the observed run.
+- Candidate phone replay reported the repeated four words in review and fixed
+  Iyyaka/Nabud alignment; normal/partial controls had no repetition warning.
+- Candidate Baqarah replay identifies native double `مرضا` at reference85;
+  counts become180 matches plus a repetition verdict. No human pronunciation
+  judgment of this phrase has been established.
+- **Full Ya-Sin candidate regression failed** its725 final-match assertion:
+  `repetition-yasin-guard-replay.log`. The harness asserted before persisting
+  detailed output. Re-run with results saved before assertions; identify whether
+  changed verdicts are genuine repeats, ASR artifacts or matcher regression.
+- **Important review issue still unfixed:** chunk-local timestamps are offset
+  without first validating finite, ordered, nonnegative times within that original
+  chunk's audio duration. A malformed negative time from a later chunk can become
+  globally plausible earlier audio evidence. Add RED regressions for negative,
+  beyond-chunk, nonfinite and unordered local times, then disable timed
+  corroboration/fail closed for malformed chunks.
+- Also test repeated speech ending exactly at Stop, without following context;
+  it must not paint unheard following reference words red.
+- Three earlier review findings were fixed/tested: complete live evidence must
+  not skip required repeat corroboration; long review must retain native source
+  timings; three copies must not suppress all repetition detection.
+- **Do not deploy** this worktree until the remaining review issue and full
+  Ya-Sin regression are resolved, all required tests pass, and real controls pass.
+
+## 8. APKs and deployment identity
+
+- Mobile source version: `1.0.49+77`; tester capture logs confirm build77.
+- Pilot APK package: `com.qari.app.micpilot`; displayed app name can still be Qari.
+- Local files: `releases/qari-mic-test-v77.apk`, `releases/qari-mic-test-v77.json`.
+- Pilot download: `https://aiquranic.com/qari-mic-test-v77.apk`.
+- Pilot APK SHA256:
+  `b4d7f2d9c0e68f4ede0337a6b1d30cfefb1cd71d61adce4d62fb5f5cfa8709fb`.
+- Pilot source commit: `92ba8b05fed9aee759fedc0bfbfd5bd22c30f832`.
+- Successful build: https://github.com/khan23153/qari/actions/runs/38114216297 .
+- `releases/app_release.json` still advertises **code75** at
+  `https://aiquranic.com/v1/app/download`; distinguish it from pilot77.
+- Other files: `releases/app-release.apk`, `app-mic-pilot.apk`, `qari-mic-test-v76.apk`.
+- Backend code changes do not prove a new APK/model was trained or downloaded.
+
+## 9. Historical model/training/recovery work
+
+Read these host journals for detailed provenance instead of restarting old jobs:
+
+| Path | Purpose |
+| --- | --- |
+| `/home/innocent/qari-active-repair-20261010.md` | Main chronological repair journal through Oct16; some early statements are superseded |
+| `/home/innocent/qari-kaggle-model-recovery.md` | Kaggle/HF/Drive recovery, failed training attempts, verified training terminal status and rejected releases |
+| `/home/innocent/qari-conformer-pilot-20261010.md` | Completed1590-step/3-epoch Conformer pilot; recognition gates failed, not deployed |
+| `/home/innocent/qari-gpu-audio-diagnostic-20261010.md` | Completed GPU recognition diagnostics; not a trained release |
+| `/home/innocent/qari-soup-compatibility-20261009.md` | User's Soup repository compatibility investigation |
+| `/home/innocent/qari-word-tracking-deployment-20261010.md` | Earlier original RNNT deployment/provenance |
+| `/home/innocent/qari-mic-pilot-release-20261010.md` | APK/capture fixes and pilot release evidence |
+| `/tmp/qari-training-submit-20261008/` | Private audited data/manifests, Whisper training submission, smoke/export checks and terminal logs |
+| `/tmp/qari-conformer-training-20261009/` | Conformer package, native exports, completed pilot artifacts and PCD adaptation diagnostics |
+| `/tmp/qari-drive-recovery-20261009/` | Downloaded old Drive archives, training scripts, July tiny/checkpoint99 and rejected live gates |
+| `/home/innocent/qari-training-artifacts/` |29 top-level experiment/evaluation directories; see audit's directory index |
+
+Important conclusions already established:
+
+- Historical V50/V13 prompt=target models can echo expected Quran text. Their
+  advertised low training/eval errors do not prove independent phone recognition.
+- A recovered Whisper phone pilot completed on Kaggle but regressed held-out
+  WER (about.8301→.8431), failed live gates and was not deployed.
+- July tiny/earlier checkpoint recovery also failed phone/independent gates.
+- Soup repo: `https://github.com/MakazhanAlpamys/Soup`; old compatibility assessment
+  pinned `a95bd38...`/v0.75.0. Old recovered scripts borrowed Soup ideas but do
+  not establish that a current Soup-trained candidate is deployed.
+- Current original PCD RNNT remains deployed. Multiple adapted/RTA/Whisper
+  candidates were rejected after false matches, missing words, latency or OOM.
+- Oct16 auxiliary context experiment cost116 extra ASR calls/80.476CPU seconds
+  without additional matched words; rejected, prototype archived separately.
+- Forcing30s chunking on the195s Baqarah fixture reduced final recall; rejected.
+  Retain the current240s single-pass cutoff.
+- New Maddogg Whisper-small candidate did not fix old Fa-aawaa and regressed
+  another Duha clip; rejected, not deployed.
+- Some phonetic/CTC diagnostics exist outside production. Native phone-alignment
+  match counts/PER are not word-level correctness or calibrated pronunciation
+  scores. Any new deployment needs independent negatives, license/provenance,
+  speaker-independent evaluation and bounded VPS memory/latency checks.
+
+Known held-out recordings and prepared WAV locations:
+
+| Audio | Prepared artifacts |
+| --- | --- |
+| Fatiha recorder OGG `79b5ae64-37eb-45ff-8573-981154d35a3c` | `recording-comparison-20261010/`, `recorder-comparison-20261010/` |
+| New Ikhlas M4A `dc1cff93-3831-41ed-9f41-4b81d64e5098` | `ikhlas-recorder-comparison-20261012/`; prefer this over uncertain old missing-huwa recording |
+| Baqarah1–7 OGG `134ab738-159d-4b56-b51e-d6a48ee7d36b` | `baqarah-recorder-20261013/provided-baqarah-16k.wav` |
+| Old Duha OGG `7f2cedbc-269c-47d7-8213-3e3f62e43dd5` | `duha-recorder-20261014/`; old Fa-aawaa mismatch remains |
+| Ya-Sin1–10 M4A `3e7de9c6-a89e-4586-b878-554d345f8674` | Historical multisurah/Ya-Sin artifacts |
+| Baqarah1–20 M4A `12905dfc-a4db-40df-8be6-168afbb1bf5d` | `baqarah-1-20-recorder-20261014/provided-baqarah-16k.wav` |
+| New-speaker Duha OPUS `02cb7f8a-b042-44e9-974d-2009ca0fbf87` | `duha-new-speaker-20261015/` |
+| Full Ya-Sin OPUS `d53c2b6a-aea5-45cc-b37f-ce3163259bf5` | `yasin-full-recorder-20261015/provided-yasin-full-16k.wav` |
+
+Most table paths are under `/home/innocent/qari-training-artifacts/`. Original
+`/tmp/<UUID>.<ext>` uploads can disappear; prepared WAVs/manifests are authoritative
+preserved inputs. Full Ya-Sin ends at ayah83, followed by Sadaqallahul Azim;
+that closing phrase must not become Quran match evidence. User previously allowed
+trimming an opening A'udhu invocation for a specific Fatiha comparison; do not
+silently trim or fabricate arbitrary later test audio.
+
+## 10. VPS resources, tools and authenticated access
+
+Observed October18: **aarch64, 2 logical CPUs, about11.65GiB RAM**, approximately
+7GiB available at the snapshot, **no swap**. Disk about48.3GiB total with only
+**1.17GiB free** before further work. Check again before exports/downloads.
+Prefer a single low-priority bounded diagnostic. Do not parallelize large ASR jobs.
+No `nvidia-smi`/local GPU was found. Historical training used remote Kaggle T4;
+that is not proof of an active GPU session or current quota.
+
+| Capability | Current access/status |
+| --- | --- |
+| GitHub CLI | `/home/innocent/.local/bin/gh`; API read authenticated as **khan23153** on Oct18 |
+| GitHub config | `/home/innocent/.config/gh/hosts.yml`; private credentials, never print content |
+| Google Drive CLI | `/home/innocent/.local/bin/rclone`; remote **`qari-training:`**; authenticated `rclone about` succeeded Oct18 |
+| Drive config | `/home/innocent/.config/rclone/rclone.conf`; private OAuth data; historical user-owned account verified Oct9 with readonly scope after old account disconnected |
+| Drive data | Historical folders `QariVPS-Backup` and `qari_ml`; recovered archives are in `/tmp/qari-drive-recovery-20261009/` |
+| Kaggle CLI | `/home/innocent/kaggle-cli/bin/kaggle`; not on default PATH. Current host authenticated `kernels list --mine` **failed**, so do not claim an active login |
+| Kaggle historical account/job | **telethonfool**, e.g. `telethonfool/qari-conformer-quran-fp32-20261009`; old terminal logs exist |
+| Kaggle helper | `/tmp/qari-conformer-training-20261009/kaggle_version_status.py` reads token via hidden prompt; never place token in a shell argument or context file |
+| Hugging Face | No default `hf`/`huggingface-cli` or persistent `~/.cache/huggingface/token` was found; historical token use is not current authenticated access |
+| HF private helper | `/tmp/qari-training-submit-20261008/hf_own_models.py` uses hidden input; do not run a blocking login flow without current need |
+| Cloudflare | Existing tokenized tunnel container is running; dashboard/CLI account login has not been independently verified here. Do not print container args/env |
+| Docker/FFmpeg | `/usr/bin/docker`, `/usr/bin/ffmpeg` |
+| Flutter SDK | `/home/innocent/flutter/bin/flutter` |
+| Deployment credentials | `/home/innocent/qari/infra/.env`; JWT, database and deployment values stay private |
+
+User supplied HF/Kaggle tokens and OAuth callbacks earlier in chat. They are not
+repeated here and must not be copied into git, reports, process arguments or logs.
+Only credential locations, scopes/status and public account handles are recorded.
+Do not replace the connected Drive account or log out again unless requested.
+
+## 11. Next work, in priority order
+
+1. **Preserve and label the new tester evidence.**51 audio/results are already
+   copied. Review representative high-match recordings in both modes with a
+   qualified Quran reciter; obtain exact expected-vs-spoken labels for intentional
+   harakat/makhraj/shadda/madd errors. No exact label is currently available.
+2. **Tighten demonstrably overbroad lexical acceptance with regression tests.**
+   Start with saved Kafirun/Qaflun and Kitab/Khitam pairs; inspect `_is_match`,
+   known-vocabulary guards and phonetic similarity. Keep validated Quran spelling
+   aliases and held-out correct-speaker recall. Unknown close text without
+   independent acoustic evidence should not receive an unconditional correctness
+   claim. Test both modes, wrong speech, silence and legitimate near spellings.
+3. **Separate lexical tracking from pronunciation correctness.** Keep availability
+   flags honest. Inspect green/checkmark/“correct” copy so it does not promise
+   an unavailable pronunciation assessment. A normalized text match or selected
+   expected reference must never be the only acoustic correctness witness.
+4. **Design/evaluate a distinct acoustic error detector** using diacritized or
+   phone-level evidence plus independently labeled correct/incorrect minimal
+   pairs and speakers. Retain low-delay lexical tracking. Measure false acceptance
+   and false accusation separately; keep unknowns unconfirmed. Do not claim a
+   confidence-threshold increase alone fixes lost-vowel information.
+5. **Finish repetition branch safely:** chunk-local source validation tests/fix,
+   final repeat-at-Stop controls, save and diagnose full Ya-Sin failure, review,
+   complete suites and bounded fresh/public replays. Do not ship current candidate.
+6. Keep testing existing difficult clips: old Duha Fa-aawaa, Baqarah remaining
+   recognition failures, multiple speakers, inserted/wrong-surah speech and silence.
+   Never blame a speaker based on ASR disagreement or train on held-out test clips.
+7. When a candidate qualifies, commit/push an isolated branch and PR, deploy only
+   the recitation service with the existing configuration, then verify the actual
+   running image label **and bind-mounted source hashes**. An image tag alone is
+   insufficient proof of deployment or rollback.
+8. Review APK code75-vs77 distribution/update metadata separately; preserve
+   package identity and user recordings. No new APK build was triggered Oct18.
+
+## 12. Useful commands and operational cautions
+
+Read-only checks:
+
+```bash
+cd /home/innocent/qari
+git status --short --branch
+docker ps
+curl -A Qari-deployment-health/1.0 http://127.0.0.1:8001/health
+curl -A Qari-deployment-health/1.0 https://aiquranic.com/health
+docker logs --since 10m infra-recitation-api-1
+docker logs --tail 30 qari-tunnel
+```
+
+Logs may contain user speech; export allowlisted/redacted data instead of dumping
+environment variables, JWTs, tunnel arguments or complete credential files.
+Audio and results require owner authentication over the API; diagnostic harnesses
+must use their own short-lived test identity and clean only their own sessions.
+
+Complete offline suite, run from the isolated worktree when needed:
+
+```bash
+docker run --rm --network none --memory 1500m --memory-swap 1500m --cpus 1 \
+  --no-healthcheck --entrypoint python --workdir /repo \
+  -e PYTHONPATH=/repo:/repo/backend/recitation_api \
+  -v /tmp/qari-live-gap-repair-20261016:/repo:ro \
+  infra-recitation-api:completed-phrase-guard-20261016 \
+  -m pytest backend/recitation_api/tests ml/tests api/tests -q -p no:cacheprovider
+```
+
+The current live root has bind-mounted ML code. **Do not edit product ML files
+there while preparing an untested change.** Work in the existing isolated tree.
+For rollback, restore/pin the old mounted ML files as well as the previous image;
+image-only rollback is incomplete. Existing overrides and deployment scripts are
+under `phone-fatihah-repeat-20261016/`; read and update their pinned revisions and
+acceptance checks before reuse. Never copy private environment values into docs.
+
+Session metadata/results use a24h Redis TTL; the audio volume can retain files
+longer. The Oct18 audit copied51 available recordings without changing Redis.
+Earlier completed monitors/jobs are not running simply because an old session
+ID is listed in a journal. The Oct16 live monitor ended at11:45 UTC. Check terminal
+logs/current Docker/process state before restarting any job. Overall recognition,
+pronunciation grading and repetition handling are **not all solved**.
+
+
+## Progress — 2026-10-18T11:06:13.257179+00:00
+
+User authorized fixing the Oct18 false acceptance and ongoing context updates. Created isolated worktree `/tmp/qari-lexical-precision-20261018`, branch `fix/lexical-precision-20261018`, from deployed d84454a. Existing dirty repetition worktree is preserved and will not be bundled into this first repair. Scope: separate strict production word confirmation from legacy approximate matching; preserve independently verified Quran orthographic aliases, exact-confidence/speech guards, and neutral handling of unknown ASR text. First reproduce saved accepted wrong-text pairs with TDD; then measure correct-speaker recall and false acceptance on actual saved PCM before any deployment. Live root/model files unchanged. New evidence directory: `/home/innocent/qari-training-artifacts/lexical-precision-20261018/`. Acoustic pronunciation/harakat grading remains a separate unqualified capability.
+
+
+## Progress — 2026-10-18T11:16:11.045695+00:00
+
+Strict lexical candidate:23new tests observed RED→GREEN; complete827pass1skip before8publishedspelling tests, then31focused tests pass. Captured wrongtextpairsare rejected and cleanlatestFatiha stays29/29. However first strict recording candidate is NOT qualified: Baqarahrecall117live142final/230 versusdeployed163/181; strong evidence incomplete Quran spelling coverage affectsalignment, so doNOTdeploy. Independentreview found401unmatchedpublished tokens/233distinctpairs among24857equal-length-ayah words; common الليل/اليل,الزكاة/الزكواه,الحياة/الحيواه etc. Reviewalsofoundnew8pairalias اتخذ→ااتخذ would merge interrogativewithordinaryverb; fix initial standalone interrogativehamza normalization before aliasing, with explicit collisionregression. Replacingadhoc8expansionwithindependentlysource-derivedcollision-checkedfull-corpus spellingmanifest; this is representationdata, not expected speech or ASR training. Runtime/source/modelrootunchanged. Singlebounded3500MiBprivatefirstregressionjob stillrunningfullYaSin; finishandpreserveasrejected-stage evidence.
+
+
+## Progress — 2026-10-18T11:25:17.909261+00:00
+
+Strictwordconfirmation RED→GREEN plus normalizer/collision coverage79focusedPASS. Firstincompletespellingcandidate rejected: fullYaSin721/725, Baqarah142/230; results archived rejected-incomplete-spellings-* (no deploy). ImplementedindependentlypinnedexactrawUthmani→Imlai representationlookup:660rawvariants from76327alignedtokens; neverredirectarbitrarybareASRtext. Compilercheckedin scripts/build_published_word_spellings.py; immutableJSON app/data/published_word_spellings.json. SourceQuran editions alignedperayah, onlycompilation groupsprintedvocativeboundaries, runtime1token→1token. Globalnewnormalizedredirectsdisabled(0) toavoidcollisions;existingfullcorpuslegacyaliasbuilderrunsaftercanonicalization. InitialUthmani ءأ retainsbothhamzas; actualpastاتخذcannotmatchquestionأأتخذ. Combininghamzaexampleيَسْـَٔلُكُمْ retainsaskidentitywhilebareيسلكمunchanged. IMPORTANT anyOLD nativecachecontainsnormalizedwordsfromoldnormalizer; cannotqualifynewnormalizerusingcachedtranscripts evenifPCMidentical. StartingALL-FRESH originalmodel replays bounded3500MiB/1CPU/noSwap; no models/threshold/productionroot changes.
+
+
+## Progress — 2026-10-18T11:36:06.219740+00:00
+
+Final backend candidate full suite: **849 passed, 1 skipped, 2 dependency warnings** in57.16s (backend/recitation_api/tests + ml/tests + api/tests). Independent review found no remaining important code findings after full6236-ayah check. Production strict matcher now disables legacy alias redirects entirely; exact published raw-token lookup handles660 attested variants, generated reproducibly from76327 compared units. Prior11:25 note about legacy alias builder is superseded: production aliases=0; retaining old clean aliases was a real identity bypass and has a regression test. All-fresh original-model qualification is running in private3500MiB/2CPU container; silence, seeded noise and Fatiha wrongly selectingYaSin all passed with0live matches/0verdicts. Await fullBaqarah/YaSin and detailed per-recording assessment before deployment. Source/model live root unchanged. UI summary wording refinement planned: report word matches and explicitly disclose pronunciation unavailable; no adaegi grading is implemented by lexical strictness.
+
+
+## Progress — 2026-10-18T11:42:19.604350+00:00
+
+Full-fresh strict candidate remains NOT qualified: Baqarah117live/142final versus deployed163/181, with38final errors versus20. Detailed comparison found both desirable removals (e.g. تفسدون previously accepted for تفسدوا) AND lost genuinely recognized later words. Strict identity was used for sequence placement as well as verdicts, disrupting alignment; increased error recovery also changed53of224 ASR audio windows. Preserved this candidate and all fresh results under rejected-strict-placement-* and stopped its unfinished YaSin replay to avoid wasting inference. Next isolate approximate sequence placement from strict correctness: similarity may locate a token, but only independently recognized lexical identity may receive MATCHED. Preserve word/ayah/provenance/confidence/speech bounds, and prove with regression tests plus fresh recordings. No deployment yet. Flutter summary focused29tests pass; full Flutter suite is running; existing page analyzer findings unchanged, new widget/test analyzer clean.
+
+
+## Progress — 2026-10-18 11:45 UTC
+
+Separated approximate sequence placement from strict correctness in isolated candidate. An actual Baqarah native transcript reproduces losing the final correctly decoded phrase (new test RED); placement/correctness separation makes that regression GREEN. A page of only similar-but-different tokens cannot start the live cursor or earn any final matches. 25 focused tests passed before additional guard test; full backend suite rerunning because matcher source changed. Original-model fresh qualification restarted with Baqarah first; candidate source hashes frozen. Full Flutter suite **192 tests passed**; changed summary widget and tests have clean targeted analysis. Page-level analysis reports six pre-existing unrelated findings; no claim of whole-project analyzer cleanliness. No production changes yet.
+
+
+## Progress — 2026-10-18 11:47 UTC
+
+Placement/verdict separation passed independent review. Full backend suite: **851 passed,1 skipped,2 warnings** in58.27s; added trailing native-slot regression also passes (12strict matcher tests total). Full Flutter suite: **192passed**. Fresh ASR candidate is still undergoing qualification, so any PR remains draft and no production rollout is authorized by these test counts alone. Private inference remains3500MiB/noadditionalSwap; no model/training change. UI source now labels matched words and discloses unavailable pronunciation assessment. Existing APK signing is not configured in VPS key.properties and earlier pilot was separate-package to avoid update-signature mismatch; do not blindly promote a new CI debug-signed APK over tester installations. Existing APKs can use a backend-only repair without reinstall.

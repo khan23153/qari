@@ -32,12 +32,12 @@ def test_real_reference_preposition_matches_without_merging_different_word(monke
     assert display==[text,'عَلِيًّا']
     assert entries[0]['text_with_tashkeel']==text
 
-@pytest.mark.parametrize('text,legacy_key',[
-    ('أَدْرَىٰكُم','ادرياكم'),
-    ('تَخْشَىٰهُ','تخشياه'),
+@pytest.mark.parametrize('text,published_key',[
+    ('أَدْرَىٰكُم','ادراكم'),
+    ('تَخْشَىٰهُ','تخشاه'),
 ])
-def test_internal_carrier_keeps_existing_alias_keys(text,legacy_key):
-    assert ss._normalize(text)==legacy_key
+def test_internal_carrier_uses_its_independently_published_word_identity(text,published_key):
+    assert ss._normalize(text)==published_key
 
 @pytest.mark.parametrize('text',['عَلَىَٰ','عَلَىـٰٓ ۖ'])
 def test_terminal_carrier_accepts_intervening_combining_marks(text):
