@@ -69,3 +69,47 @@ def test_approximate_tail_cannot_consume_past_the_last_strict_native_slot():
     assert matcher._cursor==2
     assert matcher._hyp_cursor==2
     assert matcher._live_hyp_indices=={0:0,1:1}
+
+
+def test_confirmed_repeated_phrase_does_not_shift_following_final_words():
+    reference=['الحمد','لله','رب','العالمين','الرحمن','الرحيم','مالك','يوم','الدين']
+    hypothesis=reference[:4]+reference
+    matcher=StreamingMatcher(reference,strict_word_identity=True,known_error_words=set(reference))
+    states=matcher.finalize(hypothesis,[.95]*len(hypothesis))
+    assert [(s.index,s.status) for s in states]==[(i,WordStatus.MATCHED) for i in range(len(reference))]
+    assert all(s.spoken==s.expected for s in states)
+
+
+def test_later_exact_rereading_cannot_replace_the_earlier_native_occurrence():
+    matcher=StreamingMatcher(['بسم','الكتاب','الرحيم'],strict_word_identity=True,
+                             known_error_words={'بسم','الكتاب','الرحيم'})
+    states=matcher.evaluate(['بسم','الختام','الرحيم','الكتاب','الرحيم'],[.95]*5)
+    assert [(s.index,s.status) for s in states]==[(0,WordStatus.MATCHED),(1,WordStatus.SKIPPED),(2,WordStatus.MATCHED)]
+    assert matcher._live_hyp_indices=={0:0,2:2}
+    assert matcher._hyp_cursor==3
+
+
+@pytest.mark.parametrize('violation',[
+    'fuzzy_repeat','prior_error','prior_skipped','weak_repeat','nan_repeat',
+    'infinite_repeat','weak_context','nan_context','infinite_context',
+    'overconfident_context','short_context','identical_context',
+])
+def test_rereading_insertion_requires_exact_source_and_both_strong_distinct_anchors(violation):
+    reference=['الحمد','لله','رب','العالمين','الرحمن','الرحيم','مالك']
+    matcher=StreamingMatcher(reference,strict_word_identity=True,known_error_words=set(reference))
+    matcher.evaluate(reference[:4],[.95]*4,full=True)
+    words=reference.copy();scores=[.95]*len(words)
+    if violation=='fuzzy_repeat': words[0]='الهمد'
+    if violation=='prior_error': matcher._resolved_states[0].status=WordStatus.ERROR
+    if violation=='prior_skipped': matcher._resolved_states[0].status=WordStatus.SKIPPED
+    if violation=='weak_repeat': scores[0]=.2
+    if violation=='nan_repeat': scores[0]=float('nan')
+    if violation=='infinite_repeat': scores[0]=float('inf')
+    if violation=='weak_context': scores[4]=.2
+    if violation=='nan_context': scores[4]=float('nan')
+    if violation=='infinite_context': scores[4]=float('inf')
+    if violation=='overconfident_context': scores[5]=1.1
+    if violation=='short_context': words=words[:5]
+    if violation=='identical_context':
+        matcher.reference[5]=matcher.reference[4];words[5]=words[4]
+    assert matcher._completed_repetition_end(4,0,words,scores) is None

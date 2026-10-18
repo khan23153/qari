@@ -37,7 +37,7 @@ def build(source, reference_dir):
     assert hashlib.sha256(source.read_bytes()).hexdigest()==SOURCE_SHA256
     data=json.loads(source.read_text(encoding='utf-8'))['data']
     targets=defaultdict(set);raw_targets=defaultdict(set)
-    examples=defaultdict(list);raw_examples=defaultdict(list)
+    raw_examples=defaultdict(list)
     skipped=[];compared=0
     for surah in data['surahs']:
         for ayah in surah['ayahs']:
@@ -57,7 +57,6 @@ def build(source, reference_dir):
                 compared+=1;key,value=uthmani['key'],imlai['key']
                 targets[key].add(value)
                 location={'surah':number,'ayah':verse,'word_index':uthmani['index']}
-                examples[key,value].append(dict(location,uthmani=uthmani['raw'],imlai=imlai['raw']))
                 if uthmani['input_tokens']==1:
                     raw_targets[uthmani['raw']].add(value)
                     raw_examples[uthmani['raw'],value].append(dict(location,imlai=imlai['raw']))

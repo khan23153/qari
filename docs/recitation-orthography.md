@@ -75,3 +75,11 @@ or create a `MATCHED` verdict. Final placed tokens undergo strict identity
 classification independently. This preserves the position of later exact words
 without awarding near words correctness. Existing word/ayah ceilings and native
 confidence, timing and speech guards still apply.
+
+Live placement retains the existing DP weights and earliest native occurrence;
+only strict identity supplies correctness. Final review can pass over an exact rereading
+of2–8 already matched words only when two distinct, confident exact words then
+corroborate the current reference position. This advances the native hypothesis
+only. Fuzzy repetitions, uncertain/invalid scores, unconfirmed source words and
+missing following context cannot authorize this rule. It repairs placement; it
+does not emit a new repetition-warning event.

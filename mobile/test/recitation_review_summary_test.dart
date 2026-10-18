@@ -57,4 +57,36 @@ void main() {
         find.text('Word matching · Pronunciation not assessed'), findsNothing);
     expect(find.text('Word matching'), findsOneWidget);
   });
+  testWidgets(
+      'unconfirmed reached word cannot display a complete 100 percent score',
+      (tester) async {
+    final result = RecitationResult(
+      sessionId: 'partial',
+      surahNumber: 36,
+      ayahNumber: 22,
+      overallScore: 1,
+      createdAt: DateTime.utc(2026, 10, 18),
+      wordVerdicts: const [
+        WordVerdict(word: 'وما', wordIndex: 0, isCorrect: true),
+        WordVerdict(word: 'اعبد', wordIndex: 2, isCorrect: true),
+      ],
+    );
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: RecitationReviewSummary(
+      review: RecitationReview(statuses: const [
+        LiveWordStatus.matched,
+        LiveWordStatus.pending,
+        LiveWordStatus.matched
+      ], reach: 3, result: result),
+      mushaf: MushafTheme.classic,
+      theme: ThemeData(),
+    ))));
+    expect(find.text('100%'), findsNothing);
+    expect(find.text('2/3'), findsOneWidget);
+    expect(find.text('2 matched · 0 mistakes · 1 unconfirmed'), findsOneWidget);
+    expect(find.text('Word matching · Pronunciation not assessed'),
+        findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

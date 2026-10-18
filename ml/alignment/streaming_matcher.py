@@ -611,9 +611,7 @@ class StreamingMatcher:
             prev_row = dp[i - 1]
             row = dp[i]
             for j in range(1, k + 1):
-                pair = prev_row[j - 1] + (
-                    DP_MATCH_SCORE if placement(i - 1, j - 1) else DP_MISMATCH_SCORE
-                )
+                pair = prev_row[j - 1] + (DP_MATCH_SCORE if placement(i - 1, j - 1) else DP_MISMATCH_SCORE)
                 skip = prev_row[j] + DP_SKIP_REF_PENALTY
                 insert = row[j - 1] + DP_INSERT_PENALTY
                 row[j] = max(pair, skip, insert)
@@ -639,9 +637,7 @@ class StreamingMatcher:
         i, j = best_i, best_j
         while i > 0 or j > 0:
             if i > 0 and j > 0:
-                pair = dp[i - 1][j - 1] + (
-                    DP_MATCH_SCORE if placement(i - 1, j - 1) else DP_MISMATCH_SCORE
-                )
+                pair = dp[i - 1][j - 1] + (DP_MATCH_SCORE if placement(i - 1, j - 1) else DP_MISMATCH_SCORE)
                 if dp[i][j] == pair:
                     ops.append(("pair", i - 1, j - 1))
                     i -= 1
@@ -826,6 +822,40 @@ class StreamingMatcher:
                 return target
         return None
 
+    def _completed_repetition_end(self, ref_index, hyp_index, words, confidences):
+        """Skip an exact rereading only with already confirmed source words.
+
+        No reference search or verdict is widened: two distinct exact following
+        words must corroborate the unchanged current position. Keep ASR slots.
+        """
+        import math
+        if not self.strict_word_identity or ref_index + 1 >= len(self.reference):
+            return None
+        identity = lambda word: self._word_aliases.get(word, word)
+        confirmed = {s.index: s for s in self._resolved_states if s.status == WordStatus.MATCHED}
+        for size in range(2, min(LIVE_SEARCH_REACH_WIDE, ref_index, len(words)-hyp_index-2) + 1):
+            end = hyp_index + size
+            slots = range(hyp_index, end + 2)
+            if confidences is not None and any(
+                slot >= len(confidences) or not math.isfinite(float(confidences[slot]))
+                or not self.live_confidence_threshold <= float(confidences[slot]) <= 1
+                for slot in slots
+            ):
+                continue
+            if (self.reference[ref_index] == self.reference[ref_index+1]
+                    or not all(self._is_match(words[end+k],self.reference[ref_index+k]) for k in (0,1))):
+                continue
+            phrase = tuple(identity(w) for w in words[hyp_index:end])
+            if len(set(phrase)) < 2:
+                continue
+            for start in range(ref_index-size+1):
+                if all(start+k in confirmed
+                       and identity(confirmed[start+k].spoken) == phrase[k]
+                       and identity(self.reference[start+k]) == phrase[k]
+                       for k in range(size)):
+                    return end
+        return None
+
     def _evaluate_full(
         self,
         hypothesis_words: list[str],
@@ -881,6 +911,11 @@ class StreamingMatcher:
             if not confidence(j) >= self.live_confidence_threshold:
                 j += 1
                 continue
+            if not self._is_match(hypothesis_words[j], self.reference[i]):
+                repeated_end = self._completed_repetition_end(i,j,hypothesis_words,confidences)
+                if repeated_end is not None:
+                    j = repeated_end
+                    continue
             spoken = hypothesis_words[j]
             expected = self.reference[i]
 

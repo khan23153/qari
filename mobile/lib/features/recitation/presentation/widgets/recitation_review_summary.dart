@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../data/models/recitation_model.dart';
+import '../../../../data/models/recitation_stream_event.dart';
 import '../mushaf/mushaf_theme.dart';
 import '../recitation_review.dart';
 
@@ -21,6 +22,10 @@ class RecitationReviewSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final evaluated = review.result.wordVerdicts.length;
+    final unconfirmed = review.statuses
+        .take(review.reach)
+        .where((status) => status == LiveWordStatus.pending)
+        .length;
     final muted = mushaf.text.withValues(alpha: 0.6);
     final String detail;
     if (evaluated == 0) {
@@ -30,6 +35,7 @@ class RecitationReviewSummary extends StatelessWidget {
       final parts = <String>[
         '${review.correctCount} matched',
         '${review.mistakeCount} ${review.mistakeCount == 1 ? 'mistake' : 'mistakes'}',
+        if (unconfirmed > 0) '$unconfirmed unconfirmed',
         if (review.unreachedCount > 0) '${review.unreachedCount} not reached',
       ];
       detail = parts.join(' · ');
@@ -39,7 +45,11 @@ class RecitationReviewSummary extends StatelessWidget {
       child: Row(
         children: [
           Text(
-            evaluated == 0 ? '—' : review.result.scorePercentage,
+            evaluated == 0
+                ? '—'
+                : unconfirmed > 0
+                    ? '${review.correctCount}/${review.reach}'
+                    : review.result.scorePercentage,
             style: theme.textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.w800,
               color: review.mistakeCount == 0 ? mushaf.text : mushaf.accent,
