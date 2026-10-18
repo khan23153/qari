@@ -35,4 +35,4 @@ Files: ml/training/phoneme_ctc_pilot.py; ml/tests/test_phoneme_ctc_pilot.py.
 - [x] Implement pure preflight functions and lazy optional ML imports; add bounded feature extraction/training CLI.
 - [x] Prepare pinned public synthetic fixtures outside git; retain SHA256, voice and original-reference grouping.
 - [x] Run the CPU pilot with live log/resource monitoring; save all metrics and rejection/next-step decision.
-- [ ] Run appropriate suites and independent review. Commit tested utility and update context.md. Do not promote the experimental model.
+- [x] Run appropriate suites and independent review. Commit tested utility and update context.md. Do not promote the experimental model.

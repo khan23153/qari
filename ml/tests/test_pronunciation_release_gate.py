@@ -242,10 +242,14 @@ def test_async_evaluator_preserves_forced_peak_and_actual_pronunciation_claim(tm
     import asyncio
     import struct
     import wave
+    from pathlib import Path
     from types import SimpleNamespace
     from ml.evaluation.evaluate_phone_live import evaluate
     monkeypatch.setenv('QARI_JWT_SECRET_KEY', 'private-unit-test-placeholder-no-auth-access')
     monkeypatch.setenv('QARI_ML_USE_STUB', 'true')
+    # CI runs ml/tests in a separate process from recitation_api/tests, so its
+    # conftest has not added the backend application directory to sys.path.
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2] / 'backend/recitation_api'))
     from app.services import streaming_session
 
     for name, value in [('phone_fatihah.wav', 100), ('fatihah.wav', 200), ('ikhlas.wav', 300)]:

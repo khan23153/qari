@@ -1,6 +1,6 @@
 # Qari — working context and VPS handoff
 
-Last updated: **2026-10-18, 19:37 UTC**; runtime was rechecked healthy at19:34. Later progress is appended below. Paths refer to this VPS.
+Last updated: **2026-10-18, 19:42 UTC**; runtime was rechecked healthy at19:34. Later progress is appended below. Paths refer to this VPS.
 This file records verified runtime state, historical evidence and unfinished work
 separately. It contains no passwords, API tokens, OAuth codes or signing secrets.
 
@@ -513,9 +513,9 @@ Do not replace the connected Drive account or log out again unless requested.
    or train on the51 held-out tester WAVs. Existing36 contributor-labelled and14
    expert-labelled public probes reproduce false acceptance but are insufficient
    for a reliable word-level pronunciation release.
-2. Complete the corrected-cache synthetic pilot, inspect held-out phoneme error
-   and human diagnostics, and preserve the rejection decision when unqualified.
-   Then train/qualify a distinct acoustic detector using corrected human labels.
+2. The corrected-cache synthetic pilot and36 human diagnostics are complete;
+   keep their rejection decision and avoid rerunning them without a new hypothesis.
+   Train/qualify a distinct acoustic detector using corrected human labels.
    Measure missed errors, false accusation, abstention and speaker/surah coverage;
    the new `ml/evaluation/pronunciation.py` gate is separate from word recall.
    Short vowels/consonants/shadda are a bounded phonemic scope; full tajweed
@@ -772,3 +772,33 @@ in git/context. Do not repeat the unknown tester word/time question, train on
 held-out user audio, lower existing confidence guards, or promote this pilot.
 The full pronunciation/recognition goal is **NOT COMPLETE**. Tested qualification
 code and the bounded pilot are being committed on the isolated branch for review.
+
+
+## Review branch and CI follow-up — 2026-10-18 19:41 UTC
+
+Committed/pushed research code476ee43603397039755151b9dce97c428632c5da on
+`fix/acoustic-pronunciation-20261018`. Draft PR **https://github.com/khan23153/qari/pull/36**,
+based onPR35 (`fix/native-context-selection-20261018`). It is draft because the
+pronunciation outcome is unfinished; do not merge/promote a model from test counts.
+
+GitHub CI caught a new test-environment issue: ML tests run in their own process,
+without the recitation conftest adding `backend/recitation_api` to sys.path.
+The async evaluator regression failed importing `app`; the combined local suite
+had already loaded it. Fixed the regression to explicitly add its actual backend
+path through monkeypatch, restoring the path at test teardown. Actual failing CI
+log: `P3/github-ci-failure.log`. Fresh standalone CI-shaped `ml/tests api/tests`
+now **475passed,1optional skip**, log `ci-standalone-green.log`; final combined suite
+passed960tests,1optional skip,2warnings in54.27s with exit0 before pushing
+this small test-only correction. Log: `final-ci-corrected-full-suite.log`. This is a test import
+failure, not a production ASR crash. Source model/training results are unchanged.
+Original overlap confidence fix9cfd523 is already an ancestor of current code;
+no duplicate cherry-pick was required. Runtime source hashes were rechecked and
+still match the qualified original0c7562b deployment.
+
+
+The bounded pilot plan is complete, including independent review and documented
+rejection. This does **not** complete the user’s pronunciation goal. Follow-up work
+needs corrected human phoneme access, training and held-out acoustic accuracy;
+all original recording/control, memory and latency gates must be retained.
+PR36 stays draft. The test-path correction and handoff are being pushed; GitHub
+CI for that code must be checked before claiming remote verification succeeds.
