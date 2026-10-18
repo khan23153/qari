@@ -1,6 +1,6 @@
 # Qari — working context and VPS handoff
 
-Last updated: **2026-10-18, 19:42 UTC**; runtime was rechecked healthy at19:34. Later progress is appended below. Paths refer to this VPS.
+Last updated: **2026-10-18, 19:45 UTC**; runtime was rechecked healthy at19:34. Later progress is appended below. Paths refer to this VPS.
 This file records verified runtime state, historical evidence and unfinished work
 separately. It contains no passwords, API tokens, OAuth codes or signing secrets.
 
@@ -39,12 +39,15 @@ this is feasibility evidence only. Corrected-cache rerun also completed40epochs 
 skip**. All36 human inference diagnostics completed; phoneme errors remain and no
 pronunciation candidate qualifies. **No experimental model is deployed.**
 
-Corrected human phoneme labels are currently gated on Hugging Face and the VPS has
-no persisted HF login. The user was asked to accept access to
-`IqraEval/Iqra_Extra_IS26` and `IqraEval/IqraEval_Test_GT`, then run in their own terminal:
-`python3 /home/innocent/qari-training-artifacts/pronunciation-qualification-20261018/hf_login.py`.
-It prompts secretly and stores a READ token privately; never paste it into chat.
-Public synthetic data cannot replace human pronunciation qualification. See
+VPS Hugging Face authentication now works as **Shaikhaffan**, verified using the
+previously authorized credential through a hidden terminal prompt. Token file is
+`~/.cache/huggingface/token`, mode0600; never print or copy its value. Both corrected
+human-label datasets still return403: this account is not on their authorized list.
+The user needs to request/accept access in that same HF account at:
+https://huggingface.co/datasets/IqraEval/Iqra_Extra_IS26 and
+https://huggingface.co/datasets/IqraEval/IqraEval_Test_GT .
+**No new token or login is required.** Public synthetic data cannot replace human
+pronunciation qualification. See
 section11 and the final progress entry for exact state and next work.
 
 ## 1. What the user wants
@@ -494,8 +497,8 @@ that is not proof of an active GPU session or current quota.
 | Kaggle CLI | `/home/innocent/kaggle-cli/bin/kaggle`; not on default PATH. Current host authenticated `kernels list --mine` **failed**, so do not claim an active login |
 | Kaggle historical account/job | **telethonfool**, e.g. `telethonfool/qari-conformer-quran-fp32-20261009`; old terminal logs exist |
 | Kaggle helper | `/tmp/qari-conformer-training-20261009/kaggle_version_status.py` reads token via hidden prompt; never place token in a shell argument or context file |
-| Hugging Face | No default `hf`/`huggingface-cli` or persistent `~/.cache/huggingface/token` was found; historical token use is not current authenticated access |
-| HF private helper | `/home/innocent/qari-training-artifacts/pronunciation-qualification-20261018/hf_login.py` uses hidden input, verifies identity and access, stores token0600; user action pending |
+| Hugging Face | Authenticated as **Shaikhaffan** on Oct18 at19:43 using hidden input; private `~/.cache/huggingface/token` mode0600. Both needed gated datasets return403 until that account receives access |
+| HF private helper | `/home/innocent/qari-training-artifacts/pronunciation-qualification-20261018/hf_login.py` uses hidden input, verifies identity and access, stores token0600; login complete, gated dataset access pending |
 | Cloudflare | Existing tokenized tunnel container is running; dashboard/CLI account login has not been independently verified here. Do not print container args/env |
 | Docker/FFmpeg | `/usr/bin/docker`, `/usr/bin/ffmpeg` |
 | Flutter SDK | `/home/innocent/flutter/bin/flutter` |
@@ -508,7 +511,7 @@ Do not replace the connected Drive account or log out again unless requested.
 
 ## 11. Next work, in priority order
 
-1. Await the pending secure HF access action for corrected human phoneme labels.
+1. HF login is complete. Await account access approval for the two gated human-label datasets.
    Do not repeat requests for unknown tester word/time, reuse exposed chat tokens,
    or train on the51 held-out tester WAVs. Existing36 contributor-labelled and14
    expert-labelled public probes reproduce false acceptance but are insufficient
@@ -802,3 +805,26 @@ needs corrected human phoneme access, training and held-out acoustic accuracy;
 all original recording/control, memory and latency gates must be retained.
 PR36 stays draft. The test-path correction and handoff are being pushed; GitHub
 CI for that code must be checked before claiming remote verification succeeds.
+
+
+## HF authentication and remote verification corrected — 2026-10-18 19:45 UTC
+
+Important update superseding earlier login-unavailable notes: existing user-provided
+HF authorization was verified via getpass/hidden stdin, with no token in process
+arguments, output, git or this file. Account is **Shaikhaffan**; token is saved at
+`/home/innocent/.cache/huggingface/token` with permissions0600. A new token is not
+needed. Both authenticated `/api/datasets/.../auth-check` calls return **403**,
+explicitly saying the account is not in the authorized list and must visit each
+repository to request access. Both repositories have automatic gating. The needed
+user action is access request/terms acceptance in their own HF account, not another
+CLI login. Public URLs are in Current outcome above. Redacted status is
+`P3/hf-access-status.json`; it records account/HTTP status only, no token.
+
+Latest tested code commit **e2beca9fd34d34b5172f24084c1c8dbb3cab5b0d** is pushed toPR36.
+Both GitHub Backend CI runs **39159999711** and **39159996866** passed all jobs:
+core API and recitation/ML. This supersedes the initial standalone import failure.
+Final local suite960pass/1skip, standaloneML+API475pass/1skip and optional-inference
+pilot24pass. All40-epoch runs and36human diagnostics completed with exit0/noOOM.
+`P3/run-summary.json` and `experimental-bundle.json` index exact code/model/evidence
+identity. Complete pronunciation goal remains unfinished, candidate unqualified,
+production0c7562b unchanged. No APK or live model was released from this pilot.
