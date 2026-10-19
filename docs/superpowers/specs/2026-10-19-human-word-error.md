@@ -41,6 +41,11 @@ Direct word-error classification tests a different hypothesis with public data.
   training validator still rejects any unresolved duplicate. Reserved audio is
   hashed but never used for optimization. Fetch at most4 sources concurrently in
   deterministic order with a shared reservation-protected1GB content-read budget.
+- A source exceeding the3MB individual-file cap is excluded with its filename,
+  reason and consumed-prefix byte count; a partial read never receives a full
+  source hash. Those reads still count against the unchanged total budget.
+  Total-budget exhaustion and network/identity failures remain fatal. The pinned
+  tree contains one oversized source, ID247V1T.wav (3,310,754bytes).
 - No user audio, canonical phone targets or held test labels enter optimization.
   Contributor labels are not represented as independently adjudicated truth.
 

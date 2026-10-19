@@ -23,6 +23,14 @@ MAX_FILE_BYTES = 3000000
 MAX_TOTAL_BYTES = 1000000000
 
 
+class SourceFileTooLarge(ValueError):
+    """A bounded prefix proves this individual file cannot enter the cohort."""
+
+    def __init__(self, downloaded_bytes):
+        super().__init__('Source audio exceeds per-file byte limit')
+        self.downloaded_bytes = downloaded_bytes
+
+
 def decode_source_audio(data):
     import soundfile as sf
     from scipy.signal import resample_poly
@@ -46,7 +54,7 @@ def decode_source_audio(data):
     return samples
 
 
-def prefetch_sources(rows, fetch):
+def prefetch_sources(rows, fetch, *, on_oversized=None):
     """Keep at most four sources in flight and consume in immutable source order."""
     iterator = iter(rows)
     with ThreadPoolExecutor(max_workers=4) as pool:
@@ -57,11 +65,18 @@ def prefetch_sources(rows, fetch):
                 pending.append((row, pool.submit(fetch, row['source_file'])))
         while pending:
             row, future = pending.popleft()
-            data = future.result()
+            try:
+                data = future.result()
+            except SourceFileTooLarge as error:
+                if on_oversized is None:
+                    raise
+                on_oversized(row, error)
+                data = None
             following = next(iterator, None)
             if following is not None:
                 pending.append((following, pool.submit(fetch, following['source_file'])))
-            yield row, data
+            if data is not None:
+                yield row, data
 
 
 def audit_human_audio(manifest, cache, output, identity, *, fetch, deadline, device):
@@ -75,7 +90,17 @@ def audit_human_audio(manifest, cache, output, identity, *, fetch, deadline, dev
               'metadata_sha256': manifest.get('metadata_sha256'), 'qualified': False,
               'production_changed': False, 'labels': 'Contributor word labels, not independently adjudicated'}
     pcm_groups = defaultdict(list); source_bytes = 0; audited = []
-    for row, data in prefetch_sources(manifest['cases'], fetch):
+    def exclude_oversized(row, error):
+        nonlocal source_bytes
+        source_bytes += error.downloaded_bytes
+        if source_bytes > MAX_TOTAL_BYTES:
+            raise ValueError('Public source byte budget exceeded')
+        result['excluded'].append({'source_file': row['source_file'], 'reason': str(error),
+                                   'downloaded_bytes': error.downloaded_bytes,
+                                   'source_sha256': None})
+        print('HUMAN_WORD_AUDIO_EXCLUDED', row['source_file'], str(error), flush=True)
+
+    for row, data in prefetch_sources(manifest['cases'], fetch, on_oversized=exclude_oversized):
         check_resources(output, device, deadline)
         source_bytes += len(data)
         if source_bytes > MAX_TOTAL_BYTES:
@@ -163,7 +188,7 @@ def fetch_public(source_file, budget, deadline):
                     chunk = response.read(min(65536, remaining))
                     data.extend(chunk)
                     if len(data) > MAX_FILE_BYTES:
-                        raise ValueError('Public source download byte limit exceeded')
+                        raise SourceFileTooLarge(len(data))
                     if not chunk:
                         return bytes(data)
         except (OSError, TimeoutError):

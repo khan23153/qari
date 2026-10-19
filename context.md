@@ -1175,3 +1175,156 @@ https://support.tarteel.ai/en/articles/16559266-a-mistake-was-flagged-that-i-did
 saysoptionalTashkeelmistakedetectionexists,acknowledgesmissedmistakes/falseflags,
 andstatesgeneralTajweedrulesarenotchecked. Thesearedistinctcapabilities; neither
 Qari'swordmatchingnorcompetitorfeatureclaimsprovephonemicgradingisqualified.
+
+
+### REA installed — 2026-10-19T12:07:29.563676+00:00
+
+User requested https://github.com/morluto/rea installation. Installed official
+npm package rea-agents@6.7.0 globally with --ignore-scripts (Node22.23.3).
+Executable: /home/innocent/.nvm/versions/node/v22.23.3/bin/rea.
+Reviewed dry-run then applied `rea setup --client codex --yes --json`.
+Codex MCP entry added to /home/innocent/.codex/config.toml; backup at
+/home/innocent/.codex/config.toml.rea.backup. Semantic comparison confirms all
+unrelated configuration preserved. Matching bundled workflow installed at
+/home/innocent/.agents/skills/reverse-engineer-anything (skill42,207tools).
+`rea doctor --client codex --skill --json`: healthy=true, all scoped checks pass.
+Actual stdio MCP initialize + tools/list smoke check: server6.7.0,207tools.
+Restart/reconnect Codex to discover MCP tools in the agent; this smoke test does
+not establish that the current agent has connected. No optional native engines
+(Hopper/Ghidra/IDA/JADX) installed; engine-dependent analysis needs its provider.
+No Qari production/model/UI changes. npm disposable cache cleared after install;
+filesystem free space ~1.1GiB. Setup/doctor reports under /tmp/qari-rea-*-20261019.json.
+
+Qari human-word-errors-20261019 version2 still QUEUED at this timestamp via
+Kaggle CLI. Existing monitor_v2.py process remains running (PID3961676 at check),
+monitor-v2.jsonl continues status polling; no epoch or training result yet.
+Pronunciation false-acceptance issue remains unresolved; REA is an analysis tool,
+not a new speech model or a demonstrated fix for that issue.
+
+
+### Storage cleanup — 2026-10-19T12:40:51.381608+00:00
+
+User needed room for an APK upload. Removed only unused Python dependency
+environment /tmp/qari-asr-repair-20261009/nemo-venv (~1.9GiB). Verified no active
+host process or running container mount used it. Saved all dependency versions
+and Python metadata first under /home/innocent/qari-training-artifacts/
+storage-cleanup-20261019/: removed-nemo-venv.json, nemo-venv-requirements.txt,
+cleanup-result.json. Old stopped diagnostics need this environment recreated.
+Production models, all source worktrees/local changes, recordings, research
+outputs and running services preserved. Space went from ~906MiB to ~2.7GiB free;
+current free bytes: 2823249920.
+
+Drive qari-training: remains read-only and cannot upload. Prepared a separate
+drive.file backup OAuth login. User then said choro apk upload hogaya: cancelled
+backup per that instruction, stopped pending OAuth, removed unauthenticated
+backup-only configuration. Original Drive login unchanged. NO FILES UPLOADED TO
+DRIVE; no important files deleted awaiting backup. User confirmed APK uploaded.
+
+
+### Tarteel asset analysis and Flutter Madani layouts — 2026-10-19T13:09:01.420647+00:00
+
+User supplied /home/innocent/com.mmmoussa.iqra-5-81-9-android70.xapk
+(Tarteel5.81.9/code420, SHA c89d130535495788c82b99778ec00abcc098dd89416e2725f634ee099ffd35df).
+Used connected REA tools for archive inventory, then bounded local ZIP/SQLite
+inspection and Hermes96 disassembly (P1sec/hermes-dec revision
+2e796663e1fedb93dca51060797ebf3327b3fedb). No APK execution or Tarteel service calls.
+Verified 1405=QPC_V1/qpc_v1_layout/dk_v1/DigitalKhatt Old Madina
+(DigitalKhattQuranic.otf);1421=QPC_V2/qpc_v2_layout/dk_v2/DigitalKhatt New Madina
+(DigitalKhattV2.otf). Classic1405 also has optional QCF_P001..604 glyph-font path.
+Each layout604pages/9046lines/83668tokens including6236ayahmarkers;4662rowdifferences.
+Font-only switching is insufficient. Exact function IDs/offsets and font hashes
+are recorded in docs/tarteel_mushaf_asset_analysis.md and artifact findings.json.
+Implementation isolated in /tmp/qari-mushaf-layouts-20261019, branch
+feat/mushaf-layout-switcher-20261019. New files: mobile/lib/data/models/madani_page.dart,
+data/repositories/madani_page_repository.dart, features/recitation/presentation/
+mushaf/{mushaf_layout_switcher,madani_mushaf_reader}.dart, and
+mobile/lib/main_mushaf_layout_preview.dart. Controlled Flutter selector and paired
+reader use existing MushafTheme. Repository caches4decodedpages and2fontfamilies,
+rejects mismatched data, hides stale content and supports retry. This is a READING
+component/standalone preview; NOT enabled in existing released APK or live Hifz.
+Existing Hifz, confirmations, markers, mistakes, ASR models and backend unchanged.
+Global imported IDs include markers; future live integration must map word refs,
+never feed these IDs directly to ASR. No claim of exact Tarteel Skia elongation.
+scripts/import_madani_assets.py imports only needed paired page data/fonts
+from local APK/XAPK. Generated assets ignored by git; tracked README placeholders
+keep clean checkouts valid. Actual25MiB assets under mobile/assets/madani in worktree.
+Reader requires import before preview/release packaging. Re-imports stage and
+validate the complete result before publication, with rollback and sibling backup
+on publication error. Peer review caught partial-overwrite failure; added a real
+failing-then-passing re-import preservation test and successful retry.
+Verification: full Flutter suite199passed/10opt-in skipped(exit0); additional
+fresh focused run18passed (8unit/widget+10actual-font cases across pages1,3,76,77,604);
+4Python importer tests passed. New Dart files: No issues found. Initial full-project
+analyzer reported252existing warnings/info, no errors. Screenshots and full logs
+under /tmp/qari-tarteel-assets-20261019/. Captures use a local Latin UI font override
+only because Flutter widget tests replace platform fonts; Quran fonts remain
+actual imported edition fonts. Original XAPK preserved; removed only recoverable
+170MB extracted base-APK duplicate after analysis. Current disk free ~2.2GiB.
+Production recitation container remains healthy/0restarts/noOOM. Kaggle human
+word-error experiment remains QUEUED at last check; no pronunciation fix deployed.
+No Drive upload or APK build performed for this component task.
+
+Local component commit: d2829b1e54b73c66bbb0cf6547507e7433d9404f on
+feat/mushaf-layout-switcher-20261019 (not pushed). Worktree clean; imported
+external assets remain ignored. No credentials or external binaries staged.
+
+
+### Tarteel mistake-detection client trace — 2026-10-19T19:21:30.724744+00:00
+
+User asked to inspect mistake detection in the same supplied Tarteel5.81.9 XAPK.
+Static Hermes/native-bridge inspection only; no Tarteel login/service requests,
+recording uploads, runtime accuracy/latency test, or Qari production changes.
+Artifact SHA c89d130535495788c82b99778ec00abcc098dd89416e2725f634ee099ffd35df.
+Detailed report: /tmp/qari-mushaf-layouts-20261019/docs/
+tarteel_mistake_detection_analysis.md. Retained focused disassembly, hashes,
+function references and findings.json: /tmp/qari-tarteel-assets-20261019/
+mistake-detection/. Report function IDs/offsets verified against saved disassembly.
+
+Observed StreamingClient path initializes native MicStream with a production
+voice-v2.tarteel.io WebSocket and selected recitation range/mode. Declared audio
+configuration is 16kHz/16bit/mono/bufferSize512; native buffer unit and actual wire
+cadence are unknown. Separate PARTIAL_TRANSCRIPT and STATES_UPDATE callbacks.
+Mistake types: INCORRECT_WORDS, MISSED_WORDS, EXTRA_WORDS, INCORRECT_TASHKEEL,
+plus PEEKED_WORDS (memorization annotation). Tashkeel has separate detail/highlight
+and isDiacritized session toggle. isDualModel/remote dual-model flag is present,
+but this does NOT reveal architecture, weights, accuracy or active user setting.
+Server updates include newStates/stateIndexOffset and mistakeUpdates. Reducer
+replaces a state suffix, merges mistake IDs and retracts falsey mistake updates;
+latest POSITION drives surah/ayah/word cursor. Client can revise earlier results.
+The APK contains multiple engine paths; static trace does not establish rollout.
+
+No remote detector/model/training data/decision thresholds recovered. Absence of
+common standalone model suffixes in base APK inventory is only a bounded negative
+search, not proof that no embedded/downloaded/offline model exists. Qari still
+reports pronunciation_available=false and tajweed_available=false. Its ASR can
+canonicalize incorrect vowels; client flags/colors or lower confidence cannot
+qualify pronunciation grading. Next research work: held-out human acoustic error
+qualification, typed pronunciation evidence separate from lexical progress, and
+explicit revisions while retaining confidence/speech guards and confirmed-only
+Hifz. This analysis is not a pronunciation fix or deployment. Existing detailed
+Kaggle queue status above is historical, not refreshed by this documentation task.
+
+
+### Human-word training v2 failure and bounded loader repair — 2026-10-19T20:04:16.964736+00:00
+
+Resumed actual pronunciation investigation after Tarteel static trace. Fresh
+Kaggle status is ERROR (v2), not still queued: provider started15:42UTC, failed
+15:43UTC before encoder extraction/optimization. Retained failure.json and logs:
+/tmp/qari-conformer-training-20261009/human-word-20261019/output-v2/ and runtime-v2.log.
+Actual cause: pinned data/ID247V1T.wav is3,310,754bytes, above3MB per-file cap;
+generic fetch exception aborted whole audit instead of excluding invalid source.
+Pinned tree audit1506entries,713,449,399bytes, onlythatoneoversizedfile, so this
+was not total1GBexhaustion. Tree evidence source-size-audit-v2.json in packet.
+
+Repair isolated in /tmp/qari-pronunciation-gpu-20261018 branch
+fix/human-word-error-20261019: typed per-file exception, ordered-prefetch exclusion
+callback, filename/reason/consumed-byte accounting and null full-source hash for
+partialread. Total1GBguard, network/identity failures, original3MBcap, duplicate
+participant quarantine, speaker roles and held24participants unchanged. New real
+fetch/audit regression failed on original byte-limit exception then passed; total
+budget exhaustion remains fatal. Focused12passed. Complete recitation/ML/API suite
+1029passed1skipped2knownwarnings in56.86s, log:
+/home/innocent/qari-training-artifacts/pronunciation-human-data-20261018/
+human-oversized-full-suite.log. Research spec clarified exclusion; no live model,
+backend or UI changes. Private v3 submission is being prepared; do not call it
+running/complete until provider verification. Pronunciation issue still unresolved.

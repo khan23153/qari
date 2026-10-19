@@ -111,3 +111,50 @@ def test_download_budget_counts_partial_failed_reads_before_retry(monkeypatch):
         job.fetch_public('metadata.csv', budget, time.monotonic() + 5)
     assert budget['bytes'] <= 12
     assert budget['bytes'] >= 6
+
+
+def test_oversized_source_is_excluded_without_aborting_clean_audio_audit(tmp_path, monkeypatch):
+    # The pinned dataset contains ID247V1T.wav (3,310,754 bytes). A per-file
+    # rejection must not abort the other participants or relax the byte cap.
+    from ml.training import kaggle_human_word_job as job
+    valid = wave_bytes()
+    rejected, accepted = label(247), label(45)
+    sources = {rejected['source_file']: b'x' * (len(valid) + 1),
+               accepted['source_file']: valid}
+    monkeypatch.setattr(job, 'MAX_FILE_BYTES', len(valid))
+    monkeypatch.setattr(job, 'MAX_TOTAL_BYTES', len(valid) * 4)
+    monkeypatch.setattr(job.urllib.request, 'urlopen',
+                        lambda url, **kwargs: io.BytesIO(sources['data/' + url.rsplit('/data/', 1)[1]]))
+    budget = {'bytes': 0}
+    saved = prepare_human_features(
+        {'cases': [rejected, accepted], 'reserved_speakers': [], 'excluded': []},
+        lambda _: np.zeros((80, 3000), np.float32),
+        lambda mel: np.zeros((len(mel), 1500, 512), np.float32),
+        tmp_path / 'cache', tmp_path / 'out', {},
+        fetch=lambda name: job.fetch_public(name, budget, time.monotonic() + 5))
+    assert [row['speaker_id'] for row in saved['cases']] == ['45']
+    exclusion, = saved['excluded']
+    assert exclusion['source_file'] == 'data/ID247V1T.wav'
+    assert exclusion['reason'] == 'Source audio exceeds per-file byte limit'
+    assert exclusion['downloaded_bytes'] == len(valid) + 1
+    assert exclusion['source_sha256'] is None  # A prefix is not a full file hash.
+    assert budget['bytes'] == saved['source_bytes'] == 2 * len(valid) + 1
+    assert not (tmp_path / 'cache' / 'pcm' / (rejected['id'] + '.npy')).exists()
+
+
+def test_total_download_budget_still_aborts_instead_of_becoming_an_exclusion(tmp_path, monkeypatch):
+    from ml.training import kaggle_human_word_job as job
+    source = wave_bytes()
+    monkeypatch.setattr(job, 'MAX_FILE_BYTES', len(source))
+    monkeypatch.setattr(job, 'MAX_TOTAL_BYTES', len(source) // 2)
+    monkeypatch.setattr(job.urllib.request, 'urlopen', lambda *a, **k: io.BytesIO(source))
+    budget = {'bytes': 0}
+    with pytest.raises(ValueError, match='byte limit'):
+        prepare_human_features(
+            {'cases': [label(45)], 'reserved_speakers': [], 'excluded': []},
+            lambda _: pytest.fail('Budget-exhausted audio reached encoder'),
+            lambda _: pytest.fail('Budget-exhausted audio reached encoder'),
+            tmp_path / 'cache', tmp_path / 'out', {},
+            fetch=lambda name: job.fetch_public(name, budget, time.monotonic() + 5))
+    assert budget['bytes'] <= len(source) // 2
+    assert not (tmp_path / 'out' / 'source-manifest.json').exists()
