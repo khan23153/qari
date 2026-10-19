@@ -1328,3 +1328,61 @@ budget exhaustion remains fatal. Focused12passed. Complete recitation/ML/API sui
 human-oversized-full-suite.log. Research spec clarified exclusion; no live model,
 backend or UI changes. Private v3 submission is being prepared; do not call it
 running/complete until provider verification. Pronunciation issue still unresolved.
+
+
+### Human-word v3 running / source identity verified — 2026-10-19T20:07:52.523815+00:00
+
+Private Kaggle version3 started20:04UTC onTeslaT4 (notqueued). Provider source
+pulled and verified byte-identical to tested packet; private settings and input
+originalencoder verified. Commitb7c230ae81c3287232bb8d9b6f5fe0c05d3aef19 pushed to
+existingdraftPR38; allfour coreAPI/recitation-ML CI checks passed. LauncherSHA
+ d04f4fa76120d7d7be580e4e1008466f0b7719eebfdaa2f8b440b028f5082ccd.
+Provider7200s/wholejob7100s budget unchanged. Observer monitor_v3.py, logs
+monitor-v3.jsonl/runtime-v3.log/latest-status-v3.json in existingpacket, never
+resubmits. Submission-record-v3.json stores exact private/source/runidentity.
+Actual oversizedsourceexcluded andaudit768clips by20:07:26UTC; no accuracy result
+or trained head yet. OriginalCPUhelper mislabeled mixedbinarywordlabels asvowel;
+backedup then corrected kind tobinary_word_error_unclassified, preserving default
+qualification gates and documenting unknown class coverage. Broader gated HF
+Iqra_Extra_IS26/IqraEval_Test_GT still403 on authenticatedauthcheck20:06UTC.
+Originalbackendhealthy/0restarts/noOOM, revision0c7562b remainsdeployed.
+
+
+### Human-word GPU v3 COMPLETE; harakat qualification FAILED — 2026-10-19T20:15:55.273241+00:00
+
+Actual providerstatusCOMPLETE, training10epochs/best4/threshold0.7857852578163147.
+Private frozen-encoder run finished successfully, no failureartifact. Source/head
+identities verified. HeadSHA f396e657f637eb0c886e58c4ab2c2307455211ad5b02ecb7f6192f8f9ce7fd9a.
+Fullaudit1393cleanclips:1055train/122validation/127test/89reserved;13duplicatePCMgroups,
+19participantIDs/all81theirclipsquarantined,19speech-guardexclusions,1oversized,
+plus12preexistingmetadataexclusions. Limits/splits/unknownmasks preserved.
+
+Actualheldtest:75/96errorsdetected,21missed;13falsealarms/216correctwords
+(6.02%FPR,85.23%precision,78.125%recall).14of21misses onayah3 y alid/yulad
+(7each),8of13falsealarms alsoayah3. Reservedall:34/61detected,27missed,
+5falsealarms/148correctwords. Threshold/checkpoint werevalidation-only; no
+heldtest/reserved tuning. Text-positionpriorbaseline detected0errors withits
+validation-selectedconservative threshold; notanASR/livecomparison.
+
+CrucialoriginalCPUreservedsubset:34of35clipsvalid (ID165V1F excluded fromcleanGPU
+cohort);15contributor-labelledharakaterrorwords,1detected/14missed,0falsealarms
+on70correctwords. All34resampledPCMidentical,0CPU/GPUdecisiondisagreements.
+Thus CPU conversion doesnotexplain the misses. Head-onlyCPUmedian5.51ms excludes
+encoder/buffering/network; no live latencyclaim. Sourceannotationcategories of
+those15errors separatelyverifiedasحركات; diagnosticglobalkindremainsunclassified
+binaryworderror ratherthaninventedphoneclasscoverage. Only2pure-harakattraining
+errorutterances, mosttrainingerrors tajweed/mixed; co-occurrence/generalization
+warning, notprovensolecause. Fullayahattention word-locality also unverified.
+
+Candidate isNOTqualified andNOTdeployed. Original livebackend/model/UIunchanged;
+pronunciation_available=false/tajweed_available=false remain truthful. Report:
+/tmp/qari-pronunciation-gpu-20261018/docs/human_word_error_result_20261019.md,
+durablecopyunder /home/innocent/qari-training-artifacts/pronunciation-human-data-20261018/
+human-word-experiment/human-word-error-result-20261019.md. GPUaudit/head/reports/
+predictions inpacketoutput-v3. CPUresultsandlog inhuman-word-experiment.
+
+Nextresearchrequires separatevowel supervision, enoughpureerror/correcthuman
+examples, qualifiedword-local acoustic evidence and independent speakers/surahs.
+DoNOTlowerguards, labellexicalASRcorrectaspronunciationcorrect, retuneonheldscores
+orclaimfullyfixed. BroadIqragateddatastill403. ExistingresearchdraftPR38contains
+boundedtrainingloaderfixb7c230a; full1029passed1skip2knownwarnings andallCIpass.
