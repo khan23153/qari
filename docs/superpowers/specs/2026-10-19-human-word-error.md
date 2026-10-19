@@ -35,8 +35,12 @@ Direct word-error classification tests a different hypothesis with public data.
   1 test,2–9 train. Same-speaker clips never cross partitions.
 - Fetch public source WAVs only, max3MB each/1GB total. Native mono/stereo PCM
   resampled to16k with fixed scipy polyphase filtering; .25–12s, finite/.006RMS
-  speech guard. Check actual source/floatPCM hashes, reject cross-split duplicate
-  audio before training. Reserved audio is hashed but never used for optimization.
+  speech guard. Check actual source/floatPCM hashes in a full audit before encoding/training.
+  Quarantine every participant ID involved in any exact PCM duplicate group,
+  including their other unique clips, preserving original role assignments. The
+  training validator still rejects any unresolved duplicate. Reserved audio is
+  hashed but never used for optimization. Fetch at most4 sources concurrently in
+  deterministic order with a shared reservation-protected1GB content-read budget.
 - No user audio, canonical phone targets or held test labels enter optimization.
   Contributor labels are not represented as independently adjudicated truth.
 

@@ -1,11 +1,14 @@
 """Bounded public human-label experiment, never a production pronunciation grader."""
 import csv
+from collections import defaultdict, deque
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import io
 import json
 import math
 from pathlib import Path
 import time
+import threading
 import urllib.request
 
 import numpy as np
@@ -43,19 +46,37 @@ def decode_source_audio(data):
     return samples
 
 
-def prepare_human_features(manifest, feature_extractor, encode, cache, output, identity, *, fetch, deadline=None, device='cpu'):
+def prefetch_sources(rows, fetch):
+    """Keep at most four sources in flight and consume in immutable source order."""
+    iterator = iter(rows)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        pending = deque()
+        for _ in range(4):
+            row = next(iterator, None)
+            if row is not None:
+                pending.append((row, pool.submit(fetch, row['source_file'])))
+        while pending:
+            row, future = pending.popleft()
+            data = future.result()
+            following = next(iterator, None)
+            if following is not None:
+                pending.append((following, pool.submit(fetch, following['source_file'])))
+            yield row, data
+
+
+def audit_human_audio(manifest, cache, output, identity, *, fetch, deadline, device):
+    """Hash ALL actual audio before encoding, quarantine every duplicate participant."""
     cache, output = Path(cache), Path(output)
     cache.mkdir(parents=True, exist_ok=True); output.mkdir(parents=True, exist_ok=True)
-    deadline = time.monotonic() + 7100 if deadline is None else deadline
+    pcm_dir = cache / 'pcm'; pcm_dir.mkdir(exist_ok=True)
     result = {'label_type': 'human_binary_word_error', 'dataset': DATASET, 'revision': REVISION,
               'reserved_speakers': manifest['reserved_speakers'], 'cases': [],
               'excluded': list(manifest['excluded']), 'encoder_identity': identity,
               'metadata_sha256': manifest.get('metadata_sha256'), 'qualified': False,
               'production_changed': False, 'labels': 'Contributor word labels, not independently adjudicated'}
-    seen_pcm = {}; source_bytes = 0
-    for row in manifest['cases']:
+    pcm_groups = defaultdict(list); source_bytes = 0; audited = []
+    for row, data in prefetch_sources(manifest['cases'], fetch):
         check_resources(output, device, deadline)
-        data = fetch(row['source_file'])
         source_bytes += len(data)
         if source_bytes > MAX_TOTAL_BYTES:
             raise ValueError('Public source byte budget exceeded')
@@ -66,20 +87,55 @@ def prepare_human_features(manifest, feature_extractor, encode, cache, output, i
                                        'source_sha256': hashlib.sha256(data).hexdigest()})
             continue
         pcm_sha = hashlib.sha256(samples.astype('<f4', copy=False).tobytes()).hexdigest()
-        if pcm_sha in seen_pcm:
-            raise ValueError(f'Duplicate actual PCM: {seen_pcm[pcm_sha]} and {row["id"]}')
-        seen_pcm[pcm_sha] = row['id']
+        pcm_groups[pcm_sha].append(row)
+        target = pcm_dir / (row['id'] + '.npy'); np.save(target, samples, allow_pickle=False)
+        audited.append({**row, 'source_sha256': hashlib.sha256(data).hexdigest(),
+                        'float_pcm_sha256': pcm_sha, 'sample_count': len(samples),
+                        'rms': float(np.sqrt(np.mean(samples ** 2))),
+                        'sample_path': str(target), 'sample_file_sha256': file_sha(target)})
+        if len(audited) % 64 == 0:
+            print('HUMAN_WORD_AUDIO_AUDIT', len(audited), 'source_bytes', source_bytes, flush=True)
+    duplicate_groups = [{'float_pcm_sha256': pcm, 'cases': [r['id'] for r in group],
+                         'roles': [r['role'] for r in group],
+                         'speaker_ids': sorted({r['speaker_id'] for r in group})}
+                        for pcm, group in pcm_groups.items() if len(group) > 1]
+    quarantined = {speaker for group in duplicate_groups for speaker in group['speaker_ids']}
+    result['duplicate_pcm_groups'] = duplicate_groups
+    result['quarantined_speakers'] = sorted(quarantined)
+    for row in audited:
+        if row['speaker_id'] in quarantined:
+            result['excluded'].append({'source_file': row['source_file'],
+                                       'reason': 'Ambiguous duplicate PCM participant quarantine',
+                                       'source_sha256': row['source_sha256']})
+        else:
+            result['cases'].append(row)
+    result['source_bytes'] = source_bytes
+    write_json(output / 'audio-audit.json', result)
+    print('HUMAN_WORD_AUDIO_AUDIT_COMPLETE', 'clean', len(result['cases']),
+          'duplicate_groups', len(duplicate_groups), 'quarantined_participants', len(quarantined), flush=True)
+    return result
+
+
+def prepare_human_features(manifest, feature_extractor, encode, cache, output, identity, *, fetch, deadline=None, device='cpu'):
+    cache, output = Path(cache), Path(output)
+    deadline = time.monotonic() + 7100 if deadline is None else deadline
+    audit = audit_human_audio(manifest, cache, output, identity, fetch=fetch, deadline=deadline, device=device)
+    result = {**audit, 'cases': []}
+    for row in audit['cases']:
+        check_resources(output, device, deadline)
+        if file_sha(row['sample_path']) != row['sample_file_sha256']:
+            raise ValueError('Audited PCM cache changed before encoding')
+        samples = np.load(row['sample_path'], allow_pickle=False)
+        if (samples.dtype != np.float32 or samples.shape != (row['sample_count'],)
+                or hashlib.sha256(samples.astype('<f4', copy=False).tobytes()).hexdigest() != row['float_pcm_sha256']):
+            raise ValueError('Audited actual PCM identity mismatch')
         x = extract_batch(feature_extractor, encode, [samples])[0]
         target = cache / (row['id'] + '.npz')
         np.savez_compressed(target, features=x)
-        result['cases'].append({**row, 'source_sha256': hashlib.sha256(data).hexdigest(),
-                                'float_pcm_sha256': pcm_sha, 'sample_count': len(samples),
-                                'rms': float(np.sqrt(np.mean(samples ** 2))),
-                                'feature_path': str(target), 'feature_sha256': file_sha(target)})
+        result['cases'].append({**row, 'feature_path': str(target), 'feature_sha256': file_sha(target)})
         if len(result['cases']) % 32 == 0:
             write_json(output / 'source-manifest.json', result)
-            print('HUMAN_WORD_FEATURES', len(result['cases']), 'source_bytes', source_bytes, flush=True)
-    result['source_bytes'] = source_bytes
+            print('HUMAN_WORD_FEATURES', len(result['cases']), flush=True)
     write_json(output / 'source-manifest.json', result)
     return result
 
@@ -90,14 +146,23 @@ def fetch_public(source_file, budget, deadline):
     for attempt in range(3):
         if time.monotonic() >= deadline:
             raise TimeoutError('Source download deadline reached')
+        lock = budget.setdefault('lock', threading.Lock())
+        with lock:
+            available = MAX_TOTAL_BYTES - budget['bytes'] - budget.get('reserved', 0)
+            if available <= 0:
+                raise ValueError('Public source download byte limit exceeded')
+            allowance = min(MAX_FILE_BYTES + 1, available)
+            budget['reserved'] = budget.get('reserved', 0) + allowance
+        data = bytearray()
         try:
             with urllib.request.urlopen(url, timeout=25) as response:
-                data = bytearray()
                 while True:
-                    remaining = min(MAX_FILE_BYTES - len(data), MAX_TOTAL_BYTES - budget['bytes'])
-                    chunk = response.read(min(65536, remaining + 1))
-                    budget['bytes'] += len(chunk); data.extend(chunk)
-                    if len(data) > MAX_FILE_BYTES or budget['bytes'] > MAX_TOTAL_BYTES:
+                    remaining = allowance - len(data)
+                    if remaining <= 0:
+                        raise ValueError('Public source download byte limit exceeded')
+                    chunk = response.read(min(65536, remaining))
+                    data.extend(chunk)
+                    if len(data) > MAX_FILE_BYTES:
                         raise ValueError('Public source download byte limit exceeded')
                     if not chunk:
                         return bytes(data)
@@ -105,6 +170,10 @@ def fetch_public(source_file, budget, deadline):
             if attempt == 2:
                 raise
             time.sleep(attempt + 1)
+        finally:
+            with lock:
+                budget['reserved'] -= allowance
+                budget['bytes'] += len(data)
 
 
 def main(*, deadline=None):
