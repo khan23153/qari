@@ -134,3 +134,17 @@ def test_public_audio_preparation_preserves_voice_caps_actual_targets_and_hashes
     assert all(r['phoneme_mis'] == 'k a' and r['sample_count'] == 8000 for r in manifest['cases'])
     assert len({r['float_pcm_sha256'] for r in manifest['cases']}) == 6
     assert (tmp_path/'out/source-manifest.json').exists()
+
+
+def test_training_precision_is_independent_of_ambient_autocast(tmp_path):
+    """The small CTC head must not inherit reduced precision from its caller."""
+    import torch
+    from ml.training.kaggle_phoneme_job import train_features
+    manifest=feature_manifest(tmp_path)
+    with torch.autocast('cpu',dtype=torch.bfloat16):
+        ambient=train_features(manifest,tmp_path/'ambient',epochs=1,device='cpu')
+    plain=train_features(manifest,tmp_path/'plain',epochs=1,device='cpu')
+    assert ambient['history']==plain['history']
+    left=torch.load(tmp_path/'ambient/candidate-head.pt',map_location='cpu',weights_only=True)
+    right=torch.load(tmp_path/'plain/candidate-head.pt',map_location='cpu',weights_only=True)
+    assert all(torch.equal(left['state_dict'][key],value)for key,value in right['state_dict'].items())

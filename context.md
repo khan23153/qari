@@ -1,6 +1,6 @@
 # Qari — working context and VPS handoff
 
-Last updated: **2026-10-18, 22:34 UTC**. Later progress and exact evidence are appended below. Paths refer to this VPS.
+Last updated: **2026-10-18, 22:45 UTC**. Later progress and exact evidence are appended below. Paths refer to this VPS.
 This file records verified runtime state, historical evidence and unfinished work
 separately. It contains no passwords, API tokens, OAuth codes or signing secrets.
 
@@ -38,6 +38,15 @@ this is feasibility evidence only. Corrected-cache rerun also completed40epochs 
 510.35MiB memory peak and no OOM. Latest complete test suite: **960passed,1optional
 skip**. All36 human inference diagnostics completed; phoneme errors remain and no
 pronunciation candidate qualifies. **No experimental model is deployed.**
+
+**Latest ongoing work:** larger private GPU phoneme experiment in
+`/tmp/qari-pronunciation-gpu-20261018`, branch`fix/pronunciation-gpu-training-20261018`,
+draftPR37 https://github.com/khan23153/qari/pull/37. Code`06dca92`, test successor`06c6a4d`.
+Fullsuite995passed/1skip; standaloneML/API510passed/1skip; latestGitHubCIbothpassed.
+Kaggle`telethonfool/qari-audio-only-phoneme-ctc-20261018` version2endedERROR atfirstgradientstep after8192train/512held features. Version3
+precision diagnostic is running; actual pronunciation quality is still unverified. OriginalCPU held-out human features36/36ready.
+Kaggle2.2.4 CLIcontainer authenticated;30GPUhours were available at22:07.
+
 
 VPS Hugging Face authentication now works as **Shaikhaffan**, verified using the
 previously authorized credential through a hidden terminal prompt. Token file is
@@ -943,3 +952,15 @@ Runner commit`05f4b42` pushed; draftPR37 https://github.com/khan23153/qari/pull/
 ###22:40UTC — actual GPU bootstrap failure and repair
 
 Version1 endedERROR before model setup/gradients. ProviderPython3.13.15 cannot install the originally pinnedNumPy1.26.4/oldPyAV dependencies. Bounded wrapper correctly savedfailure.json; retrievedoutput-v1. This is a bootstrap compatibility failure, not an acoustic training result. Runtime repair pinsNumPy2.2.6/faster-whisper1.2.1/CT24.6.0 and requests binary wheels only. The original faster-whisper1.0.3 feature_extractor.py is preserved byte-for-byte as research module`ml/training/frozen_whisper_frontend.py`, SHA`5509a21380cc933327bcb01f1d3d2d5ee2e242a7664e672006796ed4f4491b55`, with upstreamMITlicense. Four tests RED→GREEN verify source identity and exact original mel features for silence/voice-band/impulse audio. OriginalCPU human features completed36/36 at~397MiB under1.2GBlimit; no model text decoder or GPU cache reused. Actual publicTTS source WAV checked16kmono2.61225s, so sample-rate selection is applicable. Fresh whole suite and version2submissionpending.
+
+###22:44UTC — GPU version2 feature extraction verified
+
+Runtime repair commit`06dca92`, test-only successor`06c6a4d`, draftPR37. Full suite995passed/1skipped54.17s; final standaloneML/API510passed/1skipped5.61s, frontend tests also work around legacy optional-ASR stubs. Version2source pull confirms privateT4 and exact launcher-byte match. ActualGPU_SETUP22:42UTC verified frozenmodelSHA and originalfrontendSHA, CUDA0/int8_float32, Torch2.11.0+cu128, NumPy2.2.6, CT24.6.0, faster-whisper1.2.1, datasets3.6.0, soundfile0.13.1. Feature bundle`cc9601b43926b4b9b46049d13ccb543d2e29f0b125b5256248e8ae69776fa0a9`; originalCPU runtime is intentionally distinct and must be evaluated separately. Public source streaming and actual batch feature extraction observed (256trainclips29.9s), no decoder. No gradient/accuracy claim yet. Monitor now uses default current session because explicitversion_label='2' returned404 despite current sessionRUNNING; old observer stopped and one current monitor retained. Generic Kaggle preinstalled package conflicts were pip warnings; setup and features succeeded.
+
+## 2026-10-19 05:55 UTC — resumed actual terminal result and precision investigation
+
+Version2 endedERROR at2026-10-18 23:00:24UTC, after preparing8192train/512heldJessica clips across6trainingvoices. No successful epoch/checkpoint was produced. Failure.json andsource-manifest/feature-identity retrieved under `/tmp/qari-conformer-training-20261009/phoneme-ctc-20261018/output-v2`. Strictfinite-gradient clipping rejected nonfinite gradients at first training step; loss-scaling/FP16overflow is the hypothesis, not yet proven. Guard remains enabled.
+
+Local regression: caller autocast contaminated CTC training (initial RED: inference cached tensor error; forward-only disable still changed validation loss); whole forward/backward/optimizer FP32 wrapper passes12focusedtests. No arbitrary error suppression, zero_infinity remainsfalse. Fullsuitepending. Version3 is a private900sT4 diagnostic (not full training), comparing originalAMP vsFP32 on the same16 shuffled first-step publiccaseIDs and44-token vocabulary. It verifies each clip's actual floatPCM SHA against version2 before encoding. DiagnosticlauncherSHA`79e7e7dbc3c8b0fce4cbc395107f893ec1b1fa3dfcd0c342c1e967943ef1ebf3`; script/monitor/artifacts underP4 andprivatepacket.
+
+Public canonical phone-reference columns were read without audio download using bounded HTTP range reads:3554unique references,3669885networkbytes from firstpinnedIqra_TTSshard; foundIkhlas112:3reference. This is expected-reference text only, not human spoken-phone truth. OriginalCPUhumanfeatures36ready. No experimental model deployed; original backend unchanged.

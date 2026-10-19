@@ -129,6 +129,15 @@ def check_resources(output, device, deadline):
 
 
 def train_features(manifest, output, *, epochs=40, device='cuda', deadline=None):
+    # This small head fits in FP32; its first AMP GPU batch had nonfinite
+    # gradients. Keep forward, backward and optimizer in FP32.
+    if device not in ('cpu', 'cuda'):
+        raise ValueError('Invalid bounded training configuration')
+    with torch.autocast(device_type=device, enabled=False):
+        return _train_features_fp32(manifest, output, epochs=epochs, device=device, deadline=deadline)
+
+
+def _train_features_fp32(manifest, output, *, epochs=40, device='cuda', deadline=None):
     import random
     if device not in ('cpu', 'cuda') or type(epochs) is not int or not 1 <= epochs <= 40:
         raise ValueError('Invalid bounded training configuration')
@@ -142,7 +151,6 @@ def train_features(manifest, output, *, epochs=40, device='cuda', deadline=None)
     unknown = sorted({phone for row in validation for phone in altered_targets(row) if phone not in token_ids})
     head = TemporalPhoneHead(len(vocabulary)).to(device)
     optimizer = torch.optim.AdamW(head.parameters(), lr=1e-3)
-    scaler = torch.cuda.amp.GradScaler(enabled=device == 'cuda')
     loss_fn = nn.CTCLoss(blank=0, zero_infinity=False)
     history, best, best_epoch = [], float('inf'), 0
     started = time.monotonic()
@@ -165,7 +173,7 @@ def train_features(manifest, output, *, epochs=40, device='cuda', deadline=None)
             for offset in range(0, len(validation), 16):
                 check_resources(output, device, deadline)
                 rows = validation[offset:offset+16];features, lengths = batch(rows)
-                with torch.cuda.amp.autocast(enabled=device == 'cuda'):
+                with torch.autocast(device_type=device, enabled=False):
                     logits = head(features, lengths)
                 if not torch.isfinite(logits).all():
                     raise ValueError('Nonfinite validation phone logits')
@@ -189,14 +197,14 @@ def train_features(manifest, output, *, epochs=40, device='cuda', deadline=None)
             check_resources(output, device, deadline)
             rows = train[offset:offset+16];features, lengths = batch(rows)
             optimizer.zero_grad(set_to_none=True)
-            with torch.cuda.amp.autocast(enabled=device == 'cuda'):
+            with torch.autocast(device_type=device, enabled=False):
                 logits = head(features, lengths)
             loss = ctc_loss(logits, lengths, rows)
             if not torch.isfinite(loss):
                 raise ValueError('Nonfinite training CTC loss')
-            scaler.scale(loss).backward();scaler.unscale_(optimizer)
+            loss.backward()
             nn.utils.clip_grad_norm_(head.parameters(), 1., error_if_nonfinite=True)
-            scaler.step(optimizer);scaler.update();loss_total += float(loss.detach())*len(rows)
+            optimizer.step();loss_total += float(loss.detach())*len(rows)
         per, val_loss, predictions = evaluate()
         row = {'epoch': epoch, 'training_loss': loss_total/len(train),
                'validation_per': per, 'validation_loss': val_loss}
@@ -211,6 +219,7 @@ def train_features(manifest, output, *, epochs=40, device='cuda', deadline=None)
             write_json(output/'validation-predictions.json', predictions)
         report = {'status': 'training', 'qualified': False, 'production_changed': False,
                   'human_qualification_pending': True, 'encoder_frozen': True, 'text_decoder_used': False,
+                  'training_precision': 'float32', 'gradient_scaling': False,
                   'dataset': manifest['dataset'], 'dataset_revision': manifest['revision'],
                   'feature_bundle_sha256': manifest['feature_bundle_sha256'],
                   'vocabulary': vocabulary, 'training_clips': len(train), 'validation_clips': len(validation),
