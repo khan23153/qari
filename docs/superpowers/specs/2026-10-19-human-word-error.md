@@ -31,7 +31,7 @@ Direct word-error classification tests a different hypothesis with public data.
 - Ambiguous locations, mismatched references and missing labels are quarantined.
   Ayah3 bare `lam` cannot distinguish the two occurrences and is ambiguous.
 - All24 previously probed participant IDs are reserved, never training or tuning.
-  Remaining speakers use SHA256(`qari-human-word-v1:`+id) modulo10:0 validation,
+  Remaining speakers use the first8hex digits (first32bits) of SHA256(`qari-human-word-v1:`+id), converted to an integer, modulo10:0 validation,
   1 test,2–9 train. Same-speaker clips never cross partitions.
 - Fetch public source WAVs only, max3MB each/1GB total. Native mono/stereo PCM
   resampled to16k with fixed scipy polyphase filtering; .25–12s, finite/.006RMS
