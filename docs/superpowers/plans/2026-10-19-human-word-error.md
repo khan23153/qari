@@ -24,7 +24,7 @@ FP32,7100s whole job, provider7200s, private only. Always qualified=false.
 - Padding peers/tails must not change logits of real acoustic samples.
 - Held test/reserved scores must not choose checkpoint or decision threshold.
 
-### Task1: Conservative human word-label contract
+### Task 1: Conservative human word-label contract
 
 **Files:** Create ml/training/human_word_data.py; tests ml/tests/test_human_word_data.py.
 **Interfaces:** parse_label_row(row,reserved_speakers)->dict with speaker/role/15targets,
@@ -39,7 +39,7 @@ validation-only threshold selection with tied scores/FPR bound.
 - [ ] Focused tests pass; audit all pinned metadata without downloading audio.
 - [ ] Commit contract and audit findings.
 
-### Task2: Bounded acoustic word classifier
+### Task 2: Bounded acoustic word classifier
 
 **Files:** Create ml/training/human_word_head.py and ml/tests/test_human_word_head.py.
 **Interfaces:** HumanWordHead.forward(features,lengths)->B,15 logits;
@@ -53,7 +53,7 @@ isolation and bounded CPU smoke optimization with retained finite guard.
 FP32 training, validation-only selection and separate held predictions.
 - [ ] Focused tests and complete recitation/ML/API suite pass; commit.
 
-### Task3: Private extraction, training and actual result
+### Task 3: Private extraction, training and actual result
 
 **Files:** Create ml/training/kaggle_human_word_job.py; runner boundary tests.
 Private launch/monitor/artifacts live outside repo under P4/human-word-experiment.
