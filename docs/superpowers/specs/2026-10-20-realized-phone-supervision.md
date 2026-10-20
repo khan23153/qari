@@ -62,7 +62,11 @@ Greedy collapse is blank-aware; remove delimiter75 only for phone PER. Preserve
 other predicted symbols as errors; no repetition collapse/case folding/canonical repair.
 
 Train ONLY final two native encoder layers22/23 and lm_head. Freeze everything
-else and verify frozen-state digest before/after. Explicit eager attention for
+else and verify frozen-state digest before/after. Call the native
+`freeze_feature_encoder()` so its internal `_requires_grad` flag is false too;
+otherwise frozen convolution parameters can still force a graph through all
+encoder layers and waste GPU memory. Disable gradient checkpointing and verify
+the first frozen encoder input requires no gradient in tests. Explicit eager attention for
 controlled CPU/GPU comparison. Native spec augment .075, layer-normalized feature
 extractor and normalized16k frontend preserved. FP32 forward/backward/optimizer;
 CTC mean reduction, zero_infinity=false, finite loss/gradient/parameter checks.
