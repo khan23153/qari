@@ -81,9 +81,12 @@ def unique_consuming_pairs(expected, actual):
 
 
 def local_word_crops(reference_ids, reference_word_indices, emissions, frame_count,
-                     blank=0, min_confidence=.55, *, allow_substitutions=False):
+                     blank=0, min_confidence=.55, *, allow_substitutions=False,
+                     allow_internal_deletions=False):
     if (blank != 0 or type(frame_count) is not int or not 1 <= frame_count <= 600
             or type(allow_substitutions) is not bool
+            or type(allow_internal_deletions) is not bool
+            or (allow_internal_deletions and not allow_substitutions)
             or not math.isfinite(min_confidence) or not .55 <= min_confidence <= 1
             or not 1 <= len(reference_ids) <= 256 or len(reference_ids) != len(reference_word_indices)
             or any(type(t) is not int or not 1 <= t <= 42 for t in reference_ids)
@@ -114,13 +117,19 @@ def local_word_crops(reference_ids, reference_word_indices, emissions, frame_cou
         item = {'word_index': word, 'available': False, 'frame_start': None, 'frame_end': None,
                 'reference_ids': [token for token, owner in zip(reference_ids, reference_word_indices)
                                   if owner == word], 'reason': 'ambiguous_native_anchors'}
-        if not wanted or any(i not in paired for i in wanted):
+        missing = [i for i in wanted if i not in paired]
+        if (not wanted or (missing and (not allow_internal_deletions
+                or wanted[0] not in paired or wanted[-1] not in paired))):
             result.append(item); continue
-        indices = [paired[i] for i in wanted]
+        anchored = [i for i in wanted if i in paired]
+        indices = [paired[i] for i in anchored]
+        if missing and sum(expected[i] == actual[paired[i]] for i in anchored) < 2:
+            item['reason'] = 'insufficient_exact_native_anchors'
+            result.append(item); continue
         if allow_substitutions and len(indices)<2:
             item['reason']='insufficient_native_anchors'
             result.append(item); continue
-        if allow_substitutions and not any(expected[i]==actual[paired[i]] for i in wanted):
+        if allow_substitutions and not any(expected[i]==actual[paired[i]] for i in anchored):
             item['reason']='no_exact_native_anchor'
             result.append(item); continue
         if indices != list(range(indices[0], indices[-1] + 1)):
@@ -138,6 +147,10 @@ def local_word_crops(reference_ids, reference_word_indices, emissions, frame_cou
                 if allow_substitutions:
                     item.update(native_consonant_ids=[actual[i] for i in indices],
                                 native_anchor_types=['exact' if expected[i]==actual[paired[i]]
-                                                     else 'substitution' for i in wanted])
+                                                     else 'substitution' for i in anchored])
+                if missing:
+                    # Invariant endpoints and contiguous forced pairs leave only
+                    # internal deletions in every optimal path. Assessment only.
+                    item['deleted_reference_consonant_indices'] = missing
         result.append(item)
     return result

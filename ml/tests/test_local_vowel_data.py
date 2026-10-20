@@ -165,3 +165,50 @@ def test_native_substitution_still_needs_point55_confidence():
     refs,owners,emissions=substitution_example();emissions[0]['confidence']=.54
     row=local_word_crops(refs,owners,emissions,16,allow_substitutions=True)[0]
     assert not row['available'] and row['reason']=='low_native_confidence'
+
+
+def endpoint_deletion_example(tokens=(22,20,25,1,6,8)):
+    emissions=[dict(id=t,start_frame=i*2,end_frame=i*2+1,confidence=.99)
+               for i,t in enumerate(tokens)]
+    return [22,33,20,33,27,32,25,1,32,6,32,8,38],[0]*7+[1]*6,emissions
+
+
+def test_forced_internal_deletion_can_localize_assessment_with_stable_endpoints():
+    refs,owners,emissions=endpoint_deletion_example()
+    old=local_word_crops(refs,owners,emissions,16,allow_substitutions=True)
+    assert not old[0]['available']
+    new=local_word_crops(refs,owners,emissions,16,allow_substitutions=True,
+                         allow_internal_deletions=True)
+    assert new[0]['available'] and (new[0]['frame_start'],new[0]['frame_end'])==(0,6)
+    assert new[0]['native_consonant_ids']==[22,20,25]
+    assert new[0]['deleted_reference_consonant_indices']==[2]
+    assert new[0]['reference_ids']==[22,33,20,33,27,32,25]
+
+
+@pytest.mark.parametrize('tokens',[(20,27,25,1,6,8),(22,20,27,1,6,8),(21,19,24,1,6,8)])
+def test_endpoint_fallback_rejects_missing_boundaries_and_wrong_speech(tokens):
+    refs,owners,emissions=endpoint_deletion_example(tokens)
+    rows=local_word_crops(refs,owners,emissions,16,allow_substitutions=True,
+                         allow_internal_deletions=True)
+    assert not rows[0]['available']
+
+
+def test_endpoint_fallback_preserves_native_anchor_confidence_guard():
+    refs,owners,emissions=endpoint_deletion_example();emissions[1]['confidence']=.54
+    rows=local_word_crops(refs,owners,emissions,16,allow_substitutions=True,
+                         allow_internal_deletions=True)
+    assert not rows[0]['available'] and rows[0]['reason']=='low_native_confidence'
+
+
+def test_endpoint_fallback_rejects_ambiguous_surviving_internal_consonant():
+    emissions=[dict(id=t,start_frame=i*2,end_frame=i*2+1,confidence=.99)
+               for i,t in enumerate([22,20,25])]
+    rows=local_word_crops([22,20,20,25],[0]*4,emissions,10,allow_substitutions=True,
+                         allow_internal_deletions=True)
+    assert not rows[0]['available']
+
+
+def test_endpoint_fallback_cannot_implicitly_enable_substitution_policy():
+    refs,owners,emissions=endpoint_deletion_example()
+    with pytest.raises(ValueError):
+        local_word_crops(refs,owners,emissions,16,allow_internal_deletions=True)

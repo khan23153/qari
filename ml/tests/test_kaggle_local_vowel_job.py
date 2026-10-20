@@ -230,3 +230,19 @@ def test_remote_cpu_direct_extraction_rejects_before_creating_cache_or_fetching(
         prepare_local_vowel_features(audit, refs, encoded, cache, output, IDENTITY,
             device='kaggle_cpu', fetch=lambda _:pytest.fail('Rejected remote job reached download'))
     assert not cache.exists() and not output.exists()
+
+
+def test_stable_endpoint_policy_extracts_actual_frames_and_binds_cache_identity(tmp_path):
+    raw,audit,refs=fixtures()
+    def deletion(samples):
+        features,emissions=encoded(samples)
+        return features,[e for e in emissions if e['id']!=6]
+    identity={**IDENTITY,'crop_policy':'stable_endpoints_v1'}
+    manifest=prepare_local_vowel_features(audit,refs,deletion,tmp_path/'cache',tmp_path/'out',
+        identity,fetch=lambda _:raw,crop_policy='stable_endpoints_v1')
+    row=manifest['cases'][3]
+    assert row['available'] and row['native_consonant_ids']==[1,8]
+    assert row['deleted_reference_consonant_indices']==[8]
+    assert manifest['encoder_identity']['crop_policy']=='stable_endpoints_v1'
+    with np.load(row['feature_path'],allow_pickle=False) as data:
+        assert data['features'].shape==(row['frame_end']-row['frame_start'],1024)

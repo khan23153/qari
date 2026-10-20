@@ -185,3 +185,16 @@ def test_held_availability_never_selects_checkpoint_or_threshold(tmp_path):
     left = torch.load(tmp_path/'one/candidate-head.pt', weights_only=True)['state_dict']
     right = torch.load(tmp_path/'two/candidate-head.pt', weights_only=True)['state_dict']
     assert all(torch.equal(left[k], right[k]) for k in left)
+
+
+def test_stable_endpoint_research_policy_is_bound_to_manifest_identity(tmp_path):
+    manifest=sample_manifest(tmp_path)
+    manifest['crop_policy']='stable_endpoints_v1'
+    manifest['encoder_identity']['crop_policy']='stable_endpoints_v1'
+    identity_sha=hashlib.sha256(json.dumps(manifest['encoder_identity'],sort_keys=True).encode()).hexdigest()
+    for row in manifest['cases']:row['encoder_identity_sha256']=identity_sha
+    report=train_local_vowel_features(manifest,tmp_path/'out',device='cpu',epochs=1)
+    assert report['qualified'] is False and report['production_changed'] is False
+    manifest['encoder_identity']['crop_policy']='unique_substitution_v1'
+    with pytest.raises(ValueError,match='policy'):
+        validate_local_vowel_manifest(manifest,'cpu')

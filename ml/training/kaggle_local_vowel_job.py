@@ -94,7 +94,7 @@ def prepare_local_vowel_features(audit, references, encode, cache, output, ident
                                  *, fetch, deadline=None, device='cpu', crop_policy='exact_only_v1'):
     if device == 'kaggle_cpu':
         _require_kaggle_cpu(output)
-    if (crop_policy not in ('exact_only_v1','unique_substitution_v1')
+    if (crop_policy not in ('exact_only_v1','unique_substitution_v1','stable_endpoints_v1')
             or identity.get('crop_policy','exact_only_v1') != crop_policy):
         raise ValueError('Explicit crop policy must match immutable encoder identity')
     if (audit.get('dataset') != DATASET or audit.get('revision') != REVISION
@@ -136,7 +136,8 @@ def prepare_local_vowel_features(audit, references, encode, cache, output, ident
             raise ValueError('Native frame timebase or feature cache identity mismatch')
         ref = references['ayahs'][str(source['ayah'])]
         crops = local_word_crops(ref['reference_ids'], ref['reference_word_indices'], emissions, len(features),
-                                allow_substitutions=crop_policy=='unique_substitution_v1')
+                                allow_substitutions=crop_policy in ('unique_substitution_v1','stable_endpoints_v1'),
+                                allow_internal_deletions=crop_policy=='stable_endpoints_v1')
         labels = vowel_word_labels(source)
         if len(crops) != len(labels):
             raise ValueError('Native crop mapping lost an original word')
@@ -226,7 +227,7 @@ def main(*, deadline=None):
     parser.add_argument('--references-sha', required=True)
     parser.add_argument('--output', type=Path, default=Path('/kaggle/working'))
     parser.add_argument('--cache', type=Path, default=Path('/kaggle/temp/local-vowel-features'))
-    parser.add_argument('--crop-policy', choices=('exact_only_v1','unique_substitution_v1'),
+    parser.add_argument('--crop-policy', choices=('exact_only_v1','unique_substitution_v1','stable_endpoints_v1'),
                         default='exact_only_v1')
     parser.add_argument('--execution-device',choices=('cuda','kaggle_cpu'),default='cuda')
     args = parser.parse_args()
