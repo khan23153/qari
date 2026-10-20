@@ -45,16 +45,16 @@ Research branch: `fix/local-vowel-evidence-20261020`; draft PR #39.
 Commits: `66ec320` labels/localization, `67dc1a2` generic local head,
 `8123101` native extraction, `29ea12b` bounded download deadline repair.
 
-Latest complete recitation/ML/API suite: **1,074 passed, 1 skipped, 2 existing warnings**,
-57.62 seconds. Fresh whole-branch review found one important defect: executor
+Latest complete recitation/ML/API suite: **1,104 passed, 1 skipped, 2 existing warnings**,
+58.73 seconds. Fresh whole-branch review found one important defect: executor
 cleanup could wait for unchecked trickling downloads after the job deadline.
 Regression tests reproduced it; per-read checks, remaining-time socket bounds
 and bounded backoff fixed it. A real alarm/thread-pool cleanup test passes too.
 One in-flight socket read can still take at most 25 seconds; the provider's
 100-second shutdown reserve covers that bounded cleanup.
 
-Actual private T4 job: `telethonfool/qari-local-vowel-20261020`, version 3,
-running 2026-10-20 13:59 UTC. Provider source was pulled and verified byte for
+Earlier private T4 job: `telethonfool/qari-local-vowel-20261020`, version 3,
+submitted 2026-10-20 13:59 UTC and subsequently stopped at eligibility. Provider source was pulled and verified byte for
 byte; private/T4 metadata verified. Initial uncompressed 2.03 MB submission
 returned HTTP 400 with no kernel created; the identical extracted sources were
 compressed to 427,716 bytes and accepted. No exact provider size limit is claimed.
@@ -107,8 +107,8 @@ anchors and seven low-confidence anchors; all five unavailable validation
 positives had ambiguous anchors. The crop policy may be overly restrictive for
 some real pronunciation errors, but raw native evidence is needed before any
 algorithm change. A separate 18-clip training-only diagnostic (ten failed source
-cases and eight correct controls) will retain actual phoneme emissions/timings;
-no held labels or recordings are used to tune a new algorithm.
+cases and eight correct controls) completed and retained actual phoneme emissions/timings.
+No held labels or recordings were used to tune the crop algorithm.
 
 The experiment always reports `qualified=false`
 and `production_changed=false`. One-surah contributor labels, unknown upstream
@@ -116,3 +116,47 @@ training overlap and a full-context encoder cannot establish independent
 multi-surah or live-stream reliability. Restricted Iqra datasets still need the
 user to review account-information sharing conditions; no consent was submitted
 on their behalf. Preserve all live confidence/speech guards and existing Hifz/UI.
+
+## Current follow-up: substitution crops and guarded CPU execution
+
+An explicit `unique_substitution_v1` assessment-only policy can locate a word
+when every minimum-edit path agrees on native consuming anchors, including a
+heard substitution. It retains the actual native phone and requires contiguous
+anchors, at least two anchors with at least one exact match, and the same .55
+confidence. Ambiguity/deletion/all-substitution speech stays unassessed. It never
+confirms lexical words or moves the cursor. Exact-only default behavior is
+preserved (14,641-pair independent parity check). In the 18 actual training-only
+clips, labelled-error crop availability rose 1/13 to 4/13; correct availability
+26/30 to 30/30. This measures localization, not pronunciation accuracy.
+
+Private T4 version 4 uses that frozen policy and remained queued after an hour.
+Available GPU quota does not guarantee a scheduler start. A separate private CPU
+smoke completed real native extraction on 11 public clips / 44 words and three
+finite-loss epochs; its held accuracy was not used for selection.
+
+At 2026-10-20 15:21 UTC, the explicit full remote CPU fallback
+`telethonfool/qari-local-vowel-cpu-full-20261020` version 1 was source-verified,
+private with GPU disabled, and RUNNING. Launcher SHA256:
+`465c95a9fd86e6d0085e0b4f38d2031b8fe38282916b8b9c7d4332478f52437c`.
+It keeps all 1,393 source clips, roles, labels, model/reference pins, numerical
+head/training protocol and eligibility floors unchanged. No head or accuracy
+result exists at this observation. Packet and logs:
+`/tmp/qari-conformer-training-20261009/local-vowel-cpu-full-20261020/`.
+
+Full CPU mode requires explicit `kaggle_cpu`, Linux/x86_64, existing Kaggle
+working/temp/input directories and working output. Checks precede launcher
+unpack/install and direct extraction writes/downloads; ordinary CPU remains
+limited to 64 words and three epochs. CPU tensors and execution scope are
+reported separately. CPU disk/RSS/deadline checks use no CUDA memory APIs.
+Bounds are sampled fail-fast checks, not an OS-level memory ceiling.
+The fresh review and RED-to-GREEN boundary tests passed; no live model/UI changed.
+
+Choose the primary run from scheduler/native progress before held scores. Prefer
+T4 if it starts before CPU readiness; cancel a superseded run only with its exact
+verified session ID. The official status/source responses currently expose no
+session ID, so do not guess from the kernel ID or version number. This limitation
+may leave a queued backup to observe; never pick a winner from held accuracy.
+
+Completion, word-wise held misses/false alarms and bounded checkpoint portability
+remain pending. All outputs remain unqualified; Ikhlas-only skewed human labels
+cannot establish a general pronunciation or tajweed grader.
