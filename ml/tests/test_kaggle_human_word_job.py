@@ -113,6 +113,61 @@ def test_download_budget_counts_partial_failed_reads_before_retry(monkeypatch):
     assert budget['bytes'] >= 6
 
 
+def test_public_download_stops_trickling_reads_at_whole_job_deadline(monkeypatch):
+    from ml.training import kaggle_human_word_job as job
+    clock = [100.]
+    responses = []
+    class Trickle(io.BytesIO):
+        def read(self, size=-1):
+            clock[0] += .6
+            return super().read(min(size, 1))
+    def open_source(url, *, timeout):
+        responses.append(timeout)
+        return Trickle(b'abcdefghij')
+    monkeypatch.setattr(job.time, 'monotonic', lambda: clock[0])
+    monkeypatch.setattr(job.time, 'sleep', lambda seconds: clock.__setitem__(0, clock[0]+seconds))
+    monkeypatch.setattr(job.urllib.request, 'urlopen', open_source)
+    budget = {'bytes': 0}
+    with pytest.raises(TimeoutError, match='deadline'):
+        job.fetch_public('metadata.csv', budget, 101.)
+    assert len(responses) == 1
+    assert 0 < responses[0] <= 1.
+    assert budget['bytes'] == 2 and budget['reserved'] == 0
+
+
+def test_public_download_retry_cannot_sleep_past_remaining_budget(monkeypatch):
+    from ml.training import kaggle_human_word_job as job
+    clock = [100.]
+    attempts = []
+    def offline(url, *, timeout):
+        attempts.append(timeout)
+        clock[0] += .75
+        raise OSError('disconnected')
+    monkeypatch.setattr(job.time, 'monotonic', lambda: clock[0])
+    monkeypatch.setattr(job.time, 'sleep', lambda seconds: clock.__setitem__(0, clock[0]+seconds))
+    monkeypatch.setattr(job.urllib.request, 'urlopen', offline)
+    with pytest.raises(TimeoutError, match='deadline'):
+        job.fetch_public('metadata.csv', {'bytes': 0}, 101.)
+    assert clock[0] == 101. and len(attempts) == 1
+
+
+def test_whole_job_alarm_drains_prefetch_workers_after_one_inflight_read(tmp_path, monkeypatch):
+    from ml.training import kaggle_human_word_job as job
+    from ml.training.kaggle_job_budget import job_budget
+    class SlowRead(io.BytesIO):
+        def read(self, size=-1):
+            time.sleep(.05)
+            return super().read(min(size, 1))
+    monkeypatch.setattr(job.urllib.request, 'urlopen', lambda *a, **k: SlowRead(b'x'*20))
+    started = time.monotonic()
+    with pytest.raises(TimeoutError):
+        with job_budget(tmp_path, seconds=.1) as deadline:
+            list(job.prefetch_sources([{'source_file': 'metadata.csv'}],
+                                      lambda name: job.fetch_public(name, {'bytes': 0}, deadline)))
+    assert time.monotonic()-started < .6  # Old unchecked worker takes over one second.
+    assert (tmp_path/'failure.json').is_file()
+
+
 def test_oversized_source_is_excluded_without_aborting_clean_audio_audit(tmp_path, monkeypatch):
     # The pinned dataset contains ID247V1T.wav (3,310,754 bytes). A per-file
     # rejection must not abort the other participants or relax the byte cap.

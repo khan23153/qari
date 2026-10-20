@@ -180,21 +180,28 @@ def fetch_public(source_file, budget, deadline):
             budget['reserved'] = budget.get('reserved', 0) + allowance
         data = bytearray()
         try:
-            with urllib.request.urlopen(url, timeout=25) as response:
+            with urllib.request.urlopen(url, timeout=min(25, max(.001, deadline-time.monotonic()))) as response:
                 while True:
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError('Source download deadline reached')
                     remaining = allowance - len(data)
                     if remaining <= 0:
                         raise ValueError('Public source download byte limit exceeded')
                     chunk = response.read(min(65536, remaining))
                     data.extend(chunk)
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError('Source download deadline reached')
                     if len(data) > MAX_FILE_BYTES:
                         raise SourceFileTooLarge(len(data))
                     if not chunk:
                         return bytes(data)
         except (OSError, TimeoutError):
+            remaining_seconds = deadline-time.monotonic()
+            if remaining_seconds <= 0:
+                raise TimeoutError('Source download deadline reached')
             if attempt == 2:
                 raise
-            time.sleep(attempt + 1)
+            time.sleep(min(attempt + 1, remaining_seconds))
         finally:
             with lock:
                 budget['reserved'] -= allowance
