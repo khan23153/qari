@@ -45,8 +45,8 @@ Research branch: `fix/local-vowel-evidence-20261020`; draft PR #39.
 Commits: `66ec320` labels/localization, `67dc1a2` generic local head,
 `8123101` native extraction, `29ea12b` bounded download deadline repair.
 
-Latest complete recitation/ML/API suite: **1,105 passed, 1 skipped, 2 existing warnings**,
-58.76 seconds. Fresh whole-branch review found one important defect: executor
+Latest complete recitation/ML/API suite: **1,114 passed, 1 skipped, 2 existing warnings**,
+63.29 seconds. Fresh whole-branch review found one important defect: executor
 cleanup could wait for unchecked trickling downloads after the job deadline.
 Regression tests reproduced it; per-read checks, remaining-time socket bounds
 and bounded backoff fixed it. A real alarm/thread-pool cleanup test passes too.
@@ -189,7 +189,7 @@ Execution has terminated without a head. Learned word-wise held misses/false
 alarms and checkpoint portability are unavailable, not passing. All outputs remain unqualified; Ikhlas-only skewed human labels
 cannot establish a general pronunciation or tajweed grader.
 
-## Bounded follow-up under review: invariant endpoints
+## Completed bounded follow-up: invariant endpoints
 
 Commit `82290f3` freezes a separate explicit `stable_endpoints_v1` assessment
 policy. Training-only diagnosis found four excluded error words whose first/last
@@ -225,3 +225,56 @@ validation-only selection and 7,100/7,200-second limits. No duplicate CPU job.
 Native readiness, epochs and held per-word evaluation are still pending.
 Broader gated human labels remain 403 in an authenticated check at20:26UTC;
 no access-sharing consent was submitted for the user.
+
+## Actual full result: completed, rejected for production
+
+Version 1 terminated COMPLETE at 20:34 UTC after eight finite-loss epochs,
+with validation selecting epoch 2 and threshold 0.7165434956550598. Original
+teacher/model hashes were preserved. Candidate head SHA256:
+`ef2dccf5303e2334095280dc015b98bb5f760b78fc5e9854f0be58a01d4e233a`.
+
+| Held split | Detected / known errors | Assessed missed | Unassessed errors | False alarms / correct |
+| --- | ---: | ---: | ---: | ---: |
+| Test | 5 / 11 | 3 | 3 | 2 / 216 |
+| Reserved speakers | 10 / 22 | 11 | 1 | 0 / 148 |
+
+Both held recalls are 45.45%, below the 90% release requirement. Test precision
+is 71.43% and coverage 91.63%, also below the 98% / 95% requirements. Only one
+surah and 33 held error words were available; gemination/consonant coverage and
+upstream overlap verification are absent. Unknown rows are not negatives and
+unassessed errors remain in denominators.
+
+All 15 held detections were `kufuwan`. Reserved `qul` errors were 0/4 detected,
+`as-samad` 0/1 and `yalid` 0/1. Test `yakun` was 0/1. `Kufuwan` was 10/16 on
+reserved and 5/10 on test, with two false alarms on test correct `kufuwan` words.
+Thus improved localization did not solve general vowel-error detection. The
+heavy training concentration on `kufuwan` and lack of other-word error examples
+remain material limitations; do not tune a new threshold against these results.
+
+The exact head and 32 exported public reserved-word feature arrays were checked
+on the original ARM CPU in a networkless 1,200 MiB / 0.5 CPU container. Weight,
+feature and encoder identities matched. Maximum CPU/GPU score difference was
+8.3819e-9, with zero threshold-decision disagreements. This rules out a large
+checkpoint-port regression on that subset, not an encoder/streaming accuracy
+claim. A first output attempt used the wrong container UID and could not write
+the result; the corrected UID 1002 run passed. No numerical exception or OOM.
+
+Small result files are in the endpoint packet's `output-v1/`, including
+`held-word-breakdown.json`. Durable decision:
+`/home/innocent/qari-training-artifacts/phonetic-evidence-20261020/endpoint-experiment-decision.json`.
+No new model was deployed; production remains healthy and unchanged. All current
+PR39 backend/Flutter/native CI checks passed on the research branch.
+
+## Next data source: access granted by the user
+
+The user personally reviewed/approved HF access. Authenticated Iqra Extra access
+changed to HTTP 200 at20:38UTC. Pin `IqraEval/Iqra_Extra_IS26` revision
+`4e996ef87c6d1da517a4f21bca91e0d577dd8c82`: 1,330 upstream TRAIN rows with
+`id`, audio16k, `sentence`, `phoneme_ref`, `phoneme_mis`; parquet208,493,997bytes,
+SHA256 `9b0fed74472edd02c1f787839e51a7523df9fd32df7e98c9857d8cc30366b84c`.
+No new token or third-party consent was submitted by the agent. Metadata/ID,
+speaker-group and target audit is underway before a frozen training recipe.
+Actual realized-phone targets must remain distinct from canonical phones;
+legal waqf and phonetic conventions must not automatically become Quran errors.
+Keep test ground truth/user recordings held out and research private; dataset
+license metadata is currently empty. This is new data access, not model success.
