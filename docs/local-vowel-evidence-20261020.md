@@ -45,19 +45,36 @@ Research branch: `fix/local-vowel-evidence-20261020`; draft PR #39.
 Commits: `66ec320` labels/localization, `67dc1a2` generic local head,
 `8123101` native extraction, `29ea12b` bounded download deadline repair.
 
-Complete recitation/ML/API suite: **1,069 passed, 1 skipped, 2 existing warnings**,
-58.14 seconds. Fresh whole-branch review found one important defect: executor
+Latest complete recitation/ML/API suite: **1,074 passed, 1 skipped, 2 existing warnings**,
+57.62 seconds. Fresh whole-branch review found one important defect: executor
 cleanup could wait for unchecked trickling downloads after the job deadline.
 Regression tests reproduced it; per-read checks, remaining-time socket bounds
 and bounded backoff fixed it. A real alarm/thread-pool cleanup test passes too.
 One in-flight socket read can still take at most 25 seconds; the provider's
 100-second shutdown reserve covers that bounded cleanup.
 
-Actual private T4 job: `telethonfool/qari-local-vowel-20261020`, version 1,
-accepted 2026-10-20 09:56 UTC. Provider source was pulled and verified byte for
+Actual private T4 job: `telethonfool/qari-local-vowel-20261020`, version 3,
+running 2026-10-20 13:59 UTC. Provider source was pulled and verified byte for
 byte; private/T4 metadata verified. Initial uncompressed 2.03 MB submission
 returned HTTP 400 with no kernel created; the identical extracted sources were
 compressed to 427,716 bytes and accepted. No exact provider size limit is claimed.
+
+Version 1 stopped before extraction because a new global-uniqueness check rejected
+six duplicate filename pairs already excluded by the frozen audit. Commit
+`60984bb` revalidates only the accepted cohort while still rejecting accepted
+duplicates/missing/changed labels. Three regression tests and an actual pinned
+CSV/audit check verified all 1,393 accepted labels and roles.
+
+Version 2 loaded every original native model weight successfully, then stopped
+before extraction on the Uthmani `لَّهُۥ` reference. The generic metadata normalizer
+kept the small waw as a lexical letter. Commit `0390ce0` ignores only the Uthmani
+small waw/ya for lexical comparison, preserving their actual phonetic IDs. The
+regression test, wrong-real-word rejection and actual four-ayah/15-word reference
+bundle validation pass. Neither failed run produced trained accuracy results.
+
+An existing Flutter formatting check also failed on a summary constructor call.
+Commit `4d445c4` changes only its line wrapping (2 lines added, 1 removed). All 16
+files in the existing CI formatting command pass. UI behavior is preserved.
 
 Limits: 7,100-second whole job including dependency installation, provider
 7,200 seconds; 12 GiB resident-memory cap, 4 GiB disk reserve, 2 GiB GPU reserve;
@@ -72,8 +89,28 @@ No credentials or user recordings are included in the packet.
 
 ## Remaining gates
 
-Actual extraction, eligibility, training, held detection/false-alarm results and
-CPU portability remain pending. The experiment always reports `qualified=false`
+Version 3 completed native extraction for all 1,393 accepted clips, then stopped
+at the declared supervision floor. Eligible word counts were:
+
+| Split | Correct | Vowel errors |
+| --- | ---: | ---: |
+| Train | 1,512 | 80 |
+| Validation | 212 | 7 |
+| Test | 190 | 8 |
+| Reserved | 139 | 21 |
+
+Validation requires eight eligible positive words, so training did not start.
+There are no learned scores, epochs or new checkpoint to report. CPU checkpoint
+portability is consequently unavailable. The floor and confidence guards remain
+unchanged. Of the 143 training vowel-positive words, 56 had ambiguous native
+anchors and seven low-confidence anchors; all five unavailable validation
+positives had ambiguous anchors. The crop policy may be overly restrictive for
+some real pronunciation errors, but raw native evidence is needed before any
+algorithm change. A separate 18-clip training-only diagnostic (ten failed source
+cases and eight correct controls) will retain actual phoneme emissions/timings;
+no held labels or recordings are used to tune a new algorithm.
+
+The experiment always reports `qualified=false`
 and `production_changed=false`. One-surah contributor labels, unknown upstream
 training overlap and a full-context encoder cannot establish independent
 multi-surah or live-stream reliability. Restricted Iqra datasets still need the
