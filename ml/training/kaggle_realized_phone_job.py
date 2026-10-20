@@ -164,6 +164,20 @@ def download_base(path,check):
     if size!=MODEL_BYTES or digest.hexdigest()!=MODEL_SHA:raise ValueError('Pinned native safetensors identity mismatch')
 
 
+
+def load_native_model(config,weights):
+    """Finish lazy library imports on CPU before memory-saving meta construction."""
+    import torch
+    import transformers
+    from safetensors.torch import load_file
+    model_type=transformers.Wav2Vec2ForCTC
+    native_config=transformers.Wav2Vec2Config.from_dict(config)
+    native_config._attn_implementation='eager'
+    with torch.device('meta'):model=model_type(native_config)
+    state=load_file(str(weights));model.load_state_dict(state,strict=True,assign=True);del state
+    if any(p.is_meta for p in model.parameters()):raise ValueError('Incomplete native strict materialization')
+    return model
+
 def run(source,output,deadline):
     require_context(source,output);require_cuda()
     # Verify all input identities before creating outputs or downloading weights.
@@ -173,24 +187,22 @@ def run(source,output,deadline):
     import signal
     import torch
     import transformers
-    from safetensors.torch import load_file
     from ml.training.realized_phone_adaptation import train_adapter
     signal.alarm(max(1,int(deadline-time.monotonic())))
     torch.set_num_threads(2);torch.manual_seed(42);torch.cuda.manual_seed_all(42)
     torch.backends.cuda.matmul.allow_tf32=False;torch.backends.cudnn.allow_tf32=False
     output=Path(output);output.mkdir(parents=True,exist_ok=True)
-    scratch=output.parent/'native-realized-scratch';scratch.mkdir(exist_ok=True)
+    scratch=Path('/kaggle/temp/qari-native-realized');scratch.mkdir(parents=True,exist_ok=True)
     check=lambda:resource_guard(output,deadline)
     check()
     frontend_config=json.loads((Path(source)/'processor_config.json').read_text())['feature_extractor']
     processor=transformers.Wav2Vec2FeatureExtractor(**frontend_config)
     rows=prepare_rows(source,manifest,processor,check)
     weights=scratch/'model.safetensors';download_base(weights,check)
-    native_config=transformers.Wav2Vec2Config.from_dict(config);native_config._attn_implementation='eager'
-    with torch.device('meta'):model=transformers.Wav2Vec2ForCTC(native_config)
-    state=load_file(str(weights));model.load_state_dict(state,strict=True,assign=True);del state
-    if any(p.is_meta for p in model.parameters()):raise ValueError('Incomplete native strict materialization')
-    model=model.to('cuda');check()
+    print(json.dumps({'event':'realized_phone.base_verified','bytes':MODEL_BYTES}),flush=True)
+    model=load_native_model(config,weights).to('cuda');check()
+    print(json.dumps({'event':'realized_phone.model_ready','parameters':sum(p.numel() for p in model.parameters()),
+                      'gpu':torch.cuda.get_device_name(0)}),flush=True)
     splits=[{k:row[k] for k in ('id','role','target_ids')} for row in manifest['cases']]
     identity={'base_sha256':MODEL_SHA,'vocabulary_sha256':manifest['vocabulary_sha256'],
         'frontend_sha256':hashlib.sha256(json.dumps(frontend_config,sort_keys=True).encode()).hexdigest(),

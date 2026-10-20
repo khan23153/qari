@@ -124,3 +124,31 @@ def test_generated_launcher_rejects_host_before_unpack_install_or_output(tmp_pat
     result=subprocess.run([sys.executable,str(script)],capture_output=True,text=True,cwd=tmp_path)
     assert result.returncode!=0 and 'Kaggle' in result.stderr and 'unpacked' not in result.stderr
     assert {p.name for p in tmp_path.iterdir()}=={'launcher.py'}
+
+
+def test_native_lazy_import_completes_before_meta_construction(tmp_path,monkeypatch):
+    """Provider TorchAO imports build CPU lists; loading those inside meta fails."""
+    import sys
+    import types
+    torch=pytest.importorskip('torch');native=pytest.importorskip('transformers')
+    from safetensors.torch import save_file
+    cls=native.Wav2Vec2ForCTC
+    config=native.Wav2Vec2Config(vocab_size=80,pad_token_id=77,hidden_size=16,
+        num_hidden_layers=2,num_attention_heads=2,intermediate_size=32,conv_dim=(8,)*7,
+        num_conv_pos_embedding_groups=2,num_conv_pos_embeddings=16,feat_extract_norm='layer',
+        mask_time_prob=0.,layerdrop=0.)
+    config._attn_implementation='eager';original=cls(config).eval();weights=tmp_path/'tiny.safetensors'
+    save_file({k:v.contiguous() for k,v in original.state_dict().items()},str(weights))
+    proxy=types.ModuleType('transformers');proxy.__path__=native.__path__
+    def imported(name):
+        if name=='Wav2Vec2ForCTC':
+            # Same concrete operation that the observed lazy TorchAO import performs.
+            torch.linspace(0,1,4).tolist()
+            return cls
+        return getattr(native,name)
+    proxy.__getattr__=imported;monkeypatch.setitem(sys.modules,'transformers',proxy)
+    loaded=module().load_native_model(config.to_dict(),weights).eval()
+    assert all(not p.is_meta for p in loaded.parameters())
+    x=torch.sin(torch.arange(8000)*.03)[None]
+    with torch.no_grad():assert torch.equal(original(x).logits,loaded(x).logits)
+    for key,value in original.state_dict().items():assert torch.equal(value,loaded.state_dict()[key])
