@@ -25,7 +25,7 @@
 - Delta missing/extra keys, wrong base identity, mutation of frozen weights and CPU overbounds reject.
 - Fresh provider layout, source/decode identity, privacy and negative speech controls do not permit unsafe live grading.
 
-### Task1: Frozen human source/split/target contracts
+### Task 1: Frozen human source/split/target contracts
 
 Files: ml/training/realized_phone_data.py; ml/tests/test_realized_phone_data.py.
 Consumes raw metadata, full source PCM audit, native80-token vocabulary.
@@ -39,7 +39,7 @@ and `validate_realized_manifest(manifest)->None` preserving physical-speaker unk
 - [ ] Focused GREEN and actual pinned audit replay equals prospective artifact563/26/50 and every case role/frame count. No model scores. Expected: all tests pass and exact replay equality.
 - [ ] Full recitation/ML/API suite and commit. Expected: green baseline1114 plus new tests.
 
-### Task2: Bounded native FP32 delta training and remote entry point
+### Task 2: Bounded native FP32 delta training and remote entry point
 
 Files: ml/training/realized_phone_adaptation.py,ml/training/kaggle_realized_phone_job.py; corresponding ml/tests.
 Consumes Task1manifest/native IDs plus pinned Wav2Vec2ForCTC and actual waveforms.
@@ -53,7 +53,7 @@ Produces native-model delta/report/predictions with base/source/frontend/split i
 - [ ] Implement remote native loader(strict80/77/75/config/pins), cache only selected source waveforms, source/PCM revalidation, native frontend, outputs and immutable frozen-state check. Context before heavy work; private input not embedded corpus/token.
 - [ ] Focused/full GREEN, sourcepack compile/hash check and commit. One fresh review of Tasks1–2. Address Important findings once with RED->GREEN/full suite; note minors.
 
-### Task3: Private observed full run and original CPU evidence
+### Task 3: Private observed full run and original CPU evidence
 
 Files: external packet/observer; report docs/realized-phone-evidence-20261020.md; root context.md.
 Consumes frozen code/data/splits/model pins and private provider metadata.
