@@ -188,3 +188,40 @@ may leave a queued backup to observe; never pick a winner from held accuracy.
 Execution has terminated without a head. Learned word-wise held misses/false
 alarms and checkpoint portability are unavailable, not passing. All outputs remain unqualified; Ikhlas-only skewed human labels
 cannot establish a general pronunciation or tajweed grader.
+
+## Bounded follow-up under review: invariant endpoints
+
+Commit `82290f3` freezes a separate explicit `stable_endpoints_v1` assessment
+policy. Training-only diagnosis found four excluded error words whose first/last
+consonants have globally invariant consuming pairs, while internal consonants
+are forced deletions. The fallback requires contiguous surviving native anchors,
+at least two exact pairs and the unchanged .55 confidence/frame/speech bounds.
+It preserves original references and actual native IDs and records deleted
+reference consonant indices; it never supplies lexical correctness or cursor evidence.
+
+All old exact/substitution defaults remain unchanged. Independent executor replay
+verified 9,600 legacy calls and 198 exhaustive optimal-path fallback cases. Actual
+training-only native paths gain four error crops and one correct crop, losing no
+old acceptance (train 1,560 correct / 95 errors). This is localization coverage,
+not pronunciation accuracy. Seven initial RED unit tests and two RED integration
+tests are GREEN; full recitation/ML/API suite **1,114 passed, 1 skipped, 2 existing
+warnings in 63.29 s**. A fresh reviewer found no Critical/Important issue and independently checked
+15,996 legacy calls, 1,928 preserved accepted words and 260 all-optimal fallback
+words including multiword partitions. One nonblocking regression-coverage
+suggestion is deferred: keep the external exhaustive fallback oracle in the repo. No new held phone sequences are used to design
+the rule, and no new full model job has been submitted.
+
+The single all-role preflight froze commit `82290f3` before reading the outcome:
+train 1,560 correct / 95 errors, validation 220 / 9, test 200 / 8, reserved 143 / 21;
+all 5,198 rows retained and zero previous accepted crops lost. The unchanged
+support floors now pass. This is eligibility only, not learned accuracy.
+
+A single private T4 full run was submitted and its provider source verified:
+`telethonfool/qari-local-vowel-endpoints-20261020`, version 1, launcher SHA256
+`06e77326761ae18ee840d098a82d6e89c962c64766882656a87b2d22c40202f7`.
+Packet/logs `/tmp/qari-conformer-training-20261009/local-vowel-endpoints-20261020/`.
+Same 1,393 sources, roles, original weights, head, seed, loss, guards, floors,
+validation-only selection and 7,100/7,200-second limits. No duplicate CPU job.
+Native readiness, epochs and held per-word evaluation are still pending.
+Broader gated human labels remain 403 in an authenticated check at20:26UTC;
+no access-sharing consent was submitted for the user.
