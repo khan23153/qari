@@ -161,10 +161,31 @@ def verify_native_model(path, pins):
     return hashes
 
 
-def main(*, deadline=None):
-    import argparse
+def validate_audited_metadata(metadata, audit):
+    """Recheck only the frozen accepted cohort; prior exclusions stay excluded."""
     import csv
     import io
+    accepted = {row['source_file'] for row in audit['cases']}
+    metadata_rows = {}
+    for row in csv.DictReader(io.StringIO(metadata.decode('utf-8-sig'))):
+        key = row['file_name']
+        if key not in accepted:
+            continue
+        if key in metadata_rows:
+            raise ValueError('Ambiguous duplicate accepted source annotation')
+        metadata_rows[key] = row
+    for row in audit['cases']:
+        if row['source_file'] not in metadata_rows:
+            raise ValueError('Accepted source labels missing from pinned metadata')
+        verified = parse_label_row(metadata_rows[row['source_file']], set(audit['reserved_speakers']))
+        if any(row[k] != verified[k] for k in
+               ('id', 'source_file', 'speaker_id', 'role', 'ayah', 'targets', 'mask',
+                'source_label', 'source_error_type', 'source_error_location')):
+            raise ValueError('Pinned contributor labels or source roles changed')
+
+
+def main(*, deadline=None):
+    import argparse
     import inspect
     import importlib.metadata
     from transformers import AutoFeatureExtractor
@@ -201,18 +222,7 @@ def main(*, deadline=None):
         metadata = fetch_public('metadata.csv', budget, deadline)
         if hashlib.sha256(metadata).hexdigest() != audit['metadata_sha256']:
             raise ValueError('Public metadata SHA changed')
-        metadata_rows = {}
-        for row in csv.DictReader(io.StringIO(metadata.decode('utf-8-sig'))):
-            key = row['file_name']
-            if key in metadata_rows:
-                raise ValueError('Ambiguous duplicate source annotation')
-            metadata_rows[key] = row
-        for row in audit['cases']:
-            verified = parse_label_row(metadata_rows[row['source_file']], set(audit['reserved_speakers']))
-            if any(row[k] != verified[k] for k in
-                   ('id', 'source_file', 'speaker_id', 'role', 'ayah', 'targets', 'mask',
-                    'source_label', 'source_error_type', 'source_error_location')):
-                raise ValueError('Pinned contributor labels or source roles changed')
+        validate_audited_metadata(metadata, audit)
         pins = json.loads(args.model_pins.read_text())
         hashes = verify_native_model(args.encoder, pins)
         if references['phonetic_vocab_sha256'] != hashes['vocab.json']:

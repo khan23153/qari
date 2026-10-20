@@ -120,3 +120,25 @@ def test_missing_native_word_is_retained_as_unassessed_not_discarded(tmp_path):
     assert len(manifest['cases']) == 4
     assert all(r['available'] is False and r['feature_path'] is None for r in manifest['cases'])
     assert [r['target'] for r in manifest['cases']] == [0, 0, 0, 0]
+
+
+@pytest.mark.parametrize('changed', ['excluded_duplicate', 'accepted_duplicate', 'accepted_label'])
+def test_metadata_validation_preserves_prior_exclusions_and_unique_accepted_labels(changed):
+    import csv
+    from ml.training.kaggle_local_vowel_job import validate_audited_metadata
+    _, audit, _ = fixtures()
+    row = dict(file_name='data/ID45V1T.wav', label='1', label_name='correct',
+               verse_number='1', verse_text='قُلْ هُوَ اللَّهُ أَحَدٌ', error_location='',
+               error_type='', error_explanation='')
+    excluded = {**row, 'file_name': 'data/ID42V2T.wav', 'verse_number': '2',
+                'verse_text': 'اللَّهُ الصَّمَدُ'}
+    rows = [row, excluded, dict(excluded)]
+    if changed == 'accepted_duplicate': rows.append(dict(row))
+    if changed == 'accepted_label': row['label'] = '0'
+    text = io.StringIO(); writer = csv.DictWriter(text, fieldnames=list(row)); writer.writeheader()
+    writer.writerows(rows)
+    if changed == 'excluded_duplicate':
+        validate_audited_metadata(text.getvalue().encode(), audit)
+    else:
+        with pytest.raises(ValueError, match='duplicate|labels|label'):
+            validate_audited_metadata(text.getvalue().encode(), audit)
