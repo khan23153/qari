@@ -92,6 +92,8 @@ def validate_word_references(references):
 
 def prepare_local_vowel_features(audit, references, encode, cache, output, identity,
                                  *, fetch, deadline=None, device='cpu', crop_policy='exact_only_v1'):
+    if device == 'kaggle_cpu':
+        _require_kaggle_cpu(output)
     if (crop_policy not in ('exact_only_v1','unique_substitution_v1')
             or identity.get('crop_policy','exact_only_v1') != crop_policy):
         raise ValueError('Explicit crop policy must match immutable encoder identity')

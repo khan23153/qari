@@ -221,3 +221,12 @@ def test_rejected_remote_cpu_cli_cannot_create_output_before_context_check(tmp_p
     with pytest.raises(RuntimeError,match='Kaggle'):
         main(deadline=time.monotonic()+5)
     assert not output.exists()
+
+
+def test_remote_cpu_direct_extraction_rejects_before_creating_cache_or_fetching(tmp_path):
+    _, audit, refs = fixtures()
+    cache, output = tmp_path/'cache', tmp_path/'out'
+    with pytest.raises(RuntimeError, match='Kaggle'):
+        prepare_local_vowel_features(audit, refs, encoded, cache, output, IDENTITY,
+            device='kaggle_cpu', fetch=lambda _:pytest.fail('Rejected remote job reached download'))
+    assert not cache.exists() and not output.exists()
