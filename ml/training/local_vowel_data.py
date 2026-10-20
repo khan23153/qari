@@ -39,6 +39,11 @@ def vowel_word_labels(row):
 
 def unique_exact_matches(expected, actual):
     """Exact token pairs forced by ALL minimal edit paths; no tie-breaking."""
+    return {i:j for i,j in unique_consuming_pairs(expected,actual).items() if expected[i]==actual[j]}
+
+
+def unique_consuming_pairs(expected, actual):
+    """Forced edit pairs for assessment localization, never correctness evidence."""
     if (len(expected) > 256 or len(actual) > 256
             or any(type(token) is not int or not 1 <= token <= 42 for token in [*expected, *actual])):
         raise ValueError('Bounded native phoneme IDs required')
@@ -69,15 +74,16 @@ def unique_exact_matches(expected, actual):
             if j < m:
                 same = expected[i] == actual[j]
                 if forward[i][j] + (not same) + backward[i+1][j+1] == distance:
-                    possibilities.add(j if same else None)
+                    possibilities.add(j)
         if len(possibilities) == 1 and None not in possibilities:
             matches[i] = possibilities.pop()
     return matches
 
 
 def local_word_crops(reference_ids, reference_word_indices, emissions, frame_count,
-                     blank=0, min_confidence=.55):
+                     blank=0, min_confidence=.55, *, allow_substitutions=False):
     if (blank != 0 or type(frame_count) is not int or not 1 <= frame_count <= 600
+            or type(allow_substitutions) is not bool
             or not math.isfinite(min_confidence) or not .55 <= min_confidence <= 1
             or not 1 <= len(reference_ids) <= 256 or len(reference_ids) != len(reference_word_indices)
             or any(type(t) is not int or not 1 <= t <= 42 for t in reference_ids)
@@ -99,16 +105,24 @@ def local_word_crops(reference_ids, reference_word_indices, emissions, frame_cou
     reference = [(token, word) for token, word in zip(reference_ids, reference_word_indices)
                  if token in CONSONANTS]
     native = [row for row in emissions if row['id'] in CONSONANTS]
-    exact = unique_exact_matches([token for token, _ in reference], [r['id'] for r in native])
+    expected = [token for token, _ in reference]
+    actual = [r['id'] for r in native]
+    paired = (unique_consuming_pairs if allow_substitutions else unique_exact_matches)(expected,actual)
     result = []
     for word in range(max(reference_word_indices) + 1):
         wanted = [i for i, (_, owner) in enumerate(reference) if owner == word]
         item = {'word_index': word, 'available': False, 'frame_start': None, 'frame_end': None,
                 'reference_ids': [token for token, owner in zip(reference_ids, reference_word_indices)
                                   if owner == word], 'reason': 'ambiguous_native_anchors'}
-        if not wanted or any(i not in exact for i in wanted):
+        if not wanted or any(i not in paired for i in wanted):
             result.append(item); continue
-        indices = [exact[i] for i in wanted]
+        indices = [paired[i] for i in wanted]
+        if allow_substitutions and len(indices)<2:
+            item['reason']='insufficient_native_anchors'
+            result.append(item); continue
+        if allow_substitutions and not any(expected[i]==actual[paired[i]] for i in wanted):
+            item['reason']='no_exact_native_anchor'
+            result.append(item); continue
         if indices != list(range(indices[0], indices[-1] + 1)):
             item['reason'] = 'noncontiguous_native_consonants'
         elif any(native[i]['confidence'] < min_confidence for i in indices):
@@ -121,5 +135,9 @@ def local_word_crops(reference_ids, reference_word_indices, emissions, frame_cou
             else:
                 item.update(available=True, frame_start=left, frame_end=right, reason=None,
                             native_anchor_indices=indices)
+                if allow_substitutions:
+                    item.update(native_consonant_ids=[actual[i] for i in indices],
+                                native_anchor_types=['exact' if expected[i]==actual[paired[i]]
+                                                     else 'substitution' for i in wanted])
         result.append(item)
     return result

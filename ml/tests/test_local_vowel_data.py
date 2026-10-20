@@ -1,5 +1,7 @@
 import copy
 import math
+import itertools
+from functools import lru_cache
 
 import pytest
 
@@ -103,3 +105,63 @@ def test_malformed_native_records_stop_before_feature_cache(change):
     emissions = copy.deepcopy(phonemes()); emissions[0].update(change)
     with pytest.raises(ValueError):
         local_word_crops([21, 33, 23, 26, 33, 27], [0, 0, 0, 1, 1, 1], emissions, 20)
+
+
+def test_consuming_pairs_are_forced_by_every_optimal_edit_script_including_substitutions():
+    from ml.training.local_vowel_data import unique_consuming_pairs
+    sequences = [list(t) for length in range(4) for t in itertools.product((1,2), repeat=length)]
+    for expected, actual in itertools.product(sequences, repeat=2):
+        @lru_cache(None)
+        def paths(i,j):
+            if i==len(expected) and j==len(actual):return 0,[()]
+            options=[]
+            if i<len(expected):
+                cost,tail=paths(i+1,j)
+                options.append((cost+1,[((i,None),)+p for p in tail]))
+            if j<len(actual):
+                cost,tail=paths(i,j+1);options.append((cost+1,tail))
+            if i<len(expected) and j<len(actual):
+                cost,tail=paths(i+1,j+1)
+                options.append((cost+(expected[i]!=actual[j]),[((i,j),)+p for p in tail]))
+            best=min(cost for cost,_ in options)
+            return best,[p for cost,group in options if cost==best for p in group]
+        _,scripts=paths(0,0); wanted={}
+        for i in range(len(expected)):
+            possibilities={dict(p)[i] for p in scripts}
+            if len(possibilities)==1 and None not in possibilities:wanted[i]=possibilities.pop()
+        assert unique_consuming_pairs(expected,actual)==wanted,(expected,actual)
+
+
+def substitution_example():
+    ids=[21,20,27,25,1,6,8]
+    emissions=[dict(id=t,start_frame=i*2,end_frame=i*2+1,confidence=.99) for i,t in enumerate(ids)]
+    return [22,33,20,33,27,32,25,1,32,6,32,8,38],[0]*7+[1]*6,emissions
+
+
+def test_unique_native_substitution_is_assessment_audio_with_actual_phone_preserved():
+    refs,owners,emissions=substitution_example()
+    assert not local_word_crops(refs,owners,emissions,16)[0]['available']
+    row=local_word_crops(refs,owners,emissions,16,allow_substitutions=True)[0]
+    assert row['available'] and (row['frame_start'],row['frame_end'])==(0,8)
+    assert row['native_consonant_ids']==[21,20,27,25]
+    assert row['native_anchor_types']==['substitution','exact','exact','exact']
+    assert row['reference_ids']==[22,33,20,33,27,32,25]
+
+
+@pytest.mark.parametrize('expected,actual,reason',[
+    ([21,23],[1,8],'no_exact_native_anchor'),
+    ([21],[21],'insufficient_native_anchors'),
+    ([23,23],[23],'ambiguous_native_anchors'),
+    ([21,23,26],[21,26],'ambiguous_native_anchors'),
+    ([21,23],[21,8,23],'noncontiguous_native_consonants'),
+])
+def test_substitution_policy_keeps_wrong_speech_deletions_and_ambiguity_unavailable(expected,actual,reason):
+    emissions=[dict(id=t,start_frame=i*3,end_frame=i*3+2,confidence=.99) for i,t in enumerate(actual)]
+    row=local_word_crops(expected,[0]*len(expected),emissions,15,allow_substitutions=True)[0]
+    assert not row['available'] and row['reason']==reason
+
+
+def test_native_substitution_still_needs_point55_confidence():
+    refs,owners,emissions=substitution_example();emissions[0]['confidence']=.54
+    row=local_word_crops(refs,owners,emissions,16,allow_substitutions=True)[0]
+    assert not row['available'] and row['reason']=='low_native_confidence'
