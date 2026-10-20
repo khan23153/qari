@@ -64,6 +64,21 @@ def native_frame_features(samples, processor, model, *, device='cuda'):
     return local, _native_emissions(probabilities)
 
 
+def validate_word_references(references):
+    result = {}
+    for ayah, row in references['ayahs'].items():
+        # U+06E5/U+06E6 are Uthmani recitation marks, not lexical waw/ya.
+        # Keep their actual phonetic IDs in the reference sequence below.
+        lexical = _normalize(row['uthmani'].translate(str.maketrans('', '', 'ۥۦ'))).split()
+        if (int(ayah) not in REFERENCES or lexical != REFERENCES[int(ayah)].split()
+                or row['reference_ids'] != [t for word in row['word_reference_ids'] for t in word]
+                or row['reference_word_indices'] != [i for i, word in enumerate(row['word_reference_ids']) for _ in word]
+                or len(row['word_reference_ids']) != len(REFERENCES[int(ayah)].split())):
+            raise ValueError('Original Quran word reference mapping changed')
+        result[ayah] = row['word_reference_ids']
+    return result
+
+
 def prepare_local_vowel_features(audit, references, encode, cache, output, identity,
                                  *, fetch, deadline=None, device='cpu'):
     if (audit.get('dataset') != DATASET or audit.get('revision') != REVISION
@@ -77,15 +92,8 @@ def prepare_local_vowel_features(audit, references, encode, cache, output, ident
     identity_sha = _json_sha(identity)
     result = {'label_type': 'human_vowel_word_error', 'dataset': DATASET, 'revision': REVISION,
               'reserved_speakers': audit['reserved_speakers'], 'encoder_identity': identity,
-              'references': {}, 'sources': [], 'cases': [], 'qualified': False,
+              'references': validate_word_references(references), 'sources': [], 'cases': [], 'qualified': False,
               'production_changed': False, 'source_bytes': 0}
-    for ayah, row in references['ayahs'].items():
-        if (int(ayah) not in REFERENCES or _normalize(row['uthmani']).split() != REFERENCES[int(ayah)].split()
-                or row['reference_ids'] != [t for word in row['word_reference_ids'] for t in word]
-                or row['reference_word_indices'] != [i for i, word in enumerate(row['word_reference_ids']) for _ in word]
-                or len(row['word_reference_ids']) != len(REFERENCES[int(ayah)].split())):
-            raise ValueError('Original Quran word reference mapping changed')
-        result['references'][ayah] = row['word_reference_ids']
     seen_ids, seen_pcm = set(), set()
     for source in audit['cases']:
         source_id, pcm = source['id'], source['float_pcm_sha256']
@@ -212,6 +220,7 @@ def main(*, deadline=None):
             raise ValueError('Audited source/reference packet SHA changed')
         audit = json.loads(args.audit.read_text())
         references = json.loads(args.references.read_text())
+        validate_word_references(references)
         if (len(audit['cases']) != 1393 or len(audit['reserved_speakers']) != 24
                 or len(audit['quarantined_speakers']) != 19
                 or any(r['speaker_id'] in audit['quarantined_speakers'] for r in audit['cases'])

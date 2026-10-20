@@ -142,3 +142,24 @@ def test_metadata_validation_preserves_prior_exclusions_and_unique_accepted_labe
     else:
         with pytest.raises(ValueError, match='duplicate|labels|label'):
             validate_audited_metadata(text.getvalue().encode(), audit)
+
+
+@pytest.mark.parametrize('changed_word', [False, True])
+def test_original_uthmani_small_waw_is_recitation_mark_without_erasing_real_word_changes(tmp_path, changed_word):
+    raw, audit, refs = fixtures()
+    words = [[27,32,23,32,24],[28,32,22,33],[23,23,32,26,33,31,31],
+             [22,33,20,33,27,32,25],[1,32,6,32,8,38]]
+    refs['ayahs']['4'] = {
+        'uthmani': 'وَلَمْ يَكُن لَّهُۥ كُفُوًا أَحَدٌۢ' if not changed_word else 'وَلَمْ يَكُن لَّهُۥ كُفُوًا صَمَدٌ',
+        'word_reference_ids': words,
+        'reference_ids': [t for word in words for t in word],
+        'reference_word_indices': [i for i,word in enumerate(words) for _ in word]}
+    if changed_word:
+        with pytest.raises(ValueError, match='reference mapping'):
+            prepare_local_vowel_features(audit, refs, encoded, tmp_path/'cache', tmp_path/'out',
+                                         IDENTITY, fetch=lambda _: raw)
+    else:
+        manifest = prepare_local_vowel_features(audit, refs, encoded, tmp_path/'cache', tmp_path/'out',
+                                                IDENTITY, fetch=lambda _: raw)
+        # Long-vowel phones remain intact; only lexical-script comparison ignores the mark.
+        assert manifest['references']['4'][2] == [23,23,32,26,33,31,31]
