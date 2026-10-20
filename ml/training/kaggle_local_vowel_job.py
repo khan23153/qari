@@ -80,7 +80,10 @@ def validate_word_references(references):
 
 
 def prepare_local_vowel_features(audit, references, encode, cache, output, identity,
-                                 *, fetch, deadline=None, device='cpu'):
+                                 *, fetch, deadline=None, device='cpu', crop_policy='exact_only_v1'):
+    if (crop_policy not in ('exact_only_v1','unique_substitution_v1')
+            or identity.get('crop_policy','exact_only_v1') != crop_policy):
+        raise ValueError('Explicit crop policy must match immutable encoder identity')
     if (audit.get('dataset') != DATASET or audit.get('revision') != REVISION
             or not 1 <= len(audit['cases']) <= 1506
             or not _is_sha(identity.get('model_sha256'))
@@ -93,7 +96,7 @@ def prepare_local_vowel_features(audit, references, encode, cache, output, ident
     result = {'label_type': 'human_vowel_word_error', 'dataset': DATASET, 'revision': REVISION,
               'reserved_speakers': audit['reserved_speakers'], 'encoder_identity': identity,
               'references': validate_word_references(references), 'sources': [], 'cases': [], 'qualified': False,
-              'production_changed': False, 'source_bytes': 0}
+              'production_changed': False, 'source_bytes': 0, 'crop_policy': crop_policy}
     seen_ids, seen_pcm = set(), set()
     for source in audit['cases']:
         source_id, pcm = source['id'], source['float_pcm_sha256']
@@ -119,7 +122,8 @@ def prepare_local_vowel_features(audit, references, encode, cache, output, ident
                 or abs(len(features)-len(samples)/640) > 2 or not np.isfinite(features).all()):
             raise ValueError('Native frame timebase or feature cache identity mismatch')
         ref = references['ayahs'][str(source['ayah'])]
-        crops = local_word_crops(ref['reference_ids'], ref['reference_word_indices'], emissions, len(features))
+        crops = local_word_crops(ref['reference_ids'], ref['reference_word_indices'], emissions, len(features),
+                                allow_substitutions=crop_policy=='unique_substitution_v1')
         labels = vowel_word_labels(source)
         if len(crops) != len(labels):
             raise ValueError('Native crop mapping lost an original word')
@@ -128,6 +132,8 @@ def prepare_local_vowel_features(audit, references, encode, cache, output, ident
                          'float_pcm_sha256', 'sample_count')
         result['sources'].append({**{key: source[key] for key in source_fields},
                                   'encoder_frame_count': len(features),
+                                  'native_emissions': [{key:e[key] for key in
+                                      ('id','start_frame','end_frame','confidence')} for e in emissions],
                                   'rms': float(np.sqrt(np.mean(samples**2)))})
         for crop, label in zip(crops, labels):
             if crop['word_index'] != label['word_index']:
@@ -209,6 +215,8 @@ def main(*, deadline=None):
     parser.add_argument('--references-sha', required=True)
     parser.add_argument('--output', type=Path, default=Path('/kaggle/working'))
     parser.add_argument('--cache', type=Path, default=Path('/kaggle/temp/local-vowel-features'))
+    parser.add_argument('--crop-policy', choices=('exact_only_v1','unique_substitution_v1'),
+                        default='exact_only_v1')
     args = parser.parse_args()
     if deadline is None:
         from ml.training.kaggle_job_budget import job_budget
@@ -254,6 +262,7 @@ def main(*, deadline=None):
                     'crop_implementation_sha256': file_sha(local_vowel_data.__file__),
                     'feature_implementation_sha256': file_sha(__file__),
                     'reference_bundle_sha256': args.references_sha,
+                    'crop_policy': args.crop_policy,
                     'native_nominal_samples_per_frame': 640, 'max_frame_count_error': 2,
                     'cache_format': 'native_post_adapter_1024_float16_word_v1'}
         write_json(args.output/'readiness.json', {'encoder_identity': identity,
@@ -265,7 +274,7 @@ def main(*, deadline=None):
         manifest = prepare_local_vowel_features(audit, references,
             lambda samples: native_frame_features(samples, processor, teacher, device='cuda'),
             args.cache, args.output, identity, fetch=lambda name: fetch_public(name, budget, deadline),
-            device='cuda', deadline=deadline)
+            device='cuda', deadline=deadline, crop_policy=args.crop_policy)
         source_roles = {r['id']: r['role'] for r in manifest['sources']}
         support = {role: {label: sum(r['available'] and r['target'] == label
                                     and source_roles[r['source_case_id']] == role for r in manifest['cases'])

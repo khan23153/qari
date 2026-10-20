@@ -94,7 +94,8 @@ def test_variable_word_and_reference_lengths_have_finite_gradients():
     assert torch.isfinite(norm) and norm > 0
 
 
-@pytest.mark.parametrize('change', ['pcm', 'speaker', 'feature_sha', 'target', 'reference', 'encoder', 'omitted_held_word'])
+@pytest.mark.parametrize('change', ['pcm', 'speaker', 'feature_sha', 'target', 'reference', 'encoder',
+                                   'omitted_held_word', 'policy_mismatch', 'unknown_policy'])
 def test_manifest_rejects_leakage_changed_evidence_and_missing_held_labels(tmp_path, change):
     manifest = sample_manifest(tmp_path)
     source = manifest['sources'][0]
@@ -106,6 +107,8 @@ def test_manifest_rejects_leakage_changed_evidence_and_missing_held_labels(tmp_p
     if change == 'target': row['target'] = 1 - row['target']
     if change == 'reference': row['reference_ids'] = [1, 32, 6]
     if change == 'encoder': row['encoder_identity_sha256'] = '0' * 64
+    if change == 'policy_mismatch': manifest['crop_policy'] = 'unique_substitution_v1'
+    if change == 'unknown_policy': manifest['crop_policy'] = 'accept_all'
     if change == 'omitted_held_word':
         held = next(r for r in manifest['sources'] if r['role'] == 'test' and r['source_label'] == 'error')
         manifest['cases'] = [r for r in manifest['cases'] if r['source_case_id'] != held['id']]

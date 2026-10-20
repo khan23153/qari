@@ -163,3 +163,34 @@ def test_original_uthmani_small_waw_is_recitation_mark_without_erasing_real_word
                                                 IDENTITY, fetch=lambda _: raw)
         # Long-vowel phones remain intact; only lexical-script comparison ignores the mark.
         assert manifest['references']['4'][2] == [23,23,32,26,33,31,31]
+
+
+def test_explicit_substitution_policy_binds_cache_identity_and_retains_native_trace(tmp_path):
+    raw,audit,refs=fixtures()
+    def substitute(samples):
+        features,emissions=encoded(samples);emissions[0]['id']=22
+        return features,emissions
+    old=prepare_local_vowel_features(audit,refs,substitute,tmp_path/'old',tmp_path/'oldout',
+                                     IDENTITY,fetch=lambda _:raw)
+    assert not old['cases'][0]['available']
+    identity={**IDENTITY,'crop_policy':'unique_substitution_v1'}
+    new=prepare_local_vowel_features(audit,refs,substitute,tmp_path/'new',tmp_path/'newout',
+                                     identity,fetch=lambda _:raw,crop_policy='unique_substitution_v1')
+    assert new['crop_policy']=='unique_substitution_v1'
+    assert new['cases'][0]['available']
+    assert new['cases'][0]['native_consonant_ids']==[22,23]
+    assert new['cases'][0]['native_anchor_types']==['substitution','exact']
+    assert new['sources'][0]['native_emissions'][0]['id']==22
+    assert new['sources'][0]['source_sha256']==audit['cases'][0]['source_sha256']
+    assert new['encoder_identity']['crop_policy']=='unique_substitution_v1'
+
+
+@pytest.mark.parametrize('identity_policy,selected',[
+    (None,'unique_substitution_v1'),('exact_only_v1','unique_substitution_v1'),
+    ('unique_substitution_v1','exact_only_v1'),('accept_all','accept_all')])
+def test_feature_extraction_refuses_missing_mixed_or_unknown_policy_before_audio(tmp_path,identity_policy,selected):
+    _,audit,refs=fixtures();identity=dict(IDENTITY)
+    if identity_policy is not None:identity['crop_policy']=identity_policy
+    with pytest.raises(ValueError,match='policy'):
+        prepare_local_vowel_features(audit,refs,encoded,tmp_path/'cache',tmp_path/'out',identity,
+             fetch=lambda _:pytest.fail('Invalid policy reached download'),crop_policy=selected)

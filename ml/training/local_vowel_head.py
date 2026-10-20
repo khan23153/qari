@@ -74,6 +74,10 @@ def validate_local_vowel_manifest(manifest, device):
     identity = manifest['encoder_identity']
     if not identity or not _is_sha(identity.get('model_sha256')) or not _is_sha(identity.get('crop_implementation_sha256')):
         raise ValueError('Immutable encoder and crop identities required')
+    crop_policy = manifest.get('crop_policy', 'exact_only_v1')
+    if (crop_policy not in ('exact_only_v1','unique_substitution_v1')
+            or crop_policy != identity.get('crop_policy','exact_only_v1')):
+        raise ValueError('Local vowel crop policy differs from immutable feature identity')
     identity_sha = _json_sha(identity)
     references = manifest['references']
     reserved = set(manifest['reserved_speakers'])
