@@ -118,12 +118,13 @@ def check_resources(output, device, deadline):
     import shutil
     if time.monotonic() >= deadline:
         raise TimeoutError('Bounded training deadline reached')
-    if device == 'cuda':
+    if device in ('cuda','kaggle_cpu'):
         if shutil.disk_usage(output).free < 4*1024**3:
             raise RuntimeError('Remote4GiB disk reserve reached')
-        free, _ = torch.cuda.mem_get_info()
-        if free < 2*1024**3:
-            raise RuntimeError('Remote2GiB GPU reserve reached')
+        if device=='cuda':
+            free, _ = torch.cuda.mem_get_info()
+            if free < 2*1024**3:
+                raise RuntimeError('Remote2GiB GPU reserve reached')
         if resource.getrusage(resource.RUSAGE_SELF).ru_maxrss > 12*1024**2:
             raise RuntimeError('Remote12GiB resident-memory limit reached')
 

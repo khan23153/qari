@@ -12,13 +12,24 @@ from ml.training.human_word_data import REFERENCES, _normalize, parse_label_row
 from ml.training.kaggle_human_word_job import decode_source_audio, fetch_public, prefetch_sources
 from ml.training.kaggle_phoneme_job import check_resources, file_sha, write_json
 from ml.training.local_vowel_data import local_word_crops, vowel_word_labels
-from ml.training.local_vowel_head import _is_sha, _json_sha, train_local_vowel_features
+from ml.training.local_vowel_head import _is_sha, _json_sha, _require_kaggle_cpu, train_local_vowel_features
 
 DATASET = 'MuazAhmad7/Surah_Ikhlas-Labeled_Dataset'
 REVISION = '973b5ef1d1532bcbe7e9a5a5b0dce125cc4d0dac'
 MODEL = 'obadx/muaalem-model-v3_2'
 MODEL_REVISION = '01a1ef9fbe40d144ef845101e89ff924aed3fef5'
 MODEL_SHA = '6b6a2e85303d17ff0f3af5e1fc79ac83daecee409c756ddf27f0ced59393bb41'
+
+
+def execution_device(scope, output):
+    if scope=='kaggle_cpu':
+        _require_kaggle_cpu(output)
+        return 'cpu'
+    if scope!='cuda':
+        raise ValueError('Full research requires explicit remote CPU or CUDA scope')
+    if not torch.cuda.is_available():
+        raise RuntimeError('Private GPU required; full research never falls back to VPS CPU')
+    return 'cuda'
 
 
 def _native_emissions(probabilities):
@@ -202,8 +213,6 @@ def main(*, deadline=None):
     import argparse
     import inspect
     import importlib.metadata
-    from transformers import AutoFeatureExtractor
-    from qari_native_phonetic_model.modeling_multi_level_ctc import Wav2Vec2BertForMultilevelCTC
     from ml.training import local_vowel_data
 
     parser = argparse.ArgumentParser(description=__doc__)
@@ -217,13 +226,19 @@ def main(*, deadline=None):
     parser.add_argument('--cache', type=Path, default=Path('/kaggle/temp/local-vowel-features'))
     parser.add_argument('--crop-policy', choices=('exact_only_v1','unique_substitution_v1'),
                         default='exact_only_v1')
+    parser.add_argument('--execution-device',choices=('cuda','kaggle_cpu'),default='cuda')
     args = parser.parse_args()
+    if args.execution_device=='kaggle_cpu':
+        _require_kaggle_cpu(args.output)
     if deadline is None:
         from ml.training.kaggle_job_budget import job_budget
         with job_budget(args.output) as limit:
             return main(deadline=limit)
     args.output.mkdir(parents=True, exist_ok=True)
     try:
+        actual_device=execution_device(args.execution_device,args.output)
+        from transformers import AutoFeatureExtractor
+        from qari_native_phonetic_model.modeling_multi_level_ctc import Wav2Vec2BertForMultilevelCTC
         if file_sha(args.audit) != args.audit_sha or file_sha(args.references) != args.references_sha:
             raise ValueError('Audited source/reference packet SHA changed')
         audit = json.loads(args.audit.read_text())
@@ -244,15 +259,14 @@ def main(*, deadline=None):
         hashes = verify_native_model(args.encoder, pins)
         if references['phonetic_vocab_sha256'] != hashes['vocab.json']:
             raise ValueError('Expected reference vocabulary differs from native model')
-        if not torch.cuda.is_available():
-            raise RuntimeError('Full local vowel training requires private GPU, no VPS CPU fallback')
-        torch.set_num_threads(2); torch.cuda.set_device(0)
+        torch.set_num_threads(2)
+        if actual_device=='cuda':torch.cuda.set_device(0)
         teacher, info = Wav2Vec2BertForMultilevelCTC.from_pretrained(
             str(args.encoder), local_files_only=True, use_safetensors=True,
             torch_dtype=torch.float32, output_loading_info=True)
         if any(info.get(k) for k in ('missing_keys', 'unexpected_keys', 'mismatched_keys', 'error_msgs')):
             raise ValueError('Native model did not load every pinned weight')
-        teacher.to('cuda'); teacher.eval()
+        teacher.to(actual_device); teacher.eval()
         processor = AutoFeatureExtractor.from_pretrained(str(args.encoder), local_files_only=True,
                                                           trust_remote_code=False)
         if processor.sampling_rate != 16000 or teacher.config.level_to_vocab_size['phonemes'] != 43:
@@ -263,18 +277,20 @@ def main(*, deadline=None):
                     'feature_implementation_sha256': file_sha(__file__),
                     'reference_bundle_sha256': args.references_sha,
                     'crop_policy': args.crop_policy,
+                    'feature_device':actual_device,'execution_scope':args.execution_device,
                     'native_nominal_samples_per_frame': 640, 'max_frame_count_error': 2,
                     'cache_format': 'native_post_adapter_1024_float16_word_v1'}
         write_json(args.output/'readiness.json', {'encoder_identity': identity,
-                   'strict_native_weight_load': True, 'device': 'cuda:0', 'dtype': 'float32',
-                   'gpu': torch.cuda.get_device_name(0), 'reference_used_for_native_forward': False,
+                   'strict_native_weight_load': True, 'device': actual_device, 'dtype': 'float32',
+                   'gpu': torch.cuda.get_device_name(0) if actual_device=='cuda' else None,
+                   'execution_scope':args.execution_device,'reference_used_for_native_forward': False,
                    'versions': {p: importlib.metadata.version(p) for p in ['torch', 'transformers', 'numpy', 'scipy']},
                    'qualified': False, 'production_changed': False})
-        print('LOCAL_VOWEL_READY', torch.cuda.get_device_name(0), MODEL_SHA, flush=True)
+        print('LOCAL_VOWEL_READY', actual_device, MODEL_SHA, flush=True)
         manifest = prepare_local_vowel_features(audit, references,
-            lambda samples: native_frame_features(samples, processor, teacher, device='cuda'),
+            lambda samples: native_frame_features(samples, processor, teacher, device=actual_device),
             args.cache, args.output, identity, fetch=lambda name: fetch_public(name, budget, deadline),
-            device='cuda', deadline=deadline, crop_policy=args.crop_policy)
+            device=args.execution_device, deadline=deadline, crop_policy=args.crop_policy)
         source_roles = {r['id']: r['role'] for r in manifest['sources']}
         support = {role: {label: sum(r['available'] and r['target'] == label
                                     and source_roles[r['source_case_id']] == role for r in manifest['cases'])
@@ -284,8 +300,8 @@ def main(*, deadline=None):
             if support[role][0] < good or support[role][1] < bad:
                 raise ValueError('Insufficient eligible local vowel supervision after native exclusions')
         del teacher
-        torch.cuda.empty_cache()
-        report = train_local_vowel_features(manifest, args.output, device='cuda', epochs=30, deadline=deadline)
+        if actual_device=='cuda':torch.cuda.empty_cache()
+        report = train_local_vowel_features(manifest, args.output, device=args.execution_device, epochs=30, deadline=deadline)
         if verify_native_model(args.encoder, pins) != hashes:
             raise ValueError('Original frozen native model files changed')
         print('LOCAL_VOWEL_COMPLETE', json.dumps({k: report[k] for k in

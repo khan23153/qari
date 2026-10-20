@@ -194,3 +194,30 @@ def test_feature_extraction_refuses_missing_mixed_or_unknown_policy_before_audio
     with pytest.raises(ValueError,match='policy'):
         prepare_local_vowel_features(audit,refs,encoded,tmp_path/'cache',tmp_path/'out',identity,
              fetch=lambda _:pytest.fail('Invalid policy reached download'),crop_policy=selected)
+
+
+@pytest.mark.parametrize('scope,cuda_available,expected',[
+    ('kaggle_cpu',False,'cpu'),('cuda',True,'cuda'),('cuda',False,None),('cpu',False,None)])
+def test_full_execution_scope_requires_explicit_remote_cpu_or_actual_cuda(tmp_path,monkeypatch,scope,cuda_available,expected):
+    from ml.training import kaggle_local_vowel_job as job
+    called=[]
+    monkeypatch.setattr(job,'_require_kaggle_cpu',lambda output:called.append(output),raising=False)
+    monkeypatch.setattr(torch.cuda,'is_available',lambda:cuda_available)
+    if expected is None:
+        with pytest.raises((ValueError,RuntimeError)):
+            job.execution_device(scope,tmp_path)
+    else:
+        assert job.execution_device(scope,tmp_path)==expected
+        assert called==([tmp_path] if scope=='kaggle_cpu' else [])
+
+
+def test_rejected_remote_cpu_cli_cannot_create_output_before_context_check(tmp_path,monkeypatch):
+    import sys,time
+    from ml.training.kaggle_local_vowel_job import main
+    output=tmp_path/'outside-kaggle'
+    monkeypatch.setattr(sys,'argv',['local-vowel','--encoder','missing','--model-pins','missing',
+        '--audit','missing','--audit-sha','0'*64,'--references','missing','--references-sha','0'*64,
+        '--execution-device','kaggle_cpu','--output',str(output)])
+    with pytest.raises(RuntimeError,match='Kaggle'):
+        main(deadline=time.monotonic()+5)
+    assert not output.exists()

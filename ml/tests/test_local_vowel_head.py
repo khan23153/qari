@@ -1,6 +1,9 @@
 import copy
 import hashlib
 import json
+import time
+from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -17,7 +20,7 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def sample_manifest(tmp_path):
+def sample_manifest(tmp_path, per_role=2):
     sources, cases = [], []
     counts = {'train': 0, 'validation': 0, 'test': 0}
     references = {'1': [[21, 33, 23], [26, 33, 27, 32],
@@ -30,7 +33,7 @@ def sample_manifest(tmp_path):
                    error_location='', error_type='', error_explanation='')
         source = parse_label_row(raw, set())
         role = source['role']
-        if counts[role] >= 2:
+        if counts[role] >= per_role:
             continue
         if counts[role] == 1:
             raw.update(file_name=f'data/ID{speaker}V1F.wav', label='0', label_name='error',
@@ -54,7 +57,7 @@ def sample_manifest(tmp_path):
                           'frame_start': index*16, 'frame_end': index*16+13,
                           'feature_path': str(path), 'feature_sha256': digest(path),
                           'encoder_identity_sha256': identity_sha})
-        if all(n == 2 for n in counts.values()):
+        if all(n == per_role for n in counts.values()):
             break
     return {'label_type': 'human_vowel_word_error', 'reserved_speakers': [],
             'encoder_identity': identity, 'references': references,
@@ -92,6 +95,44 @@ def test_variable_word_and_reference_lengths_have_finite_gradients():
     torch.nn.functional.binary_cross_entropy_with_logits(logits, torch.tensor([0., 1.])).backward()
     norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1., error_if_nonfinite=True)
     assert torch.isfinite(norm) and norm > 0
+
+
+@pytest.mark.parametrize('case',['valid','arm_vps','missing_kaggle_path','outside_output'])
+def test_remote_full_cpu_requires_explicit_kaggle_context_and_output(monkeypatch,case):
+    import platform
+    from ml.training.local_vowel_head import _require_kaggle_cpu
+    monkeypatch.setattr(platform,'system',lambda:'Linux')
+    monkeypatch.setattr(platform,'machine',lambda:'aarch64' if case=='arm_vps' else 'x86_64')
+    real_is_dir=Path.is_dir
+    def is_dir(path):
+        if str(path) in ('/kaggle/working','/kaggle/temp','/kaggle/input'):
+            return not (case=='missing_kaggle_path' and str(path)=='/kaggle/input')
+        return real_is_dir(path)
+    monkeypatch.setattr(Path,'is_dir',is_dir)
+    output=Path('/tmp/output') if case=='outside_output' else Path('/kaggle/working/run')
+    if case=='valid':_require_kaggle_cpu(output)
+    else:
+        with pytest.raises(RuntimeError,match='Kaggle'):_require_kaggle_cpu(output)
+
+
+def test_only_explicit_remote_cpu_can_train_75_words_four_epochs(tmp_path,monkeypatch):
+    import shutil
+    from ml.training import local_vowel_head as module
+    manifest=sample_manifest(tmp_path,per_role=7)
+    assert len(manifest['cases'])==75
+    with pytest.raises(ValueError,match='bounded size'):
+        validate_local_vowel_manifest(manifest,'cpu')
+    with pytest.raises(ValueError,match='configuration'):
+        train_local_vowel_features(manifest,tmp_path/'local',device='cpu',epochs=4)
+    # Platform/filesystem checks are tested above; this test isolates training bounds.
+    monkeypatch.setattr(module,'_require_kaggle_cpu',lambda output=None:None)
+    monkeypatch.setattr(shutil,'disk_usage',lambda _:SimpleNamespace(free=8*1024**3))
+    monkeypatch.setattr(torch.cuda,'mem_get_info',lambda:pytest.fail('Remote CPU called CUDA'))
+    report=train_local_vowel_features(manifest,tmp_path/'remote',device='kaggle_cpu',epochs=4,
+                                      deadline=time.monotonic()+30)
+    assert report['device']=='cpu' and report['execution_scope']=='kaggle_cpu'
+    assert report['epochs_completed']==4 and not report['qualified']
+    assert all(np.isfinite(r['train_loss']) and np.isfinite(r['validation_loss']) for r in report['history'])
 
 
 @pytest.mark.parametrize('change', ['pcm', 'speaker', 'feature_sha', 'target', 'reference', 'encoder',

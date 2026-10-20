@@ -65,9 +65,21 @@ def _is_sha(value):
     return isinstance(value, str) and len(value) == 64 and all(c in '0123456789abcdef' for c in value)
 
 
+def _require_kaggle_cpu(output=None):
+    """Prevent accidental full CPU work on the VPS; not an authentication claim."""
+    import platform
+    roots = [Path('/kaggle/working'),Path('/kaggle/temp'),Path('/kaggle/input')]
+    if (platform.system()!='Linux' or platform.machine().lower() not in ('x86_64','amd64')
+            or not all(path.is_dir() for path in roots)
+            or (output is not None and not Path(output).resolve().is_relative_to(roots[0].resolve()))):
+        raise RuntimeError('Full CPU research requires explicit Kaggle context and working output')
+
+
 def validate_local_vowel_manifest(manifest, device):
-    if manifest.get('label_type') != 'human_vowel_word_error' or device not in ('cpu', 'cuda'):
+    if manifest.get('label_type') != 'human_vowel_word_error' or device not in ('cpu', 'cuda','kaggle_cpu'):
         raise ValueError('Explicit vowel-word research manifest required')
+    if device=='kaggle_cpu':
+        _require_kaggle_cpu()
     cases, sources = manifest['cases'], manifest['sources']
     if not 3 <= len(cases) <= (64 if device == 'cpu' else 7500) or not 3 <= len(sources) <= 1506:
         raise ValueError('Local vowel research manifest exceeds bounded size')
@@ -168,18 +180,22 @@ def _metrics(rows, threshold):
 
 
 def train_local_vowel_features(manifest, output, device='cpu', epochs=30, deadline=None):
-    if device not in ('cpu', 'cuda') or type(epochs) is not int or not 1 <= epochs <= (3 if device == 'cpu' else 30):
+    if device not in ('cpu', 'cuda','kaggle_cpu') or type(epochs) is not int or not 1 <= epochs <= (3 if device == 'cpu' else 30):
         raise ValueError('Bounded local vowel training configuration required')
-    with torch.autocast(device_type=device, enabled=False):
-        return _train(manifest, Path(output), device, epochs, deadline)
+    if device=='kaggle_cpu':
+        _require_kaggle_cpu(output)
+    actual_device='cpu' if device=='kaggle_cpu' else device
+    with torch.autocast(device_type=actual_device, enabled=False):
+        return _train(manifest, Path(output), actual_device, epochs, deadline,execution_scope=device)
 
 
-def _train(manifest, output, device, epochs, deadline):
+def _train(manifest, output, device, epochs, deadline, *, execution_scope=None):
+    execution_scope=execution_scope or device
     torch.set_num_threads(2); torch.manual_seed(42)
     generator = random.Random(42)
     deadline = time.monotonic()+7100 if deadline is None else deadline
     output.mkdir(parents=True, exist_ok=True)
-    rows, cache = validate_local_vowel_manifest(manifest, device)
+    rows, cache = validate_local_vowel_manifest(manifest, execution_scope)
     train = [r for r in rows if r['role'] == 'train' and r['available'] and r['target'] is not None]
     validation = [r for r in rows if r['role'] == 'validation']
     positives = sum(r['target'] == 1 for r in train)
@@ -204,7 +220,7 @@ def _train(manifest, output, device, epochs, deadline):
         eligible = [r for r in group if r['available']]
         with torch.inference_mode():
             for offset in range(0, len(eligible), 16):
-                check_resources(output, device, deadline)
+                check_resources(output, execution_scope, deadline)
                 selected = eligible[offset:offset+16]
                 logits = model(*batch(selected))
                 if not torch.isfinite(logits).all():
@@ -224,7 +240,7 @@ def _train(manifest, output, device, epochs, deadline):
     for epoch in range(1, epochs+1):
         model.train(); generator.shuffle(train); total = 0.
         for offset in range(0, len(train), 16):
-            check_resources(output, device, deadline)
+            check_resources(output, execution_scope, deadline)
             selected = train[offset:offset+16]
             targets = torch.tensor([r['target'] for r in selected], dtype=torch.float32, device=device)
             optimizer.zero_grad(set_to_none=True)
@@ -274,6 +290,7 @@ def _train(manifest, output, device, epochs, deadline):
         baselines[role] = _metrics(prior_scores(values), prior_threshold)
         predictions.extend(values)
     report = {'status': 'completed_narrow_local_vowel_experiment', 'qualified': False,
+              'device':device,'execution_scope':execution_scope,
               'production_changed': False, 'epochs_completed': len(history), 'best_epoch': best_epoch,
               'threshold': threshold, 'text_prior_threshold': prior_threshold,
               'training_positive_weight': positive_weight, 'eligible_training_positive': positives,
