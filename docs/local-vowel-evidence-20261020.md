@@ -134,22 +134,42 @@ Available GPU quota does not guarantee a scheduler start. A separate private CPU
 smoke completed real native extraction on 11 public clips / 44 words and three
 finite-loss epochs; its held accuracy was not used for selection.
 
-At 2026-10-20 15:21 UTC, the explicit full remote CPU fallback
-`telethonfool/qari-local-vowel-cpu-full-20261020` version 1 was source-verified,
-private with GPU disabled, and RUNNING. Launcher SHA256:
-`465c95a9fd86e6d0085e0b4f38d2031b8fe38282916b8b9c7d4332478f52437c`.
-The attempt then ERRORed before unpack/model downloads: the preflight assumed all
-Kaggle scratch directories already existed. The preceding smoke had created those
-directories before checking, so it did not validate fresh-container layout. A
-separate tiny private CPU context diagnostic verified Linux/x86_64, existing
-working/input and absent scratch temp. The guard now permits creating scratch
-only after validating the existing provider context. Regression tests and all
-1,105 recitation/ML/API tests pass before the guarded retry. No epochs or learned accuracy exist from CPU v1.
+The corrected private full CPU run, version 2, completed native extraction for
+all 1,393 clips and stopped at the same unchanged supervision floor as T4 v4.
+No optimizer epoch ran; neither run produced a candidate head or learned accuracy.
 
-The frozen packet keeps all 1,393 source clips, roles, labels, model/reference pins, numerical
-head/training protocol and eligibility floors unchanged. No head or accuracy
-result exists at this observation. Packet and logs:
-`/tmp/qari-conformer-training-20261009/local-vowel-cpu-full-20261020/`.
+| Split | Correct words | Eligible vowel errors |
+| --- | ---: | ---: |
+| Train | 1,559 | 91 |
+| Validation | 220 | 7 |
+| Test | 200 | 8 |
+| Reserved | 143 | 21 |
+
+Validation still falls below the fixed eight-positive minimum. All five unavailable
+validation positives remain ambiguous; they are retained as unassessed. Do not
+tune an alignment algorithm against their held phone sequences. Training-only
+unavailable positives comprise 33 ambiguous and 19 low-confidence words.
+
+T4 v4 was ready at 15:45:32 UTC and ERROR at 15:49:08. CPU v2 was ready at
+15:28:56 and ERROR at 16:24:16. CPU was the frozen primary from its earlier
+readiness/progress before held scores. The unknown exact T4 session ID prevented
+safe cancellation, so it later consumed bounded duplicate GPU time. No winner
+was selected from accuracy. Both jobs have now terminated; no paid scaling.
+
+All 1,393 CPU/GPU native phone sequences and start/end frame intervals match
+exactly, as do availability decisions for all 5,198 word rows and support counts.
+Source/PCM/speaker/label identities also agree. This verifies the observed failure
+is shared across devices; it does not establish feature-value equality, grading
+accuracy, checkpoint portability or qualification.
+
+CPU packet `/tmp/qari-conformer-training-20261009/local-vowel-cpu-full-20261020/`;
+version 2 launcher SHA256:
+`0c87542b44fa28513b598d96975faa352202939e2436a5290b27d828008d7cc8`.
+Provider source was pulled and verified byte-for-byte, private with GPU disabled.
+The first CPU attempt rejected a false assumption that scratch `/kaggle/temp`
+already existed. A separate actual private diagnostic verified working/input
+present and temp absent; regression tests reproduced the false rejection and
+`f784df1` permits scratch creation after context validation.
 
 Full CPU mode requires explicit `kaggle_cpu`, Linux/x86_64, existing Kaggle
 working/input directories (scratch temp is created after validation) and working output. Checks precede launcher
@@ -165,6 +185,6 @@ verified session ID. The official status/source responses currently expose no
 session ID, so do not guess from the kernel ID or version number. This limitation
 may leave a queued backup to observe; never pick a winner from held accuracy.
 
-Completion, word-wise held misses/false alarms and bounded checkpoint portability
-remain pending. All outputs remain unqualified; Ikhlas-only skewed human labels
+Execution has terminated without a head. Learned word-wise held misses/false
+alarms and checkpoint portability are unavailable, not passing. All outputs remain unqualified; Ikhlas-only skewed human labels
 cannot establish a general pronunciation or tajweed grader.
