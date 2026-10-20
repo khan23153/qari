@@ -13,14 +13,14 @@ def module():
     return importlib.import_module('ml.training.realized_phone_adaptation')
 
 
-def tiny():
+def tiny(mask_time_prob=0.,mask_time_length=10):
     torch.manual_seed(42)
     config=transformers.Wav2Vec2Config(vocab_size=80,pad_token_id=77,
         hidden_size=16,num_hidden_layers=3,num_attention_heads=2,intermediate_size=32,
         conv_dim=(8,)*7,conv_kernel=(10,3,3,3,3,2,2),conv_stride=(5,2,2,2,2,2,2),
         num_conv_pos_embedding_groups=2,num_conv_pos_embeddings=16,feat_extract_norm='layer',
         hidden_dropout=0.,attention_dropout=0.,activation_dropout=0.,feat_proj_dropout=0.,
-        final_dropout=0.,layerdrop=0.,mask_time_prob=0.,mask_feature_prob=0.,
+        final_dropout=0.,layerdrop=0.,mask_time_prob=mask_time_prob,mask_time_length=mask_time_length,mask_feature_prob=0.,
         ctc_loss_reduction='mean',ctc_zero_infinity=False)
     config._attn_implementation='eager'
     return transformers.Wav2Vec2ForCTC(config)
@@ -143,3 +143,15 @@ def test_evaluation_never_passes_target_text_and_keeps_unrepresentable_reference
     result=module().evaluate(model,data);handle.remove()
     assert result['reference_phones']==24 and len(result['predictions'])==2
     assert keys and all(k=={'input_values','attention_mask'} for k in keys)
+
+
+def test_native_specaugment_repeats_after_unrelated_numpy_random_activity(tmp_path):
+    import numpy as np
+    one=tiny(mask_time_prob=.5,mask_time_length=2)
+    two=copy.deepcopy(one)
+    np.random.seed(1)
+    first=module().train_adapter(one,rows(),identity(),tmp_path/'one',max_epochs=1)
+    np.random.seed(999);np.random.random(73)
+    second=module().train_adapter(two,rows(),identity(),tmp_path/'two',max_epochs=1)
+    assert first['history'][0]['train_ctc_loss']==second['history'][0]['train_ctc_loss']
+    assert all(torch.equal(one.state_dict()[k],two.state_dict()[k]) for k in module().adapter_keys(one))

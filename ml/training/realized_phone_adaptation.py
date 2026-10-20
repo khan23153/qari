@@ -3,8 +3,10 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import random
 import re
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 
@@ -167,7 +169,7 @@ def train_adapter(model,rows,identity,output,*,max_epochs=20,microbatch=2,
     identity=_identity(identity);_validate_rows(rows);allowed=freeze_adapter(model)
     if any(p.dtype!=torch.float32 for p in model.parameters()):raise ValueError('Native FP32 weights required')
     for p in model.parameters():_finite(p,'initial parameter')
-    torch.manual_seed(42)
+    random.seed(42);np.random.seed(42);torch.manual_seed(42)
     if device.type=='cuda':torch.cuda.manual_seed_all(42)
     output=Path(output)
     if (output/'candidate-delta.pt').exists():raise ValueError('Refuse to overwrite an existing candidate')
