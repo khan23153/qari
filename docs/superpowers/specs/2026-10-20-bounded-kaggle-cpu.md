@@ -9,7 +9,7 @@ T4 is an operational block, not evidence that the model failed.
 Provide an explicit `kaggle_cpu` research execution mode for the identical frozen
 local-vowel experiment. Actual tensor device remains CPU and is recorded honestly.
 Default `cpu` retains64word/3epoch limits; original GPU behavior remains. The
-larger mode requires Linux/x86_64, existing /kaggle/working,/kaggle/temp,/kaggle/input
+larger mode requires Linux/x86_64, existing /kaggle/working and /kaggle/input
 directories and an output below /kaggle/working. These checks prevent accidental
 execution on the current aarch64 VPS; they are not a security authentication claim.
 There is no automatic CPU fallback in the production/native entry point.
@@ -28,3 +28,9 @@ cancel only this task's queued T4 v4, preserving its source/version history. If
 T4 starts before that decision, prefer T4 and stop the CPU duplicate before head
 training. Do not select a winner using held accuracy. Report actual execution,
 eligibility and errors; one complete training run is the intended outcome.
+
+Runtime clarification (2026-10-20): a separate actual private CPU diagnostic
+verified Linux/x86_64, working/input present and scratch `/kaggle/temp` absent.
+The scratch directory may be created only after the provider-context guard.
+This changes the false fresh-directory assumption, not local limits, model,
+data, loss, resource budgets, production guard or score-based selection.

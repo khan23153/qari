@@ -68,7 +68,8 @@ def _is_sha(value):
 def _require_kaggle_cpu(output=None):
     """Prevent accidental full CPU work on the VPS; not an authentication claim."""
     import platform
-    roots = [Path('/kaggle/working'),Path('/kaggle/temp'),Path('/kaggle/input')]
+    # Fresh provider sessions lack scratch /kaggle/temp; create it only after this guard.
+    roots = [Path('/kaggle/working'),Path('/kaggle/input')]
     if (platform.system()!='Linux' or platform.machine().lower() not in ('x86_64','amd64')
             or not all(path.is_dir() for path in roots)
             or (output is not None and not Path(output).resolve().is_relative_to(roots[0].resolve()))):

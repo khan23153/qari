@@ -97,7 +97,7 @@ def test_variable_word_and_reference_lengths_have_finite_gradients():
     assert torch.isfinite(norm) and norm > 0
 
 
-@pytest.mark.parametrize('case',['valid','arm_vps','missing_kaggle_path','outside_output'])
+@pytest.mark.parametrize('case',['valid','fresh_kaggle_no_temp','arm_vps','missing_kaggle_path','outside_output'])
 def test_remote_full_cpu_requires_explicit_kaggle_context_and_output(monkeypatch,case):
     import platform
     from ml.training.local_vowel_head import _require_kaggle_cpu
@@ -106,11 +106,12 @@ def test_remote_full_cpu_requires_explicit_kaggle_context_and_output(monkeypatch
     real_is_dir=Path.is_dir
     def is_dir(path):
         if str(path) in ('/kaggle/working','/kaggle/temp','/kaggle/input'):
-            return not (case=='missing_kaggle_path' and str(path)=='/kaggle/input')
+            return not ((case=='missing_kaggle_path' and str(path)=='/kaggle/input')
+                        or (case=='fresh_kaggle_no_temp' and str(path)=='/kaggle/temp'))
         return real_is_dir(path)
     monkeypatch.setattr(Path,'is_dir',is_dir)
     output=Path('/tmp/output') if case=='outside_output' else Path('/kaggle/working/run')
-    if case=='valid':_require_kaggle_cpu(output)
+    if case in ('valid','fresh_kaggle_no_temp'):_require_kaggle_cpu(output)
     else:
         with pytest.raises(RuntimeError,match='Kaggle'):_require_kaggle_cpu(output)
 

@@ -45,8 +45,8 @@ Research branch: `fix/local-vowel-evidence-20261020`; draft PR #39.
 Commits: `66ec320` labels/localization, `67dc1a2` generic local head,
 `8123101` native extraction, `29ea12b` bounded download deadline repair.
 
-Latest complete recitation/ML/API suite: **1,104 passed, 1 skipped, 2 existing warnings**,
-58.73 seconds. Fresh whole-branch review found one important defect: executor
+Latest complete recitation/ML/API suite: **1,105 passed, 1 skipped, 2 existing warnings**,
+58.76 seconds. Fresh whole-branch review found one important defect: executor
 cleanup could wait for unchecked trickling downloads after the job deadline.
 Regression tests reproduced it; per-read checks, remaining-time socket bounds
 and bounded backoff fixed it. A real alarm/thread-pool cleanup test passes too.
@@ -138,13 +138,21 @@ At 2026-10-20 15:21 UTC, the explicit full remote CPU fallback
 `telethonfool/qari-local-vowel-cpu-full-20261020` version 1 was source-verified,
 private with GPU disabled, and RUNNING. Launcher SHA256:
 `465c95a9fd86e6d0085e0b4f38d2031b8fe38282916b8b9c7d4332478f52437c`.
-It keeps all 1,393 source clips, roles, labels, model/reference pins, numerical
+The attempt then ERRORed before unpack/model downloads: the preflight assumed all
+Kaggle scratch directories already existed. The preceding smoke had created those
+directories before checking, so it did not validate fresh-container layout. A
+separate tiny private CPU context diagnostic verified Linux/x86_64, existing
+working/input and absent scratch temp. The guard now permits creating scratch
+only after validating the existing provider context. Regression tests and all
+1,105 recitation/ML/API tests pass before the guarded retry. No epochs or learned accuracy exist from CPU v1.
+
+The frozen packet keeps all 1,393 source clips, roles, labels, model/reference pins, numerical
 head/training protocol and eligibility floors unchanged. No head or accuracy
 result exists at this observation. Packet and logs:
 `/tmp/qari-conformer-training-20261009/local-vowel-cpu-full-20261020/`.
 
 Full CPU mode requires explicit `kaggle_cpu`, Linux/x86_64, existing Kaggle
-working/temp/input directories and working output. Checks precede launcher
+working/input directories (scratch temp is created after validation) and working output. Checks precede launcher
 unpack/install and direct extraction writes/downloads; ordinary CPU remains
 limited to 64 words and three epochs. CPU tensors and execution scope are
 reported separately. CPU disk/RSS/deadline checks use no CUDA memory APIs.
