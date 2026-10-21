@@ -1,14 +1,28 @@
 <!-- QARI_CURRENT_STATE_START -->
-# Qari current state — 2026-10-21T16:06:07.332201+00:00
+# Qari current state — 2026-10-21T17:37:56.659445+00:00
 
 **The pronunciation goal remains open. No new pronunciation model qualifies for deployment.** Word tracking working on a recording does not establish correct harakat, adaegi or tajweed. Keep this dated block current; everything below it is retained historical evidence and may describe superseded jobs or missing paths.
 
 ## Production and user requirements
 
-- Live service: `https://aiquranic.com`; recitation container `infra-recitation-api-1`, revision `0c7562b0ee35cee33f9e1884ac5f8e9a6974a37d`. At 21 October 16:04 UTC it is healthy, with zero restarts and no OOM. Public `/health` checks the core API only.
+- Live service: `https://aiquranic.com`; recitation container `infra-recitation-api-1`, revision `0c7562b0ee35cee33f9e1884ac5f8e9a6974a37d`. At 21 October 17:36 UTC it is healthy, with zero restarts and no OOM. Public `/health` checks the core API only.
 - Existing model paths: `/app/models/qari-fastconformer-pcd-rnnt-int8` and `/app/models/qari-ct2-base`. Pronunciation/tajweed assessment remains unavailable. Preserve confidence .55, speech RMS .006, strict lexical identity and cursor guards.
 - Hifz reveals confirmed words only; every ayah marker remains visible. Mistakes and unreached text belong in summary. Silence/wrong speech must not complete a page. The app is free with no ads; do not infer approval for paid compute.
 - Root checkout `/home/innocent/qari`: branch `deploy/aiquranic-domain`, HEAD `9966b4a`; only `context.md` is dirty. Root `ml` is production bind-mounted. Keep research isolated and preserve local changes. No backend/UI/model/APK deployment occurred in this research continuation.
+
+## Latest verified result — 21 October, 17:37 UTC
+
+The unchanged FastConformer encoder can now be reproduced exactly on the three fixed training fixtures using KNF 1.22.3, the pinned Eigen 5.0.1 normalization and Sherpa's own ORT 1.28.2. All native feature/encoder hashes match; tokens/frames and the frozen probability bound also pass on speech plus silence. Python ORT 1.17.1 or NumPy normalization alone fails parity. This resolves an offline pipeline mismatch, not pronunciation accuracy.
+
+The small frozen-encoder phone head **fails** its predeclared validation gates. Primary private CPU kernel `telethonfool/qari-pcd-phone-head-cpu-20261021` v2 completed 40 epochs, selected epoch30, 92.66 seconds and peak529,916KiB RSS. Training408/23,689phone errors (1.72%); validation216/927 (23.30%, limit15%). Short-vowel family recalls: a152/196, i54/73, u31/49, all below80%. Independent NumPy replay verifies all589 source IDs/predictions/metrics, exact train-only statistics, selected history and checkpoint hashes; maximum probability delta1.46e-6<2e-5. The original563/26 split and unseen-in-training ZZ remain intact. No expert TestGT evaluation or model promotion follows a failed gate.
+
+Execution failures are preserved: initial CPUv1 and GPUv1 both stopped before their first gradient/epoch because the CTC-loss targets and lengths were supplied in the wrong order. The corrected CPUv2 uses keyword binding and passes two actual Torch CTC regressions before fitting. All seven local research tests pass. The GPU had queued about20minutes, prompting a deliberate CPU fallback declared primary before predictions. Both kernels are now terminal; no background training is pending. No accuracy result is claimed for either failed initial run.
+
+A separate Hann-only whole-clip probe on old/new Ad-Duha and newer Ikhlas produces the same word sequences as Povey on allthree. Old Ad-Duha still substitutes faawa and tanhar. Thus a window change alone is not a fix. The75second whole-clip path reached1,529,236KiB RSS near its1,536MiB limit; no OOM occurred, but future long-recording tests must use bounded streaming windows. This is not a live cursor/40-of-40 test.
+
+Packets: `/home/innocent/qari-training-artifacts/fastconformer-phonetic-feasibility-20261021/` and `fastconformer-phonetic-cpu-20261021/`. Report: `docs/fastconformer-phone-feasibility-20261021.md` in the research worktree. Production/UI/model/confidence/speech/cursor behavior is unchanged. Full pronunciation assessment remains unresolved.
+
+Next data prerequisite: publisher `IWAN/L2-KSU-Dataset` (revisionca2331a38af06e3348feb3ffd2376953cdc10ce5) describes human non-native pronunciation errors and TextGrid annotations, but authenticated access still returns403 at17:34UTC. The user has a pending request to review this NEW repository's account-sharing conditions themselves. No conditions accepted, no new token requested, no archive/labels downloaded. The card reports identical original train/test CSVs and no official split, so a source/label/identity/duplicate/split audit must precede training. Existing approved Iqra access still works. Do not keep sweeping the rejected head or call reused expert data fresh validation.
 
 ## Verified research results
 
@@ -35,15 +49,15 @@ Earlier native SWS71, complete CROTTC39-case screen, four-clip main-library pari
 
 ## Code, reports and durable artifacts
 
-- Research worktree: `/home/innocent/qari-research/native-phone-screen-20261021`, branch `research/native-phone-screen-20261021`. Prior pushed evidence commits `8907702` and `b62eb51`; new report/context snapshot follows. Draft [PR41](https://github.com/khan23153/qari/pull/41) is based on [PR40](https://github.com/khan23153/qari/pull/40). Neither is a qualified pronunciation release.
-- Reports: `docs/frozen-ssl-vowel-diagnostic-20261021.md`, `raw-vowel-quality-spike-20261021.md`, `native-guard-attrition-20261021.md`, `expert-vowel-evaluation-20261021.md`, `published-phone-screen-20261021.md`, `crottc-word-evidence-20261021.md` and `realized-phone-evidence-20261020.md`.
+- Research worktree: `/home/innocent/qari-research/native-phone-screen-20261021`, branch `research/native-phone-screen-20261021`. Prior pushed evidence commits `8907702` and `b62eb51`; latest report/context snapshot is on this branch. Draft [PR41](https://github.com/khan23153/qari/pull/41) is based on [PR40](https://github.com/khan23153/qari/pull/40). Neither is a qualified pronunciation release.
+- Reports: `docs/fastconformer-phone-feasibility-20261021.md`, `docs/frozen-ssl-vowel-diagnostic-20261021.md`, `raw-vowel-quality-spike-20261021.md`, `native-guard-attrition-20261021.md`, `expert-vowel-evaluation-20261021.md`, `published-phone-screen-20261021.md`, `crottc-word-evidence-20261021.md` and `realized-phone-evidence-20261020.md`.
 - Artifact root: `/home/innocent/qari-training-artifacts/`. Current packets: `ssl-vowel-quality-20261021/` (frozen protocol/sourcepack, checkpoint, compressed source vectors, `CPU-output-verified.json`) and `ssl-vowel-expert-20261021/` (original protocols/predictions, `primary-audit-failure.json`, `native-confidence-divergence.json`, `decision-equivalence.json`, separately frozen `posthoc-plan.json` / `posthoc_reanalysis.py`, `posthoc-expert-results.json` and private case details).
 - Earlier packets: `raw-vowel-quality-20261021/`, `native-guard-attrition-20261021/`, `iqra-expert-eval-20261021/`, `iqra-human-phone-20261020/`, `published-phone-screen-20261021/`, `crottc-if-screen-20261021/`, `crottc-if-reference-20261021/`, `phonetic-evidence-20261020/`. Old `/tmp/qari-*` packets/worktrees and `published-phone-audit-20261021/` are missing; cause unknown. Preserve their original branches/commits and do not treat historical paths as available.
-- All remote jobs are terminal. Actual latest kernels: `telethonfool/qari-frozen-ssl-vowel-quality-20261021` and `telethonfool/qari-ssl-vowel-expert-20261021`, each v1. No new APK or background training is pending. Heavy weights never loaded on the VPS in these runs.
+- Earlier remote jobs are terminal. Earlier kernels: `telethonfool/qari-frozen-ssl-vowel-quality-20261021` and `telethonfool/qari-ssl-vowel-expert-20261021`, each v1. No new APK is pending. The PCD-head GPUv1 and CPUv2 runs above are terminal. Heavy teacher weights were never loaded on the VPS in these runs; the existing 172 MB production encoder was read only in a bounded separate container.
 
 ## Resources and authentication
 
-ARM64 VPS: 2 CPUs, 11.65 GiB RAM, no swap; 23 GiB disk free / 54% used at 16:04 UTC. Production uses about 1,007 MiB of its 6 GiB limit. Bounded CLI container `qari-research-cli-20261021` has 1 GiB RAM / .5 CPU, with `/home/innocent/qari-research/cli-deps` and private token-file mount; it does not contain Torch. Research model execution was on the existing free private T4 provider.
+ARM64 VPS: 2 CPUs, 11.65 GiB RAM, no swap; 23 GiB disk free / 54% used at 17:36 UTC. Production uses about 1,007 MiB of its 6 GiB limit. Bounded CLI container `qari-research-cli-20261021` has 1 GiB RAM / .5 CPU, with `/home/innocent/qari-research/cli-deps` and private token-file mount; it does not contain Torch. Research fitting/inference used the existing free private Kaggle CPU/T4 workers; bounded native encoder extraction and tiny CTC tests ran in isolated VPS containers.
 
 GitHub `khan23153`, Kaggle `telethonfool` and HF credentials are cached privately. Never print credentials, environment dumps, OAuth codes or signed URLs; never copy tokens into context, logs, datasets or Git. Drive's earlier read-only login is preserved; the user cancelled backup/cleanup upload. No paid compute or ads. Do not falsely complete/reset the unrelated historic blocked Ad-Duha goal. The current pronunciation goal remains unresolved.
 <!-- QARI_CURRENT_STATE_END -->
@@ -1708,3 +1722,62 @@ Userresumed15:52UTC; originalv1wasCOMPLETE,413.51s/4287664KiBRSS,278+3records. D
 Original frozenaudit remainsFAILED/unchanged (confidence2e-5 criterion); labelsnot scored there. Separateposthocplan e7582e48ad5e0dfa6b9774c23037760f3d93cdb1a0dcc860a774844562a7cfc9 andownscript+11inputhashes frozenbeforeGTmetrics, peerreviewPASS. Label-free allnativeID/frame/055decision/2630ROIequivalence independentlyconfirmed. Posthocdescriptive paireddecisions:6/15missescorrectlyvetoed,0wrongdiag,9remain.16/2250eligiblecorrectvowelsfalsealarms (11/955in110correctclips,5/1295othercorrectvowelsin168errorclips),16clipsaffected incl11/110fullycorrectclips.36rawproposals=6correctrecoveries+16falsealarms+14unscored, noglobalprecisionclaim.10would-clearcases arepotentialonly, neveractuallyclearedbecauseveto cannotclear nativeerrors. Reviewerindependentlyrecounted all16falsealarms/denominators. Rejectforproduction; sourcevalidation95.64%isnotpronunciationqualification.
 
 No threshold/layer/modelretuning afterexpertinspection. Need broader independenthumanerror/correctvalidation and a justified next model approach; currentprefixgroups train10/val2arealreadydisjoint (physicalspeakeridentityunknown), so donotblameprovenspeakerleakage or reshuffletoforcepass. CurrentinspectedTestGT isreuseddiagnostic, notfreshfinaltest. Prior Iqra_train weak-label/nativeMostafamodel/ASMDDnonQuran auditsalreadyexist; do not repeat them as newhumanerrorgroundtruth or download12GB. App/backend/models/UI/guards unchanged; allGPUjobs terminal; no claimedfullfix.
+
+
+## 2026-10-21 16:37 UTC — user requests full goal; fast-encoder feasibility investigation
+
+User explicitly asks setgoal/continueuntilfullyfixed. create_goal rejected because historicalblocked Ad-Duha objectiveunfinished; not falselycompletedorreset. Broader pronunciation/falsealarm/latency/memory objective stays recorded here while authorizedworkcontinues. ExistingoldDuha still39/40 vsnewDuha40/40 inlastqualifiedevidence, so oldobjectivecannotbehonestlymarkedachieved.
+
+New question (research only, no modeltraining yet): can existingdeployedPCDacousticencoder support independentheard-phone evidence with a smallhead, avoidinglarge315Mteacherdeployment and RNNTwordpredictionprior? This differsfrom earlierWhisper/syntheticpilot and frozenWavLMvowelcrops. Pin172433955byteencoder SHA583d152c5bfd7dbfaa573319043fed4f1ef448add3f769d31b3dddf31e4e533f unchanged. Metadata inspected in no-network1536MiB/.5CPU ephemeralcontainer, peak341624KiBRSS: input[batch,80,time], output[batch,512,encodedtime], subsampling8, per_feature normalization. ProductionSherpa1.13.8 exactcommit11afbd009a7f8c08f4bcf2fc1b265d0df4670fbf confirmed; officialsourcepinsretained. InitialESTIMATEDframefeasibility original589sources:16of563train shorttargetsneedmore80msCTCframes,0of26val;factor2sufficesforallsources byestimate. Need exactfrontend/geometry/nativeparity BEFORE training; no silentdroppingexamples/upsamplingclaims/nativefine-timestamp fabrication. Artifactpacket `/home/innocent/qari-training-artifacts/fastconformer-phonetic-feasibility-20261021/`; no app/model/guard changes.
+
+
+## 2026-10-21 16:48 UTC — frontend/runtime parity blocks training
+
+Read-only exact source audit pins KNF1.22.3. First/median/last frozen train fixtures plus silence: explicit ORT1.17.1 produced same token IDs but two speech timestamps differ and log-prob deltas up to0.61865; frozen1e-4 boundFAIL. Do not train yet. Discovered Sherpa1.13.8 actually embeds ORT1.28.2 (public sherpa_onnx.onnxruntime_version), unlike PythonORT1.17.1. Pinned public C API28 bridge now tests identical installed Sherpa runtime without privateC++symbols; this isolates runtime from preprocessing. Initial parity failure preserved in frontend-parity-ort117-failed.json/runtime-investigation.json; no product change, no claim pronunciation bug fixed.
+
+
+## 2026-10-21 17:01 UTC — exact native encoder extraction verified; small CTC experiment prepared
+
+SameORT1.28.2 with approximatePythonfbankstillfails; observednativeinputfeaturesdiffer5.7e-6..2.0e-4. PublicAPI28Runrecorder captures actualnativeinput+encoderoutput withoutmodifying successfulinference. Replayingcapturedinputwithsameexactruntime gives encodermaxdelta0, exactIDs/framesall3fixedTRAINfixtures, maxlogpdelta7.54e-6<fixed1e-4. Thus approximatefrontendunqualified; exactnativefeaturescanbeusedforresearch. Recorderreviewcaughtstale/partialfilepossibility: stopped/discardedfirstcache; addedexclusivewrite/fullwrite-close/tensorcontracts/uniquemkdtemp/hashbinding, negativeexistingpathcontrol exits86 asrequired. Clean589cache completed218.56s/848488KiBRSS under2GiB/.75CPU/noswap/no-network/model-readonly. Hostaudit all589PCM/cohort/arrayhashes/exactgeometryPASS;16native80msCTCshortclips,0with2learnedslots. Nativeencoderunchanged. CacheSHA b5f7949a4f86b68beb4acf4f6ec584ec94f619e6c891e6e6b36f442eb5915c3d.
+
+Newthrowawaytestprotocol frozenbeforefit: same563train/26val(actualheardonly),512->256->142MLP,2orderedCTCslots/native80msstate,71phonealphabet,seed42/AdamW.001/60max/patience10/minvalPERthenloss,train-onlynormalization. No claimnew40msacousticresolution. ValidationZZhaszeroTRAINsupport(1of927phones),retained/countedinmetrics. GatingPER<=.15+eachshortvowelfamilyrecall>=.80onlyallowsreusedexpert278diagnostic,NOTproductionqualification. FivehelpertestsRED->GREEN,packetcompiles/ARMguardPASS. Privatefeatureinputuploadstarted; trainingawaitingindependentreview/notyetsubmitted. Liveapp/models/guards/UIunchanged.
+
+
+PCD-head submission 2026-10-21 17:05 UTC: reviewPASS/firstprivateT4v1accepted `telethonfool/qari-pcd-phone-head-20261021` with960sprovider/900slauncher. Privateinput `telethonfool/qari-pcd-native-features-private-20261021` verifiedprivate; provider-pulledsourcebyteidentity/intendedsoleinputverified. CurrentQUEUED, noepochs. QueuedSSE500archived; reconnectsamejobwhenRUNNING, donotresubmit. OriginalNVIDIApinnedconfiginspectedusingonly1MiBHTTP206range(no459MBweights): model_config.yamlSHA c67180984ad0da0267e1f051794c05b407418fdadfed77826cfacc2409d2015b;windowHann versusnativePoveydefault. Thisisnewfrontendcompatibilityquestion, NOTprovenproductioncause/fix. Keep trainingcache/nativepipelinefrozen; donotmixfrontendchangeintothisexperiment.
+
+
+Frontendisolation 2026-10-21 17:14 UTC: pinnedEigen5.0.1normalizercompiledfromexactmathsource, all3nativeTRAINfeaturehashesandencoderhashesEXACT; all3speech+silenceIDs/framespassandlogpmax7.54e-6usingnativeORT1.28.2. SameexactfeatureswithORT1.17.1stillFAIL(token/frame/probabilitydifferences), so bothnumericnormalizationandruntimepinsneededforparity. This solvesofflinefrontendidentityonly, NOTpronunciationaccuracy. Headv1stillQUEUED; firstSSE500notmodelerror. IndependentHann-only3existingheldrecordingprobeisrunningwithsameexactEigen/nativeORT, noGTdecoderinput/noheadtrainingchange. Originalaudiofilesavailabledespitemissingoldworktrees; hashespinnedinwindow-probe-protocol.json. Fullclipwindowdiagnosticdoesnotestablishlive40/40orcursorguards.
+
+
+## Additional human pronunciation data — 2026-10-21T17:19:52.656473+00:00
+
+The paper's original L2-KSU GitHub link returns 404. The publisher's HF repository is `IWAN/L2-KSU-Dataset`, revision `ca2331a38af06e3348feb3ffd2376953cdc10ce5`. Its card describes 4,094 WAV files, 4,098 TextGrids and an 818-row actual-versus-canonical annotation table. It also says the original train/test CSVs were identical and supplies no official split. Source identity, realized-label semantics, speaker/content separation and duplicate audio must be audited before fitting or claiming independent evaluation.
+
+The authenticated access check returns 403. The agent did not accept conditions. An asynchronous question asks the user to review this new dataset's account-sharing conditions themselves; no new token is requested. Existing Iqra access remains approved and work continues. Metadata lists CC-BY-NC-ND-4.0; this note is not legal clearance. No archive or annotation CSV downloaded. Sources: https://huggingface.co/datasets/IWAN/L2-KSU-Dataset and https://doi.org/10.1007/s10791-024-09489-8 .
+
+
+## CPU execution fallback prepared — 2026-10-21T17:23:32.395722+00:00
+
+T4 kernel `telethonfool/qari-pcd-phone-head-20261021` v1 has stayed QUEUED for approximately 20 minutes, with no epochs or fitting outputs observed. To make progress, a separate free remote CPU execution is prepared in `/home/innocent/qari-training-artifacts/fastconformer-phonetic-cpu-20261021/`, not on the VPS. `pre-fit-CPU-fallback-decision.json` declares CPU as the primary experiment decision before predictions; any eventual GPU result is supplementary, not a way to select whichever model performs better on expert data.
+
+Architecture, original data/split, seed, optimizer, stopping/selection and validation gates are unchanged. Device/RNG trajectories may differ and no training-trajectory equivalence is claimed. Five tests, compilation and host-context guard pass; independent delta review is pending before CPU submission. Original GPU source/cache remains frozen. Both execution states must be monitored and recorded; no automatic deployment.
+
+
+CPU fallback 2026-10-21T17:25:23.516486+00:00: reviewed, accepted first privateCPUv1 `telethonfool/qari-pcd-phone-head-cpu-20261021`, explicit960s provider/900slauncher. Actual RUNNING; source byteidentity, private, GPU=false, sole original private feature input verified. Live SSE connects to sameCPUv1. OriginalGPUv1lastQUEUED, unchanged. CPUprimarydecision was frozen before fitting; no head selection across devices.
+
+
+## CPU v1 implementation failure and regression repair — 2026-10-21T17:29:49.555676+00:00
+
+The CPU job started, then stopped at the first CTC-loss call: `RuntimeError: input_lengths must be of size batch_size`. Root cause was the experiment script passing `(log_probs, input_lengths, targets, target_lengths)` to `nn.CTCLoss`, whose second argument must be targets. This is an implementation bug missed by the earlier helper tests/review, not model accuracy or OOM. No gradient update, epoch event, learned checkpoint or validation result exists. Preserve `fastconformer-phonetic-cpu-20261021/output-v1/failure.json`, runtime log and `archive-v1/` source.
+
+CPU v2 now routes both fitting and evaluation through keyword-bound `ctc_objective`. Real Torch tests reproduce the old failure, then pass against exhaustive CTC path probability, zero padded-frame gradient and preserved infinite loss for an impossible repeated target. All seven local research tests pass in an isolated 1,536 MiB/.5-CPU/no-network container; no model weights loaded. The next launcher embeds and runs those two real CTC tests on the remote runtime before fitting. Data, architecture, optimizer, stopping and validation gates are unchanged. Independent delta review is pending before v2 submission. Original T4 v1 remains queued and has the same known old loss-order bug; it is not a candidate.
+
+
+CPUv2 2026-10-21T17:31:43.463406+00:00: independent repairreviewPASS, same privateCPUkernel version2accepted, actualRUNNING. Provider-pulledsourcebyteidentity/private/CPU/intendedinputverified. EmbeddedrealTorchCTCpreflight2testsPASS beforefit. First8epochs observed;validation268/927=28.91% phoneerror at8, notfinal/gatepass. RuntimeSSE `/home/innocent/qari-training-artifacts/fastconformer-phonetic-cpu-20261021/runtime-v2.log` active. Let original60max/10patienceselect minimumPER/loss; no tuning. Host verifier path changedonlyoutput-v1->output-v2 andrepinned BEFOREoutputretrieval, numericchecksunchanged. OriginalGPUv1stillQUEUED/knownoldcallbug/notcandidate.
+
+
+## Completed PCD experiment and current limitation — 2026-10-21T17:37:56.660368+00:00
+
+CPUv2 COMPLETE; best30/40,92.664s529,916KiB RSS,167,822 parameters. Native encoder frozen. Training408/23,689 (1.72%) versus validation216/927 (23.30%); short-vowel recalls152/196,54/73,31/49. All fixed validation gates fail. CPU replay all589 predictions and statistics/metrics/checkpoint/source identities pass, maxprobabilitydelta1.46e-6. No expert TestGT scoring, retuning or deployment. The gap shows poor generalization of this head/split; it does not isolate the dominant data/representation/geometry cause.
+
+Both initial runs now terminal ERROR with the same verified loss-argument bug, no gradient/epoch/checkpoint. CPUv2 preflight is verified from downloaded ctc-preflight.json (two tests on Torch2.11CPU). Original queued SSE500 and CPUv1 implementation failure remain in artifacts. All provider work is terminal; live production healthy/revision0c7562b/zero restarts/OOMfalse,23GiB free54%. Root changes remain context-only; report and research context snapshot will be committed to existing draftPR41. User's broader pronunciation goal is not complete. New L2-KSU authenticated access remains403; user self-review is pending, not assumed from elapsed time.
