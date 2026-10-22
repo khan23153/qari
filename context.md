@@ -1,6 +1,6 @@
 # Qari — working context and VPS handoff
 
-Last updated: **2026-10-18, 19:45 UTC**; runtime was rechecked healthy at19:34. Later progress is appended below. Paths refer to this VPS.
+Last updated: **2026-10-19, 06:42 UTC**. Later progress and exact evidence are appended below. Paths refer to this VPS.
 This file records verified runtime state, historical evidence and unfinished work
 separately. It contains no passwords, API tokens, OAuth codes or signing secrets.
 
@@ -27,7 +27,7 @@ work remains in its separate unqualified worktree. Summary UI source distinguish
 matched/unconfirmed words and unavailable pronunciation, but **no new APK was
 released**: existing signing certificates differ and a compatible release key is
 not configured. Existing APKs use the deployed backend without reinstalling.
-Current pronunciation investigation is isolated on `fix/acoustic-pronunciation-20261018`
+Baseline pronunciation preparation is isolated on `fix/acoustic-pronunciation-20261018`
 in `/tmp/qari-lexical-precision-20261018`. Actual public labelled audio reproduces
 false acceptance: all16 contributor-labelled vowel-error targets were matched,
 and3of8 expert-labelled incorrect full-ayah recordings were fully word-matched.
@@ -35,9 +35,20 @@ The existing native phonetic model also misses errors; it is not qualified to gr
 A new frozen-encoder CTC pilot completed40epochs on95 synthetic training clips with
 32 unseen-voice/text-group validation clips. Best synthetic phoneme error33.55%;
 this is feasibility evidence only. Corrected-cache rerun also completed40epochs with the same best33.55% error,
-510.35MiB memory peak and no OOM. Latest complete test suite: **960passed,1optional
+510.35MiB memory peak and no OOM. Pilot-stage test suite: **960passed,1optional
 skip**. All36 human inference diagnostics completed; phoneme errors remain and no
 pronunciation candidate qualifies. **No experimental model is deployed.**
+
+**Latest ongoing work:** larger private GPU phoneme experiment in
+`/tmp/qari-pronunciation-gpu-20261018`, branch`fix/pronunciation-gpu-training-20261018`,
+draftPR37 https://github.com/khan23153/qari/pull/37. Code`adadd63` (FP32fix).
+Fullsuite996passed/1skip; earlierstandaloneML/API510passed/1skip; latestGitHubCIbothpassed.
+Kaggle`telethonfool/qari-audio-only-phoneme-ctc-20261018` version2endedERROR atfirstgradientstep after8192train/512held features. Version3
+COMPLETE provedAMPoverflow andFP32stability onidenticalPCM. Version4fullFP32run
+COMPLETE:18epochs,best10,syntheticPER14.21%; human36+expert14diagnostics
+remainunqualified. Experimentalheadwasrejectedforproductiongrading. OriginalCPU held-out human features36/36ready.
+Kaggle2.2.4 CLIcontainer authenticated;30GPUhours were available at22:07.
+
 
 VPS Hugging Face authentication now works as **Shaikhaffan**, verified using the
 previously authorized credential through a hidden terminal prompt. Token file is
@@ -494,9 +505,9 @@ that is not proof of an active GPU session or current quota.
 | Google Drive CLI | `/home/innocent/.local/bin/rclone`; remote **`qari-training:`**; authenticated `rclone about` succeeded Oct18 |
 | Drive config | `/home/innocent/.config/rclone/rclone.conf`; private OAuth data; historical user-owned account verified Oct9 with readonly scope after old account disconnected |
 | Drive data | Historical folders `QariVPS-Backup` and `qari_ml`; recovered archives are in `/tmp/qari-drive-recovery-20261009/` |
-| Kaggle CLI | `/home/innocent/kaggle-cli/bin/kaggle`; not on default PATH. Current host authenticated `kernels list --mine` **failed**, so do not claim an active login |
+| Kaggle CLI | **Authenticated as telethonfool** via existing qari-conformer-kaggle-cli container, Kaggle2.2.4/Python3.12.15. Host1.7.4.5 cannot use new access tokens; use container CLI |
 | Kaggle historical account/job | **telethonfool**, e.g. `telethonfool/qari-conformer-quran-fp32-20261009`; old terminal logs exist |
-| Kaggle helper | `/tmp/qari-conformer-training-20261009/kaggle_version_status.py` reads token via hidden prompt; never place token in a shell argument or context file |
+| Kaggle helper | P4/kaggle_login_private.py uses hidden input, verifies telethonfool and caches token0600 at ~/.kaggle/access_token and CLI container private home. No credentials in job/input packets |
 | Hugging Face | Authenticated as **Shaikhaffan** on Oct18 at19:43 using hidden input; private `~/.cache/huggingface/token` mode0600. Both needed gated datasets return403 until that account receives access |
 | HF private helper | `/home/innocent/qari-training-artifacts/pronunciation-qualification-20261018/hf_login.py` uses hidden input, verifies identity and access, stores token0600; login complete, gated dataset access pending |
 | Cloudflare | Existing tokenized tunnel container is running; dashboard/CLI account login has not been independently verified here. Do not print container args/env |
@@ -828,3 +839,168 @@ pilot24pass. All40-epoch runs and36human diagnostics completed with exit0/noOOM.
 `P3/run-summary.json` and `experimental-bundle.json` index exact code/model/evidence
 identity. Complete pronunciation goal remains unfinished, candidate unqualified,
 production0c7562b unchanged. No APK or live model was released from this pilot.
+
+
+## Continued without waiting for gated data — 2026-10-18 21:54 UTC
+
+User explicitly requested continued work until full resolution. Authenticated HF
+access rechecked21:47; both corrected-label repositories remain403. Investigating
+public alternatives instead of repeating that blocker. New evidence directory:
+/home/innocent/qari-training-artifacts/pronunciation-human-data-20261018.
+
+Public QDAT-Bench (obadx/qdat_bench) revision53d7221da573b2b9e92d9542507564ae1b88fd30
+has159human recordings, one per reciter, one shared ayah (Ma'idah5:109), with
+phonetic transcript and observed madd/noon/qalqalah annotations. Metadata fetched,
+audio not downloaded yet. This is a limited-scope alternative, not a replacement
+for multi-surah word-level ground truth. Source:
+https://huggingface.co/datasets/obadx/qdat_bench .
+
+Other public Iqra mirrors contain canonical phonetizer targets and cannot
+substitute for actual erroneous spoken phones. MON3EMPASHA Arabic mispronunciation
+word dataset has binary labels but no realized phones/clear annotation provenance;
+not accepted as human-phone truth. Official Iqra trained checkpoints are615MB
+and require additional upstream dependencies; current disk free903MiB with512MiB
+reserve. Existing Muaalem FP32 graph remains but its external data weights are
+absent, so do not claim it is currently runnable. Android INT8 candidate876MB
+would violate reserve and is not downloaded. No cache/container/model data deleted.
+
+A small public candidate fryad-yaseen/quran-phoneme-ctc-tiny-v2 was downloaded
+for private diagnostic only (32914622bytes, immutable75c2dae862b8703feb75f0c9984273a343677e8d,
+sha256e00e996f9e8c2760cdb6d42e5a5b9163f0a951919d312645701e0d3421959f1d).
+Architecture inspected with weights_only=True before use; license/training
+provenance are not yet sufficient for deployment. It could test whether a
+pretrained phoneme head improves the synthetic-only pilot's human errors without
+new encoder training. Original production models and backend0c7562b unchanged.
+
+
+## Public phonetic candidate running — 2026-10-18 22:00 UTC
+
+Tiny33MBcandidate rejected before decoding because no published ID-to-phone map
+exists in its repo; never guess vocabulary order. Its newly downloaded weights
+were removed afterSHAverification, preserving metadata/rejection record to avoid
+filling VPS disk. Public TBOGamer22/wav2vec2-quran-phonetics downloaded instead:
+revision65c3ab93446f2f1041a18082433a911e5e154a9d, standard Wav2Vec2ForCTC with
+complete40-ID vocabulary, nativeblank37, Apache2.0. All weight tensors loaded
+strictly into existing runtime, no missing/random parameters. Source model trained
+on isolated Quran words, so comparing whole short ayahs against original-native
+word crops; no expected transcript enters phonetic inference.
+
+P4=/home/innocent/qari-training-artifacts/pronunciation-human-data-20261018.
+Actual probe P4/run_word_phone.py / probe_word_phone.py, container
+qari-word-phone-probe-20261018, networknone/2500MiBtotalmemory/1CPU/nice19,
+logs word-phone.log, output word-phone-results.json, resources word-phone-memory.json.
+First whole-ayah outputs are poor as expected for word-trained model; crop output
+still pending. No human correctness decisions or productionchanges made.
+Model377635736bytes; disk530MiBfree above512MiBreserve. Do not download another
+model or corpus while this candidate occupies that reserve. Dataset source labels
+and all user recordings remain excluded from training. Needfinish/assess probe.
+
+
+## Kaggle access restored; larger training preparation — 2026-10-18 22:12 UTC
+
+The earlier Kaggle login failure was partly a tooling diagnosis error: host
+CLI1.7.4.5 lacks KAGGLE_API_TOKEN support and fails locally before contacting Kaggle.
+Existing qari-conformer-kaggle-cli container has Python3.12.15/Kaggle2.2.4/SDK0.1.37;
+the same previously authorized token authenticates correctly there as **telethonfool**.
+Legacy kernel default session isCOMPLETE (explicitversion1 returned404, not authfailure).
+Credential is now cached0600 at /home/innocent/.kaggle/access_token and inside the
+existing CLI container's private home. No token is in code, arguments, output or
+this file. Private helper P4/kaggle_login_private.py uses getpass/hiddenstdin and
+verifies the expected training account; existing differing credentials are backed
+up privately before replacement. Current authoritative CLI is the container.
+
+Actual quota query: **GPU0used/30hours remaining; TPU0used/20remaining**, refresh
+2026-10-24. No current training job is claimed started yet. Plan now scales audio-
+only frozen-original-encoder training to8192actual altered public TTS clips plus
+512heldJessica clips, with15% reference-group holdout and1536pervoice trainingcap.
+New isolated worktree /tmp/qari-pronunciation-gpu-20261018, branch
+fix/pronunciation-gpu-training-20261018, basedPR36. Written spec/plan under
+docs/superpowers/{specs,plans}/2026-10-18-gpu-phoneme-training.md. Core split and
+padding-safe temporal head tests written first; RED run inprogress. Only frozen
+original model files will be uploaded privately; no user audio or credentials.
+
+Public word-phonetic candidate probe finished36cases, exit0, peak823.40MiB/noOOM.
+Both wholeayah and original-native word crops failed to separate annotated vowel
+errors reliably (wrong andcorrect clips oftenbothdecodedkufuu). Rejected, allraw
+outputs/modelidentity retained P4/word-phone-results.json andword-phone-decision.json.
+Its newly downloaded377635736-byte weights were removed after exactSHA verification
+to reclaimdisk; metadata retained. Current originalproductionmodels untouched.
+
+
+## Larger training core verified — 2026-10-18 22:17 UTC
+
+Isolated GPUtraining branch coreTDD:17 meaningful failures to17pass. New head
+masks padding before every temporal convolution; tests prove real-frame logits
+are invariant to unrelated batch peers and poisoned padded tails, with finiteCTC
+gradients. Reference grouping unifies presentation/diacritics for leakage checks
+only; actual phoneme_mis targets retain vowels/geminates. Entire current backend
++ML+API suite **977passed,1optional skip,2warnings in54.64s**, exit0.
+Task2runner tests writtenfirst andRED inprogress. Kaggletraining stillNOTstarted;
+preparing/testingaudio-only extraction/finitecheckpointreportingbefore submission.
+
+## 2026-10-18 22:34 UTC — bounded GPU experiment submission preparation
+
+- Kaggle login is working in `qari-conformer-kaggle-cli` (Kaggle2.2.4/Python3.12); account `telethonfool`, verified30GPUhours remaining. HostCLI1.7.4.5 did not support the new token format; that was a tooling failure, not proof of bad credentials. Private cached authentication locations are documented above; no secrets are copied here.
+- Isolated branch `fix/pronunciation-gpu-training-20261018`, worktree `/tmp/qari-pronunciation-gpu-20261018`, basedPR36`efba180`. Core commit `02bb80b`; original live model and backend unchanged.
+- First full runner suite988passed/1skipped. Reviewer found one Important issue: dependency installation was outside the whole-job timeout and defaultSIGALRM bypassed failure metadata. One fix pass adds a standard-library deadline covering bootstrap and processing, bounded dependency subprocess, inherited deadline, terminal failure metadata; three real timeout/success tests pass. Focused suite31passed. Fresh reviewed whole suite991passed/1skipped,2warnings in55.11s.
+- Private frozen encoder dataset `telethonfool/qari-frozen-encoder-20261018` ready, datasetId12691275; downloaded provider metadata confirmsisPrivate=true; only five original model assets plus hash manifest are included. No learner audio or credentials. Model SHA unchanged`b47c0fc7cd202c24ad4c7816e29d06c7d37c3761c1dcc91690796227df01dfa0`.
+- Planned private kernel `telethonfool/qari-phoneme-ctc-20261018` is NOT yet submitted/training. Packet `/tmp/qari-conformer-training-20261009/phoneme-ctc-20261018`; build/decisions/tests under `/home/innocent/qari-training-artifacts/pronunciation-human-data-20261018`.
+- Research only: independently split actual synthetic altered-phone targets, frozen audio encoder, temporal CTC head; Jessica and normalized reference groups held out. Min4096train/512validation, caps8192/512/1536pervoice; no expected text decoder. Deadline7100s and provider7200s cap. No qualification or deployment claim until human-labeled errors, correct speech, original CPU encoder and guards pass.
+
+###22:37UTC — private GPU version1 running
+
+Runner commit`05f4b42` pushed; draftPR37 https://github.com/khan23153/qari/pull/37 (basedPR36). Actual provider slug differs from requested metadata id because title normalized it: **`telethonfool/qari-audio-only-phoneme-ctc-20261018`**, kernelId139498044, version1. Do not resubmit using the old requested slug. Provider source pull confirmsis_private=true, NvidiaTeslaT4, exact launcher-byte match. ActualstatusRUNNING andQARI_GPU_BOOTSTRAP_START observed22:34:50UTC; gradient training has not yet been observed. Live monitor `/tmp/qari-conformer-training-20261009/phoneme-ctc-20261018/monitor.py` and runtime-v1.log/monitor-v1.jsonl/status artifacts; submissionrecordalsoinP4. OriginalCPU encoder held-out human features are being prepared independently; model/correctness qualification remainspending.
+
+###22:40UTC — actual GPU bootstrap failure and repair
+
+Version1 endedERROR before model setup/gradients. ProviderPython3.13.15 cannot install the originally pinnedNumPy1.26.4/oldPyAV dependencies. Bounded wrapper correctly savedfailure.json; retrievedoutput-v1. This is a bootstrap compatibility failure, not an acoustic training result. Runtime repair pinsNumPy2.2.6/faster-whisper1.2.1/CT24.6.0 and requests binary wheels only. The original faster-whisper1.0.3 feature_extractor.py is preserved byte-for-byte as research module`ml/training/frozen_whisper_frontend.py`, SHA`5509a21380cc933327bcb01f1d3d2d5ee2e242a7664e672006796ed4f4491b55`, with upstreamMITlicense. Four tests RED→GREEN verify source identity and exact original mel features for silence/voice-band/impulse audio. OriginalCPU human features completed36/36 at~397MiB under1.2GBlimit; no model text decoder or GPU cache reused. Actual publicTTS source WAV checked16kmono2.61225s, so sample-rate selection is applicable. Fresh whole suite and version2submissionpending.
+
+###22:44UTC — GPU version2 feature extraction verified
+
+Runtime repair commit`06dca92`, test-only successor`06c6a4d`, draftPR37. Full suite995passed/1skipped54.17s; final standaloneML/API510passed/1skipped5.61s, frontend tests also work around legacy optional-ASR stubs. Version2source pull confirms privateT4 and exact launcher-byte match. ActualGPU_SETUP22:42UTC verified frozenmodelSHA and originalfrontendSHA, CUDA0/int8_float32, Torch2.11.0+cu128, NumPy2.2.6, CT24.6.0, faster-whisper1.2.1, datasets3.6.0, soundfile0.13.1. Feature bundle`cc9601b43926b4b9b46049d13ccb543d2e29f0b125b5256248e8ae69776fa0a9`; originalCPU runtime is intentionally distinct and must be evaluated separately. Public source streaming and actual batch feature extraction observed (256trainclips29.9s), no decoder. No gradient/accuracy claim yet. Monitor now uses default current session because explicitversion_label='2' returned404 despite current sessionRUNNING; old observer stopped and one current monitor retained. Generic Kaggle preinstalled package conflicts were pip warnings; setup and features succeeded.
+
+## 2026-10-19 05:55 UTC — resumed actual terminal result and precision investigation
+
+Version2 endedERROR at2026-10-18 23:00:24UTC, after preparing8192train/512heldJessica clips across6trainingvoices. No successful epoch/checkpoint was produced. Failure.json andsource-manifest/feature-identity retrieved under `/tmp/qari-conformer-training-20261009/phoneme-ctc-20261018/output-v2`. Strictfinite-gradient clipping rejected nonfinite gradients at first training step; loss-scaling/FP16overflow is the hypothesis, not yet proven. Guard remains enabled.
+
+Local regression: caller autocast contaminated CTC training (initial RED: inference cached tensor error; forward-only disable still changed validation loss); whole forward/backward/optimizer FP32 wrapper passes12focusedtests. No arbitrary error suppression, zero_infinity remainsfalse. Fullsuitepending. Version3 is a private900sT4 diagnostic (not full training), comparing originalAMP vsFP32 on the same16 shuffled first-step publiccaseIDs and44-token vocabulary. It verifies each clip's actual floatPCM SHA against version2 before encoding. DiagnosticlauncherSHA`79e7e7dbc3c8b0fce4cbc395107f893ec1b1fa3dfcd0c342c1e967943ef1ebf3`; script/monitor/artifacts underP4 andprivatepacket.
+
+Public canonical phone-reference columns were read without audio download using bounded HTTP range reads:3554unique references,3669885networkbytes from firstpinnedIqra_TTSshard; foundIkhlas112:3reference. This is expected-reference text only, not human spoken-phone truth. OriginalCPUhumanfeatures36ready. No experimental model deployed; original backend unchanged.
+
+### 2026-10-19 05:58 UTC — FP32 regression verification
+
+Commit`adadd63` pushed toPR37. Full996passed/1skipped54.80s. Version3actualGPUbootstrap succeeded; all16first-batch publicPCM hashes verified exactly againstversion2metadata. AMP/FP32 numerical comparison nowinprogress. Both publiccorehealth andlocalrecitationhealth200, originalproductionimageunchanged, recitationhealthy/0restarts/0OOM.
+
+### 2026-10-19 06:04 UTC — numerical root cause verified, full FP32 run active
+
+Version3COMPLETE. Same16publicPCM recordings verified against version2: AMPFP16 loss14.0669918060 finite, initialscale65536, exactly9nonfinitegradientvalues, clipping rejected update; FP32 loss14.0673179626 finite,0nonfinitegradientvalues, norm14.10006237, optimizerstepcompleted. Saved`output-v3/precision-diagnostic.json`. Thus training-start failure was actualFP16gradientoverflow under initialloss scaling; it is separate from the original pronunciation false acceptance. No finite/confidence/speech guard was disabled. LatestGitHubCI39207109634 and39207104753 passed foradadd63.
+
+Version4privateT4 fullFP32 run submitted, actualGPU_SETUP and feature extraction observed, pulledprovider sourcebyte-identical andprivate. Featurebundle`11b823a007f037a6f61fa6081758b0a1937b4d2bd20266689042787c352a7a32`. Monitor_v4.py/runtime-v4.log active. No training epoch/qualification result yet.
+
+HFauth-check rechecked2026-10-19: correctedhuman datasetsIqra_Extra_IS26 andIqraEval_Test_GT still403. No newcredentialrequested. A separate publicmodel candidate`MostafaMaroof/wav2vec2-arabic-phoneme-asr` revision`0a32c641aaaeec6957e41a794add52e024e46b50` (315Mparameters/1262135432-byte safetensors, SHA`582149e3e913a0fc7f29c116530e0b1b6ae7a7ab23eef4efc3fc2acc760e2b75`) is being tested privately without alteringoriginalmodels. Weightdownload goes to ephemeralRAMtmpfs,4GiBhardmemory/3.5GiBsoftstop,0.75CPU,1200stimecap, exacthash/nativevocab/blank/processor/strictmetadeviceload. Sourcecardclaim14.4%syntheticphoneerror is not Qari qualification. Metadata/helpers/logs underP4arabic-phone-*; no output verdict invented.
+
+### 2026-10-19, 06:10 UTC — held-out evaluation preparation
+
+OriginalCPU feature caches now include36contributor-labelledIkhlas clips and14expert-labelledmulti-surah utterances (`human-cpu-feature-manifest.json`, `expert-cpu-feature-manifest.json`), allheldout/no training. Expertlabelsareutterancelevelonly, no inventedword-errorlocations. Public315MArabicphonememodel weights/native80-token vocabulary/blank77/strictmetadeviceload verified; actualRAM~1.5GiBunder4GiB, no diskweightcopy. Its early free-phone transcripts disagree with labelledcorrect clips too; do not assume mismatches are speaker errors. Bounded36clipcomparison stillrunning. Canonicalreference-only Iqra columnscan reached11,008,302networkbytes across3shards, foundIkhlasayah2–4;180sdiagnostictimeoutstoppedfurtherreads, no rawaudio downloaded. Canonicalphone strings containpausing/phoneticconventionissues and are NOT human realized-phone groundtruth. MON3EMPASHAmetadata shows100commonArabicwords/children-speaker folders and_Nsuffixlabels; sourceappearsASMDD/MSAdialogue, not Quranwordphone annotations. Do not use it to claim Quranqualification.
+
+### 2026-10-19 06:14 UTC — larger public phoneme recognizer rejected after complete bounded diagnostic
+
+MostafaMaroof315M candidate completed36/36held-outcontributor-labelledclips plusnativewordcrops, exit0, noOOM/no3.5GiBsoftstop. ProcesspeakRSS1819604KiB; sampledcgrouppeak1688.58MiB under4GiBcap. Five labellederror clips produceexactlythesamefree-phone text ascorrectclips(sameayah);4correctclips participateincollisions. This demonstratesphone-text-only matchingcannotseparatethese observedclasses; it doesNOT measure a calibratedposterior/GOPclassifier orprovewhatthereciteractuallysaid. Medianwhole-clipRTF2.2469 at0.75CPUcap. No humanrealized-phonegroundtruth wasinvented. Decisionnopromotion, qualifiedfalse. ExactpinnedweightswereRAM-onlyanddisappearedoncontainerexit; originalmodelsuntouched. P4`arabic-phone-results.json`, `arabic-phone-readiness.json`, `arabic-phone-decision.json`, logs/memory/exit andsourcepinsretained.
+
+Version4stillRUNNINGwithfeatures>5500train; no successfultrainingepochyet. OriginalCPUhuman36+expert14featuresreadyforitshead.
+
+## 2026-10-19, 06:42 UTC — completed GPU experiment; pronunciation goal still open
+
+**No experimental model was deployed.** Version4terminalCOMPLETE at06:30:23UTC. It trained18epochs (earlystopafter8unimproved), bestepoch10, 8192TTSalteredclips/512Jessicaheldclips,6trainingvoices. BestsyntheticPER0.14205191594561187; trainingphase477.53s. Native44-token vocabularyincludingblank0, no unknownheldphones. FP32retainsfinitegradientguard; no textdecoder/oracle. HeadSHA`e419a176420196d0ee5004ed781f8fc99ecf214f6517ee574c4c30cafb6f2115`,1.1MiB. Privateoutputfolder `/tmp/qari-conformer-training-20261009/phoneme-ctc-20261018/output-v4` holdshead,report,512bestpredictions,source-manifestandfeatureidentity(~9MiBtotal). This is a researchcheckpoint, not a releasemodel.
+
+Completed originalCPU/INT8 evaluation:36contributor-labelledhumanclips +14expert-labelledutterances. Outputs oncorrect-labeledspeechare not reliableenough to serve as phonemic grading. No humanphonemePER, pronunciationaccuracy, or successfulworderrorgradingwasinvented; all50statusesremainunassessed. Zero exactgreedyclasscollisions innewhead doesNOT meanzeroerrors (noisyuniquetranscriptscanavoidcollisions). Recordednative20msframeposteriorswithfilehashes underP4`gpu-human-posteriors` and`gpu-expert-posteriors`; observation/decisionJSONsretainheadandfrontendidentity. Medianheadforward+posteriorcalculation57.43ms at0.5CPUcap, excludingencoderandfileIO; liveappdelaynotmeasuredbythisofflinefigure.
+
+Matchedbackendcomparison:32identicalpublicheldTTSwaveforms/1256actualsyntheticphones. CPU14.2516%PER vsGPU14.1720%PER (difference0.0796percentagepoints);23/32decodedsequencesidentical. OriginalCPUfeaturePCM/sha/nativeframessourcevalidatedagainstfinalv4manifest. ThuslargeCPU/GPUportregressionwasnotobservedonthislimitedsubset; likelysynthetic-to-natural domaingapisaseparate concern, not a provenhumanphonemeerrorrate. SeeP4`portability-report.json`, `portability-cpu-feature-manifest.json`, `portability-cases.json`.
+
+Three model-only controls (2ssilence,belowenergy sine,white-noise) returnedblankphones. ThisdoesNOT exerciseappmatchercursor/WS; unchangedproduction'searlier9publicWSchecksremainseparateevidence. Currentproductionhealthrechecked06:40UTC:corepublic200/localrecitation200,recitationhealthy0restarts0OOM,imageunchanged`sha256:1c93eb3220a3dd980d3d7269e9eb6fcc9fa9731c0bb260dc0b54c420c7e58d57`. Main/streaming_sessionactualsourcehashesstillmatchdeployed0c7562. BoundedDockerlogwindowafter00:00UTCcontained0lines, thereforeitdoesnotverifynewliverecitationaccuracy.
+
+Finalengineeringtests996passed/1skip; bothGitHubCI39207109634/39207104753passedoncode`adadd63`. PR37staysdraft; rootproductioncode/UI/originalmodelsunchanged. Rootcontext.mdandtrainingworktreecopyupdated; preserveallworktrees/privateartifacts. Currentusergoal **fully fixing pronunciation is NOT complete**.
+
+**Next dependency:** correctedhumanrealized-phone/errorlabels. HFauthworksbutIqra_Extra_IS26andIqraEval_Test_GTstill403at06:41UTC; userwasaskedviaasyncrequesttorequest/acceptaccessinthesameShaikhaffanaccount. No newtokenneeded. PublicIqra_train revision`02f9863194faa8aab2de7896c936a6f1f1a55138` wasaudited:71,391train/2588dev,phoneme_ref/phoneme_aug,mostlycanonicalweaklabelsfromMSA/Quran. Sourcepaperexplicitlyassumesvowelizationmatchesaudioandacknowledgesnativevowel deviations. Do NOTrelabeltheseautomaticreferencephonesasactuallearnererrorannotationsortrainincorrectspeechwithcanonicaltargetstoforcepasses. Furtherdatarecipesmustdeclareweaksupervision; theycannotreplacehumanqualification.
+
+Afterlegitimateaccess:pinandinspectschemas,keeptestGT/userrecordingsheldout,trainwithactualspokenphonesfrompropertrainpart,validateword-errorfalseaccepts/falsealarmsacrossrequiredvoices/surahs/kinds. Onlyahumanqualifiedmodelmayintegratewithoriginalspeech/confidence/cursorguards; re-runactualrecitationcontrolsanddeployusingexistingconfigafterthat. No promisesofallpronunciationerrorsbeingfixedfromsyntheticPER. Fullresearchdecision:P4`final-experiment-decision.json`.
