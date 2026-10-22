@@ -229,12 +229,37 @@ _NON_ARABIC = _re.compile(r"[^\u0621-\u064A\u0660-\u0669\u066E-\u06D5\u06DE\u06E
 _MULTI_SPACE = _re.compile(r"\s+")
 
 
-def _normalize(text: str) -> str:
+from functools import lru_cache as _lru_cache
+
+
+@_lru_cache(maxsize=1)
+def _published_spelling_manifest():
+    """Immutable independently attested representations; never ASR guesses."""
+    import json
+    from pathlib import Path
+    path = Path(__file__).resolve().parents[1] / 'data' / 'published_word_spellings.json'
+    return json.loads(path.read_text(encoding='utf-8'))
+
+
+@_lru_cache(maxsize=1)
+def _published_raw_spellings():
+    return {row['uthmani']: row['imlai']
+            for row in _published_spelling_manifest().get('raw_spellings', [])}
+
+
+def _normalize(text: str, *, use_published_spelling: bool = True) -> str:
     if not text:
         return ""
     # Establish word boundaries and ya variants before preserving identities.
     text = "".join(" " if _unicodedata.category(c).startswith("P") else c
                    for c in text).replace("ی", "ي")
+    if use_published_spelling:
+        spellings = _published_raw_spellings()
+        text = ' '.join(spellings.get(word, word) for word in text.split())
+    # Uthmani interrogative ءَأَ contains TWO hamzas. Dropping the standalone
+    # first one merges أأتخذ (36:23) with ordinary اتخذ (2:116). A plain alef
+    # after hamza, as in ءَامَنُوا, remains the existing long-vowel spelling.
+    text = _re.sub(r"ء(?=[\u0618-\u061A\u064B-\u065F]*أ)", "ا", text)
     # At word end, maqsura already carries the long vowel. Preserve internal
     # carrier keys used by existing corpus aliases and dagger expansion elsewhere.
     text = _re.sub(
@@ -1024,11 +1049,16 @@ class StreamingRecitationSession:
         # clamped to the active ayah (+1). Without them the aligner could anchor
         # on a word several ayahs ahead and cascade SKIPPED marks over everything
         # in between (the "red wall" symptom).
+        strict_identity = self._explicit_transcriber is None and not settings.ml_use_stub
         self._matcher = StreamingMatcher(
             self.reference_words,
             ayah_boundaries=self.ayah_boundaries,
             known_error_words=_get_live_error_vocabulary(),
-            word_aliases=_get_live_word_aliases(),
+            # Legacy clean keys can erase real hamzas (يسلكم/يسألكم).
+            # Production already canonicalizes exact published printed forms
+            # before matching; legacy redirects cannot establish correctness.
+            word_aliases={} if strict_identity else _get_live_word_aliases(),
+            strict_word_identity=strict_identity,
         )
 
         if self._explicit_transcriber is not None:
