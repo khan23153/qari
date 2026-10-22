@@ -229,12 +229,37 @@ _NON_ARABIC = _re.compile(r"[^\u0621-\u064A\u0660-\u0669\u066E-\u06D5\u06DE\u06E
 _MULTI_SPACE = _re.compile(r"\s+")
 
 
-def _normalize(text: str) -> str:
+from functools import lru_cache as _lru_cache
+
+
+@_lru_cache(maxsize=1)
+def _published_spelling_manifest():
+    """Immutable independently attested representations; never ASR guesses."""
+    import json
+    from pathlib import Path
+    path = Path(__file__).resolve().parents[1] / 'data' / 'published_word_spellings.json'
+    return json.loads(path.read_text(encoding='utf-8'))
+
+
+@_lru_cache(maxsize=1)
+def _published_raw_spellings():
+    return {row['uthmani']: row['imlai']
+            for row in _published_spelling_manifest().get('raw_spellings', [])}
+
+
+def _normalize(text: str, *, use_published_spelling: bool = True) -> str:
     if not text:
         return ""
     # Establish word boundaries and ya variants before preserving identities.
     text = "".join(" " if _unicodedata.category(c).startswith("P") else c
                    for c in text).replace("ی", "ي")
+    if use_published_spelling:
+        spellings = _published_raw_spellings()
+        text = ' '.join(spellings.get(word, word) for word in text.split())
+    # Uthmani interrogative ءَأَ contains TWO hamzas. Dropping the standalone
+    # first one merges أأتخذ (36:23) with ordinary اتخذ (2:116). A plain alef
+    # after hamza, as in ءَامَنُوا, remains the existing long-vowel spelling.
+    text = _re.sub(r"ء(?=[\u0618-\u061A\u064B-\u065F]*أ)", "ا", text)
     # At word end, maqsura already carries the long vowel. Preserve internal
     # carrier keys used by existing corpus aliases and dagger expansion elsewhere.
     text = _re.sub(
@@ -956,6 +981,7 @@ class StreamingRecitationSession:
         self._pending_error_revisions: dict[int, tuple[str, int, int]] = {}
         self._pending_gap_revisions: dict[int, tuple[int, float, int, int, tuple]] = {}
         self._last_native_view = None
+        self._previous_native_view = None
         self._native_word_repairs: dict[int, dict] = {}
         self._pending_native_reanchor = None
         self._pending_error_events: dict[int, tuple[str, int, int]] = {}
@@ -1023,11 +1049,16 @@ class StreamingRecitationSession:
         # clamped to the active ayah (+1). Without them the aligner could anchor
         # on a word several ayahs ahead and cascade SKIPPED marks over everything
         # in between (the "red wall" symptom).
+        strict_identity = self._explicit_transcriber is None and not settings.ml_use_stub
         self._matcher = StreamingMatcher(
             self.reference_words,
             ayah_boundaries=self.ayah_boundaries,
             known_error_words=_get_live_error_vocabulary(),
-            word_aliases=_get_live_word_aliases(),
+            # Legacy clean keys can erase real hamzas (يسلكم/يسألكم).
+            # Production already canonicalizes exact published printed forms
+            # before matching; legacy redirects cannot establish correctness.
+            word_aliases={} if strict_identity else _get_live_word_aliases(),
+            strict_word_identity=strict_identity,
         )
 
         if self._explicit_transcriber is not None:
@@ -1295,6 +1326,7 @@ class StreamingRecitationSession:
                     self._pending_error_revisions.clear()
                     self._pending_gap_revisions.clear()
                     self._last_native_view = None
+                    self._previous_native_view = None
                     self._pending_native_reanchor = None
                     self._pending_error_events.clear()
                     logger.error(
@@ -1439,6 +1471,7 @@ class StreamingRecitationSession:
                     self._pending_error_revisions.clear()
                     self._pending_gap_revisions.clear()
                     self._last_native_view = None
+                    self._previous_native_view = None
                     self._pending_native_reanchor = None
                     self._pending_error_events.clear()
                     logger.error(
@@ -1538,6 +1571,7 @@ class StreamingRecitationSession:
                         self._pending_error_revisions.clear()
                         self._pending_gap_revisions.clear()
                         self._last_native_view = None
+                        self._previous_native_view = None
                         self._pending_native_reanchor = None
                         self._pending_error_events.clear()
                         return []
@@ -1545,6 +1579,7 @@ class StreamingRecitationSession:
                         self._pending_error_revisions.clear()
                         self._pending_gap_revisions.clear()
                         self._last_native_view = None
+                        self._previous_native_view = None
                         self._pending_native_reanchor = None
                         self._pending_error_events.clear()
                         logger.error("stream.transcribe_failed", session_id=self.session_id,
@@ -1610,6 +1645,7 @@ class StreamingRecitationSession:
                             tuple(win_confs), tuple(window_timings),
                         )
                         self._repair_anchored_native_words(native_view)
+                        self._previous_native_view = self._last_native_view
                         self._last_native_view = native_view
                         # Stitching validated the complete native window first.
                         # Copy only proven corrections into its retained prefix;
@@ -1622,6 +1658,7 @@ class StreamingRecitationSession:
                         self._pending_error_revisions.clear()
                         self._pending_gap_revisions.clear()
                         self._last_native_view = None
+                        self._previous_native_view = None
                         self._pending_native_reanchor = None
                         self._pending_error_events.clear()
                         logger.error("stream.transcribe_failed", session_id=self.session_id, error=str(exc))
@@ -1888,6 +1925,86 @@ class StreamingRecitationSession:
                 logger.info('stream.native_word_repaired', word_index=index,
                             confidence=round(evidence['confidence'], 3), endpoints=evidence['endpoints'])
 
+        self._repair_anchored_native_spans(current)
+
+    def _repair_anchored_native_spans(self, current) -> None:
+        """Recover 2–3 adjacent gaps using their original outside anchors."""
+        import math
+        from ml.alignment.native_evidence import prove_native_span_repair
+        from ml.alignment.streaming_matcher import WordStatus
+
+        delegate = getattr(self._matcher, '_delegate', self._matcher)
+        repair = getattr(self._matcher, 'repair_native_span', None)
+        if (repair is None or self._last_native_view is None or self._is_stub
+                or EVIDENCE_POLICY != 'tier2' or _live_asr_engine() != 'fastconformer_rnnt'):
+            return
+        states = {state.index: state for state in getattr(delegate, '_resolved_states', [])}
+        slots = getattr(delegate, '_live_hyp_indices', {})
+        identity = lambda word: delegate._word_aliases.get(word, word)
+        threshold = getattr(delegate, 'live_confidence_threshold', .55)
+        unresolved = (WordStatus.SKIPPED, WordStatus.ERROR)
+        for left, before in sorted(states.items()):
+            if before.status != WordStatus.MATCHED:
+                continue
+            right = left + 1
+            while right in states and states[right].status in unresolved and right - left <= 3:
+                right += 1
+            count = right - left - 1
+            after = states.get(right)
+            if (not 2 <= count <= 3 or after is None or after.status != WordStatus.MATCHED
+                    or any(not anchor.spoken or not math.isfinite(anchor.confidence)
+                           or not threshold <= anchor.confidence <= 1
+                           or identity(anchor.spoken) != identity(anchor.expected)
+                           for anchor in (before, after))):
+                continue
+            first_slot, last_slot = slots.get(left), slots.get(right)
+            if (first_slot is None or last_slot is None
+                    or not 0 <= first_slot < last_slot < getattr(self._matcher, '_hyp_cursor', 0)
+                    or last_slot >= min(len(self._hypothesis), len(self._hypothesis_timings))
+                    or self._hypothesis[first_slot] != before.spoken
+                    or self._hypothesis[last_slot] != after.spoken):
+                continue
+            proof = prove_native_span_repair(
+                self._last_native_view, current,
+                expected=[states[index].expected for index in range(left, right + 1)],
+                before_span=self._hypothesis_timings[first_slot],
+                after_span=self._hypothesis_timings[last_slot],
+                identity=identity, threshold=threshold, sample_rate=self.sample_rate,
+                total_samples=self._total_samples, right_context_seconds=LIVE_RIGHT_CONTEXT_SEC,
+            )
+            if proof is None:
+                continue
+            # The whole target run is resegmented atomically. Its native frames
+            # cannot belong to a surviving match/error outside these anchors.
+            used = []
+            for other_index, other in states.items():
+                if left <= other_index <= right or other.status not in (WordStatus.MATCHED, WordStatus.ERROR):
+                    continue
+                slot = slots.get(other_index)
+                if slot is not None and 0 <= slot < len(self._hypothesis_timings):
+                    used.append(self._hypothesis_timings[slot])
+                prior = self._native_word_repairs.get(other_index)
+                if prior:
+                    used.append(prior['spans'][1])
+            if (any(not all(math.isfinite(value) for value in bounds) for bounds in used)
+                    or any(max(begin, used_begin) <= min(end + .08, used_end + .08) + 1e-5
+                           for begin, end in proof['spans'][1:-1]
+                           for used_begin, used_end in used)):
+                continue
+            if not repair(left + 1, proof['words'], proof['confidences']):
+                continue
+            for offset, (word, score) in enumerate(zip(proof['words'], proof['confidences']), start=1):
+                index = left + offset
+                # Keep each repaired word at spans[1], preserving the existing
+                # one-word provenance contract used by later ownership checks.
+                self._native_word_repairs[index] = {
+                    'word': word, 'confidence': score, 'endpoints': proof['endpoints'],
+                    'previous_spans': proof['previous_spans'][offset-1:offset+2],
+                    'spans': proof['spans'][offset-1:offset+2],
+                }
+                logger.info('stream.native_span_word_repaired', word_index=index,
+                            confidence=round(score, 3), endpoints=proof['endpoints'])
+
     def _revise_supported_timed_errors(
         self, window_words, window_confs, window_times, *, window_start,
         window_seconds, right_context_seconds, endpoint_samples,
@@ -1924,6 +2041,7 @@ class StreamingRecitationSession:
             self._pending_error_revisions.clear()
             self._pending_gap_revisions.clear()
             self._last_native_view = None
+            self._previous_native_view = None
             self._pending_native_reanchor = None
             self._pending_error_events.clear()
             return
@@ -2073,6 +2191,7 @@ class StreamingRecitationSession:
         except (ValueError, TypeError):
             self._pending_gap_revisions.clear()
             self._last_native_view = None
+            self._previous_native_view = None
             self._pending_native_reanchor = None
             self._pending_error_events.clear()
             return
@@ -2308,6 +2427,101 @@ class StreamingRecitationSession:
         # this audit rather than becoming independent final evidence.
         return True
 
+    def _repair_final_native_words(self, states, native):
+        """Keep two stronger original views of an uncertain final token.
+
+        Only the SAME weak, correctly decoded token between globally unique
+        final anchors qualifies. No new recognition, cursor progress, word
+        substitution, or unsupported omission can become evidence here.
+        """
+        import math
+        from collections import Counter
+        from ml.alignment.native_evidence import prove_native_word_repair
+        from ml.alignment.streaming_matcher import WordState, WordStatus
+
+        previous, current = self._previous_native_view, self._last_native_view
+        if (self._is_stub or self._explicit_transcriber is not None
+                or EVIDENCE_POLICY != 'tier2' or _live_asr_engine() != 'fastconformer_rnnt'
+                or previous is None or current is None or native is None
+                or current[1] != self._total_samples or not hasattr(native, 'timings')):
+            return states
+        delegate = getattr(self._matcher, '_delegate', self._matcher)
+        identity = lambda word: delegate._word_aliases.get(word, word)
+        threshold = getattr(self._matcher, 'live_confidence_threshold', .55)
+        words, scores, times = native.words, native.confidences, native.timings
+        try:
+            if not len(words) == len(scores) == len(times):
+                return states
+            last_begin = -1.
+            for word, score, (begin, end) in zip(words, scores, times):
+                if (not isinstance(word, str) or not word
+                        or not all(math.isfinite(v) for v in (score, begin, end))
+                        or not 0 <= score <= 1 or not 0 <= begin <= end <= self.duration_seconds + .08
+                        or begin < last_begin):
+                    return states
+                last_begin = begin
+            reference = [identity(word) for word in self.reference_words]
+            keys = [identity(word) for word in words]
+            ref_counts, native_counts = Counter(reference), Counter(keys)
+            by_index = {state.index: state for state in states}
+            limit = min(len(reference), int(self._matcher.max_live_words))
+            for index in range(1, limit - 1):
+                if index in by_index:
+                    continue  # Never erase a supported error or prior match.
+                triple = reference[index - 1:index + 2]
+                if (len(set(triple)) != 3
+                        or any(ref_counts[word] != 1 or native_counts[word] != 1 for word in triple)):
+                    continue
+                anchors = [by_index.get(index - 1), by_index.get(index + 1)]
+                if any(anchor is None or anchor.status != WordStatus.MATCHED
+                       or not math.isfinite(anchor.confidence) or not threshold <= anchor.confidence <= 1
+                       or identity(anchor.spoken) != reference[anchor.index] for anchor in anchors):
+                    continue
+                left = keys.index(triple[0])
+                if (keys[left:left + 3] != triple or scores[left] < threshold
+                        or scores[left + 2] < threshold or scores[left + 1] >= threshold
+                        or any(identity(state.spoken) == triple[1] for state in states if state.spoken)):
+                    continue
+                proof = prove_native_word_repair(
+                    previous, current, expected=triple,
+                    before_span=times[left], after_span=times[left + 2],
+                    identity=identity, threshold=threshold, sample_rate=self.sample_rate,
+                    total_samples=self._total_samples, right_context_seconds=LIVE_RIGHT_CONTEXT_SEC,
+                )
+                if proof is None:
+                    continue
+                old, new = times[left + 1], proof['spans'][1]
+                if (abs(old[0] - new[0]) > .4 + 1e-5
+                        or max(old[0], new[0]) > min(old[1] + .08, new[1] + .08) + 1e-5):
+                    continue
+                # A different recognized word can already own these frames.
+                # Preserve live ownership even if final alignment changed its
+                # text; prior native repairs may have no hypothesis slot.
+                owners = {state.index: state for state in getattr(delegate, '_resolved_states', [])}
+                owners.update(by_index)
+                slots = getattr(delegate, '_live_hyp_indices', {})
+                used = []
+                for other_index, other in owners.items():
+                    if (other_index in (index - 1, index, index + 1)
+                            or other.status not in (WordStatus.MATCHED, WordStatus.ERROR)):
+                        continue
+                    slot = slots.get(other_index)
+                    if slot is not None and 0 <= slot < len(self._hypothesis_timings):
+                        used.append(self._hypothesis_timings[slot])
+                    prior = self._native_word_repairs.get(other_index)
+                    if prior:
+                        used.append(prior['spans'][1])
+                if (any(not all(math.isfinite(v) for v in bounds) for bounds in used)
+                        or any(max(new[0], a) <= min(new[1] + .08, b + .08) + 1e-5 for a, b in used)):
+                    continue
+                by_index[index] = WordState(index, self.reference_words[index], WordStatus.MATCHED,
+                                            proof['word'], proof['confidence'])
+                logger.info('stream.final_native_repair', session_id=self.session_id,
+                            word_index=index, confidence=proof['confidence'], endpoints=proof['endpoints'])
+            return [by_index[index] for index in sorted(by_index)] if len(by_index) > len(states) else states
+        except (ValueError, TypeError, IndexError, OverflowError):
+            return states
+
     async def finalize(self) -> dict:
         """End the session: persist audio + build the final result blob."""
         from ml.alignment.streaming_matcher import WordStatus
@@ -2316,6 +2530,7 @@ class StreamingRecitationSession:
         use_recording_evidence = not self._is_stub and independent_finalizer is not None
         final_words: list[str] = []
         final_confs: list[float] = []
+        final_native = None
 
         # A fresh native suffix may audit already independent live witnesses.
         # Otherwise retain the independent full-recording review. Stitched text
@@ -2325,9 +2540,10 @@ class StreamingRecitationSession:
             try:
                 audio = self._decode_float()
                 if _rms_energy(audio) >= SILENCE_RMS_THRESHOLD:
-                    words, confs = await asyncio.to_thread(
+                    final_native = await asyncio.to_thread(
                         _independent_recording_transcriber, audio, self.sample_rate
                     )
+                    words, confs = final_native
                     final_words, final_confs = list(words), list(confs)
             except Exception as exc:  # pragma: no cover - model failures
                 logger.error("stream.finalize_transcribe_failed", session_id=self.session_id, error=str(exc))
@@ -2362,6 +2578,7 @@ class StreamingRecitationSession:
 
         if use_recording_evidence:
             states = independent_finalizer(final_words, final_confs)
+            states = self._repair_final_native_words(states, final_native)
         else:
             states = (
                 self._matcher.finalize(self._last_hypothesis, self._hypothesis_confs)

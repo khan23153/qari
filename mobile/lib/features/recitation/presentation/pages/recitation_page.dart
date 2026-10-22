@@ -412,7 +412,8 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
         return _ErrorState(
           icon: Icons.mic_off_rounded,
           title: 'Microphone Access Denied',
-          message: 'Please allow microphone access in your device settings to use the recitation feature.',
+          message:
+              'Please allow microphone access in your device settings to use the recitation feature.',
           onRetry: _reset,
           theme: theme,
         );
@@ -420,7 +421,8 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
         return _ErrorState(
           icon: Icons.graphic_eq_rounded,
           title: 'Too Noisy',
-          message: 'We couldn\'t hear you clearly. Please find a quieter place and try again.',
+          message:
+              'We couldn\'t hear you clearly. Please find a quieter place and try again.',
           onRetry: _reset,
           theme: theme,
         );
@@ -428,7 +430,8 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
         return _ErrorState(
           icon: Icons.help_outline_rounded,
           title: 'Low Confidence',
-          message: _errorMessage ?? 'We couldn\'t analyze your recitation with enough confidence. Please try again in a quieter environment.',
+          message: _errorMessage ??
+              'We couldn\'t analyze your recitation with enough confidence. Please try again in a quieter environment.',
           onRetry: _reset,
           theme: theme,
           showNoRedMarks: true,
@@ -437,7 +440,8 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
         return _ErrorState(
           icon: Icons.cloud_off_rounded,
           title: 'Analysis Failed',
-          message: _errorMessage ?? 'Something went wrong while analyzing your recitation.',
+          message: _errorMessage ??
+              'Something went wrong while analyzing your recitation.',
           onRetry: _reset,
           theme: theme,
         );
@@ -452,9 +456,10 @@ class _RecitationPageState extends ConsumerState<RecitationPage>
         content: const Text(
           '1. Listen to the reference recitation\n'
           '2. Record yourself reciting the same ayah\n'
-          '3. Our AI analyzes your pronunciation\n'
-          '4. Words turn green (correct) or red (needs work)\n'
-          '5. Tap red words to compare your audio with the reference',
+          '3. AI matches the recognised words with the ayah\n'
+          '4. Green means matched; red means a word mismatch\n'
+          '5. Tap red words to compare your audio with the reference\n\n'
+          'Pronunciation and tajweed are not assessed.',
         ),
         actions: [
           TextButton(
@@ -520,10 +525,7 @@ class _IdleState extends StatelessWidget {
                   ),
                 ],
               ),
-            )
-                .animate()
-                .fadeIn(duration: 400.ms)
-                .slideY(begin: 0.05, end: 0),
+            ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05, end: 0),
 
             const SizedBox(height: 32),
 
@@ -535,9 +537,7 @@ class _IdleState extends StatelessWidget {
               style: FilledButton.styleFrom(
                 minimumSize: const Size.fromHeight(56),
               ),
-            )
-                .animate()
-                .fadeIn(delay: 200.ms, duration: 400.ms),
+            ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
 
             const SizedBox(height: 16),
 
@@ -549,9 +549,7 @@ class _IdleState extends StatelessWidget {
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size.fromHeight(56),
               ),
-            )
-                .animate()
-                .fadeIn(delay: 300.ms, duration: 400.ms),
+            ).animate().fadeIn(delay: 300.ms, duration: 400.ms),
           ],
         ),
       ),
@@ -588,9 +586,7 @@ class _ListeningState extends StatelessWidget {
               Icons.graphic_eq_rounded,
               size: 80,
               color: theme.colorScheme.primary,
-            )
-                .animate(onComplete: (c) => c.repeat())
-                .scale(
+            ).animate(onComplete: (c) => c.repeat()).scale(
                   begin: const Offset(1, 1),
                   end: const Offset(1.1, 1.1),
                   duration: 800.ms,
@@ -603,9 +599,7 @@ class _ListeningState extends StatelessWidget {
               style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w600,
               ),
-            )
-                .animate()
-                .fadeIn(duration: 300.ms),
+            ).animate().fadeIn(duration: 300.ms),
 
             const SizedBox(height: 24),
 
@@ -637,13 +631,12 @@ class _ListeningState extends StatelessWidget {
             FilledButton.icon(
               onPressed: onRecord,
               icon: const Icon(Icons.mic_rounded, size: 28),
-              label: const Text('Start Recording', style: TextStyle(fontSize: 16)),
+              label:
+                  const Text('Start Recording', style: TextStyle(fontSize: 16)),
               style: FilledButton.styleFrom(
                 minimumSize: const Size.fromHeight(56),
               ),
-            )
-                .animate()
-                .fadeIn(delay: 500.ms, duration: 400.ms),
+            ).animate().fadeIn(delay: 500.ms, duration: 400.ms),
           ],
         ),
       ),
@@ -812,12 +805,11 @@ class _AnalyzingState extends StatelessWidget {
                   strokeWidth: 4,
                   color: theme.colorScheme.primary,
                 ),
-                Icon(Icons.auto_awesome_rounded, size: 32, color: theme.colorScheme.primary),
+                Icon(Icons.auto_awesome_rounded,
+                    size: 32, color: theme.colorScheme.primary),
               ],
             ),
-          )
-              .animate(onComplete: (c) => c.repeat())
-              .rotate(duration: 2.seconds),
+          ).animate(onComplete: (c) => c.repeat()).rotate(duration: 2.seconds),
 
           const SizedBox(height: 24),
 
@@ -826,21 +818,17 @@ class _AnalyzingState extends StatelessWidget {
             style: theme.textTheme.titleLarge?.copyWith(
               fontWeight: FontWeight.w600,
             ),
-          )
-              .animate()
-              .fadeIn(duration: 400.ms),
+          ).animate().fadeIn(duration: 400.ms),
 
           const SizedBox(height: 8),
 
           Text(
-            'Our AI is checking your pronunciation and tajweed',
+            'Matching your words with the selected ayah',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
             ),
             textAlign: TextAlign.center,
-          )
-              .animate()
-              .fadeIn(delay: 200.ms, duration: 400.ms),
+          ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
         ],
       ),
     );
@@ -873,7 +861,9 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 64, color: theme.colorScheme.error.withValues(alpha: 0.5))
+            Icon(icon,
+                    size: 64,
+                    color: theme.colorScheme.error.withValues(alpha: 0.5))
                 .animate()
                 .fadeIn(duration: 400.ms)
                 .scale(
@@ -881,21 +871,15 @@ class _ErrorState extends StatelessWidget {
                   end: const Offset(1, 1),
                   duration: 400.ms,
                 ),
-
             const SizedBox(height: 24),
-
             Text(
               title,
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w700,
               ),
               textAlign: TextAlign.center,
-            )
-                .animate()
-                .fadeIn(delay: 200.ms, duration: 400.ms),
-
+            ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
             const SizedBox(height: 12),
-
             Text(
               message,
               style: theme.textTheme.bodyMedium?.copyWith(
@@ -903,10 +887,7 @@ class _ErrorState extends StatelessWidget {
                 height: 1.5,
               ),
               textAlign: TextAlign.center,
-            )
-                .animate()
-                .fadeIn(delay: 300.ms, duration: 400.ms),
-
+            ).animate().fadeIn(delay: 300.ms, duration: 400.ms),
             if (showNoRedMarks) ...[
               const SizedBox(height: 16),
               Container(
@@ -921,35 +902,32 @@ class _ErrorState extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.info_outline_rounded, size: 18,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+                    Icon(Icons.info_outline_rounded,
+                        size: 18,
+                        color:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.5)),
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(
                         'No red marks shown — we don\'t want to mislead you when unsure.',
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                          color: theme.colorScheme.onSurface
+                              .withValues(alpha: 0.5),
                         ),
                       ),
                     ),
                   ],
                 ),
-              )
-                  .animate()
-                  .fadeIn(delay: 500.ms, duration: 400.ms),
+              ).animate().fadeIn(delay: 500.ms, duration: 400.ms),
             ],
-
             const SizedBox(height: 32),
-
             FilledButton(
               onPressed: onRetry,
               style: FilledButton.styleFrom(
                 minimumSize: const Size.fromHeight(52),
               ),
               child: const Text('Try Again'),
-            )
-                .animate()
-                .fadeIn(delay: 600.ms, duration: 400.ms),
+            ).animate().fadeIn(delay: 600.ms, duration: 400.ms),
           ],
         ),
       ),

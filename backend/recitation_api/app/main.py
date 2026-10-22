@@ -179,6 +179,12 @@ class _ConservativeLiveMatcher:
             confidences,
         )
 
+    def repair_native_span(self, start, words, confidences):
+        limit = min(len(self.reference), max(0, int(self.max_live_words)))
+        if not 0 < start < start + len(words) < limit:
+            return False
+        return self._delegate.repair_native_span(start, words, confidences)
+
     def recover_native_anchor(self, index, slot, words, confidences):
         delegate = self._delegate
         saved = delegate.reference

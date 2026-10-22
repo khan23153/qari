@@ -25,6 +25,7 @@ import '../recitation_mode.dart';
 import '../recitation_review.dart';
 import '../widgets/mushaf_reveal_view.dart';
 import '../widgets/word_comparison_sheet.dart';
+import '../widgets/recitation_review_summary.dart';
 import 'recitation_history_page.dart';
 import 'verse_identifier_page.dart';
 
@@ -1392,7 +1393,8 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
         Expanded(
             child: Column(
           children: [
-            _ReviewSummary(review: review, mushaf: mushaf, theme: theme),
+            RecitationReviewSummary(
+                review: review, mushaf: mushaf, theme: theme),
             Expanded(
               child: _buildMushafPage(
                 theme,
@@ -1551,80 +1553,13 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
           'tap Stop.\n\n'
           '• The page starts blank. As the engine confirms each word you say, it '
           'appears on the page — right-to-left, like a real Mushaf.\n\n'
-          '• Mispronounced words show in red, skipped words in amber.\n\n'
+          '• Mismatched words show in red, skipped words in amber.\n\n'
           '• Circular markers between words show where each ayah ends.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Got it'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Compact score line above the review page. The score covers only the words
-/// the reciter reached; words not reached are counted, never penalised.
-class _ReviewSummary extends StatelessWidget {
-  final RecitationReview review;
-  final MushafTheme mushaf;
-  final ThemeData theme;
-
-  const _ReviewSummary({
-    required this.review,
-    required this.mushaf,
-    required this.theme,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final evaluated = review.result.wordVerdicts.length;
-    final muted = mushaf.text.withValues(alpha: 0.6);
-    final String detail;
-    if (evaluated == 0) {
-      detail =
-          'No words were recognised. Move closer to the mic and try again.';
-    } else {
-      final parts = <String>[
-        '${review.correctCount} correct',
-        '${review.mistakeCount} ${review.mistakeCount == 1 ? 'mistake' : 'mistakes'}',
-        if (review.unreachedCount > 0) '${review.unreachedCount} not reached',
-      ];
-      detail = parts.join(' · ');
-    }
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 2, 20, 10),
-      child: Row(
-        children: [
-          Text(
-            evaluated == 0 ? '—' : review.result.scorePercentage,
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: review.mistakeCount == 0 ? mushaf.text : mushaf.accent,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  detail,
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: mushaf.text,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                if (review.mistakeCount > 0)
-                  Text(
-                    'Tap an underlined word to compare',
-                    style: theme.textTheme.labelSmall?.copyWith(color: muted),
-                  ),
-              ],
-            ),
           ),
         ],
       ),

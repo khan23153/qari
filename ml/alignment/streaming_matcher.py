@@ -184,12 +184,14 @@ class StreamingMatcher:
         ayah_lookahead: int = AYAH_LOOKAHEAD,
         known_error_words: Optional[Iterable[str]] = None,
         word_aliases: Optional[dict[str, str]] = None,
+        strict_word_identity: bool = False,
     ) -> None:
         self.reference = list(reference_words)
         self._known_error_words = (
             frozenset(known_error_words) if known_error_words is not None else None
         )
         self._word_aliases = dict(word_aliases or {})
+        self.strict_word_identity = bool(strict_word_identity)
         # Final review may slice the active reference after opening alignment.
         # Keep complete selected identities for ambiguity checks and its offset
         # for the existing global ayah coordinates.
@@ -259,12 +261,30 @@ class StreamingMatcher:
         return min(reference_count, self._ayah_ranges[target][1] + 1)
 
     def _is_match(self, hypothesis: str, reference: str) -> bool:
+        return self._compare_words(hypothesis, reference,
+                                   allow_approximate=not self.strict_word_identity)
+
+    def _is_alignment_match(self, hypothesis: str, reference: str) -> bool:
+        # Similar spellings can locate speech without confirming its identity.
+        # This is never a verdict or a live anchor/revision witness.
+        return self._compare_words(hypothesis, reference, allow_approximate=True)
+
+    def _compare_words(self, hypothesis: str, reference: str, *, allow_approximate: bool) -> bool:
         if not hypothesis or not reference:
             return False
         hypothesis = self._word_aliases.get(hypothesis, hypothesis)
         reference = self._word_aliases.get(reference, reference)
         if hypothesis == reference:
             return True
+        if not allow_approximate:
+            # Production word confirmation must preserve consonants and word
+            # boundaries. Acoustic pronunciation cannot be established by
+            # edit distance, article removal or text-derived phonetic likeness.
+            # Keep only the independently established printed alef families
+            # with the same article; full-corpus aliases were applied above.
+            same_article = hypothesis.startswith('ال') == reference.startswith('ال')
+            return same_article and frozenset((self._strip_article(hypothesis),
+                                               self._strip_article(reference))) in _ALEF_SPELLING_FAMILIES
         # Quranic liaison: a word that loses its leading article inside the
         # recitation flow (e.g. reference 'صرط' spoken as the close token
         # 'الصرط') never clears the 0.80 similarity bar on its own. If the
@@ -401,6 +421,47 @@ class StreamingMatcher:
         self._resolved[index] = WordStatus.MATCHED
         return True
 
+    def repair_native_span(self, start, words, confidences) -> bool:
+        """Atomically upgrade 2–3 consumed gaps; session proves original audio."""
+        import math
+        try:
+            count = len(words)
+            end = start + count
+            states = {state.index: state for state in self._resolved_states}
+            if (not 2 <= count <= 3 or len(confidences) != count
+                    or not 0 < start < end < min(self._cursor, len(self.reference))
+                    or self._resolved.get(start - 1) != WordStatus.MATCHED
+                    or self._resolved.get(end) != WordStatus.MATCHED):
+                return False
+            for index, word, score in zip(range(start, end), words, confidences):
+                if (index not in states
+                        or self._resolved.get(index) not in (WordStatus.SKIPPED, WordStatus.ERROR)
+                        or states[index].status not in (WordStatus.SKIPPED, WordStatus.ERROR)
+                        or not math.isfinite(score) or not self.live_confidence_threshold <= score <= 1
+                        or not self._is_match(word, self.reference[index])):
+                    return False
+            for index, word, score in zip(range(start, end), words, confidences):
+                states[index].status = WordStatus.MATCHED
+                states[index].spoken = word
+                states[index].confidence = score
+                self._resolved[index] = WordStatus.MATCHED
+            return True
+        except (TypeError, ValueError, IndexError, OverflowError):
+            return False
+
+    def _reuses_completed_phrase(self, index, words) -> bool:
+        """An earlier reading cannot identify a jump across an unheard gap."""
+        if index <= self._cursor or len(words) < 2:
+            return False
+        identity = lambda word: self._word_aliases.get(word, word)
+        phrase = tuple(identity(word) for word in words)
+        for start in range(self._cursor - len(phrase) + 1):
+            if (all(self._resolved.get(start + offset) == WordStatus.MATCHED
+                    for offset in range(len(phrase)))
+                    and tuple(identity(word) for word in self.reference[start:start + len(phrase)]) == phrase):
+                return True
+        return False
+
     def recover_native_anchor(self, index, slot, words, confidences) -> bool:
         """Resume at two independently timed anchors inside the existing reach.
 
@@ -415,7 +476,8 @@ class StreamingMatcher:
                 or self._resolved.get(self._cursor - 1) != WordStatus.MATCHED
                 or not self._cursor < index < ceiling - 1
                 or not self._hyp_cursor <= slot < min(len(words), len(confidences)) - 1
-                or identity(words[slot]) == identity(words[slot + 1])):
+                or identity(words[slot]) == identity(words[slot + 1])
+                or self._reuses_completed_phrase(index, words[slot:slot + 2])):
             return False
         for offset in (0, 1):
             if (identity(words[slot + offset]) != identity(self.reference[index + offset])
@@ -561,6 +623,11 @@ class StreamingMatcher:
                 hypothesis_words, confidences, _recover_opening=True
             )
 
+        def placement(i: int, j: int) -> bool:
+            return confidence(j) >= self.live_confidence_threshold and self._is_alignment_match(
+                hyp[j], ref_win[i]
+            )
+
         NEG = float("-inf")
         dp = [[NEG] * (k + 1) for _ in range(m + 1)]
         dp[0][0] = 0.0
@@ -572,9 +639,7 @@ class StreamingMatcher:
             prev_row = dp[i - 1]
             row = dp[i]
             for j in range(1, k + 1):
-                pair = prev_row[j - 1] + (
-                    DP_MATCH_SCORE if paired(i - 1, j - 1) else DP_MISMATCH_SCORE
-                )
+                pair = prev_row[j - 1] + (DP_MATCH_SCORE if placement(i - 1, j - 1) else DP_MISMATCH_SCORE)
                 skip = prev_row[j] + DP_SKIP_REF_PENALTY
                 insert = row[j - 1] + DP_INSERT_PENALTY
                 row[j] = max(pair, skip, insert)
@@ -600,9 +665,7 @@ class StreamingMatcher:
         i, j = best_i, best_j
         while i > 0 or j > 0:
             if i > 0 and j > 0:
-                pair = dp[i - 1][j - 1] + (
-                    DP_MATCH_SCORE if paired(i - 1, j - 1) else DP_MISMATCH_SCORE
-                )
+                pair = dp[i - 1][j - 1] + (DP_MATCH_SCORE if placement(i - 1, j - 1) else DP_MISMATCH_SCORE)
                 if dp[i][j] == pair:
                     ops.append(("pair", i - 1, j - 1))
                     i -= 1
@@ -630,6 +693,18 @@ class StreamingMatcher:
             recovered = recover_stalled_opening()
             if recovered is not None:
                 return recovered
+            self._stall_passes += 1
+            return list(self._resolved_states)
+
+        # A short rereading (or shifted native timing of that old reading)
+        # supplies the same text as a later ayah. Wait for distinct following
+        # context rather than skipping unheard words to that repeated phrase.
+        if (all(bi == ai + 1
+                for (ai, aj), (bi, bj) in zip(matched_pairs, matched_pairs[1:]))
+                and self._reuses_completed_phrase(
+                    win_start + matched_pairs[0][0],
+                    [ref_win[ii] for ii, _ in matched_pairs],
+                )):
             self._stall_passes += 1
             return list(self._resolved_states)
 
@@ -775,6 +850,40 @@ class StreamingMatcher:
                 return target
         return None
 
+    def _completed_repetition_end(self, ref_index, hyp_index, words, confidences):
+        """Skip an exact rereading only with already confirmed source words.
+
+        No reference search or verdict is widened: two distinct exact following
+        words must corroborate the unchanged current position. Keep ASR slots.
+        """
+        import math
+        if not self.strict_word_identity or ref_index + 1 >= len(self.reference):
+            return None
+        identity = lambda word: self._word_aliases.get(word, word)
+        confirmed = {s.index: s for s in self._resolved_states if s.status == WordStatus.MATCHED}
+        for size in range(2, min(LIVE_SEARCH_REACH_WIDE, ref_index, len(words)-hyp_index-2) + 1):
+            end = hyp_index + size
+            slots = range(hyp_index, end + 2)
+            if confidences is not None and any(
+                slot >= len(confidences) or not math.isfinite(float(confidences[slot]))
+                or not self.live_confidence_threshold <= float(confidences[slot]) <= 1
+                for slot in slots
+            ):
+                continue
+            if (self.reference[ref_index] == self.reference[ref_index+1]
+                    or not all(self._is_match(words[end+k],self.reference[ref_index+k]) for k in (0,1))):
+                continue
+            phrase = tuple(identity(w) for w in words[hyp_index:end])
+            if len(set(phrase)) < 2:
+                continue
+            for start in range(ref_index-size+1):
+                if all(start+k in confirmed
+                       and identity(confirmed[start+k].spoken) == phrase[k]
+                       and identity(self.reference[start+k]) == phrase[k]
+                       for k in range(size)):
+                    return end
+        return None
+
     def _evaluate_full(
         self,
         hypothesis_words: list[str],
@@ -808,11 +917,21 @@ class StreamingMatcher:
                     # It contributes zero evidence; later confident pairs can
                     # still distinguish the competing bounded continuations.
                     return max(score(ri, hj + 1), score(ri + 1, hj + 1))
-                if self._is_match(hypothesis_words[hj], self.reference[ri]):
+                if self._is_alignment_match(hypothesis_words[hj], self.reference[ri]):
                     return 1 + score(ri + 1, hj + 1)
                 return 0
 
             return score(ref_index, hyp_index)
+
+        def placed_state(index: int, slot: int) -> WordState:
+            spoken = hypothesis_words[slot]
+            if self._is_match(spoken, self.reference[index]):
+                return WordState(index, self.reference[index], WordStatus.MATCHED,
+                                 spoken, confidence(slot))
+            known = self._known_error_words is None or spoken in self._known_error_words
+            return WordState(index, self.reference[index],
+                             WordStatus.ERROR if known else WordStatus.SKIPPED,
+                             spoken if known else '', confidence(slot) if known else 0.0)
 
         while i < window_end and j < hypothesis_count:
             # Uncertain recognition is neither a match nor a spoken mistake,
@@ -820,13 +939,16 @@ class StreamingMatcher:
             if not confidence(j) >= self.live_confidence_threshold:
                 j += 1
                 continue
+            if not self._is_match(hypothesis_words[j], self.reference[i]):
+                repeated_end = self._completed_repetition_end(i,j,hypothesis_words,confidences)
+                if repeated_end is not None:
+                    j = repeated_end
+                    continue
             spoken = hypothesis_words[j]
             expected = self.reference[i]
 
-            if self._is_match(spoken, expected):
-                self._resolved_states.append(
-                    WordState(i, expected, WordStatus.MATCHED, spoken, confidence(j))
-                )
+            if self._is_alignment_match(spoken, expected):
+                self._resolved_states.append(placed_state(i, j))
                 i += 1
                 j += 1
                 continue
@@ -839,15 +961,7 @@ class StreamingMatcher:
                         WordState(index, self.reference[index], WordStatus.SKIPPED,
                                   confidence=0.0)
                     )
-                self._resolved_states.append(
-                    WordState(
-                        skip_to,
-                        self.reference[skip_to],
-                        WordStatus.MATCHED,
-                        spoken,
-                        confidence(j),
-                    )
-                )
+                self._resolved_states.append(placed_state(skip_to, j))
                 i = skip_to + 1
                 j += 1
                 continue
@@ -855,7 +969,7 @@ class StreamingMatcher:
             next_pair = (
                 i + 1 < window_end and j + 1 < hypothesis_count
                 and confidence(j + 1) >= self.live_confidence_threshold
-                and self._is_match(hypothesis_words[j + 1], self.reference[i + 1])
+                and self._is_alignment_match(hypothesis_words[j + 1], self.reference[i + 1])
             )
             insertion_search_end = j + 1 + self.lookahead
             insertion_to = self._find_hyp(
@@ -921,7 +1035,7 @@ class StreamingMatcher:
 
     def _find_ref(self, word: str, start: int, end: int) -> Optional[int]:
         for index in range(start, min(len(self.reference), end)):
-            if self._is_match(word, self.reference[index]):
+            if self._is_alignment_match(word, self.reference[index]):
                 return index
         return None
 
@@ -939,7 +1053,7 @@ class StreamingMatcher:
                 and float(confidences[index]) >= self.live_confidence_threshold
             ):
                 continue
-            if self._is_match(hypothesis[index], word):
+            if self._is_alignment_match(hypothesis[index], word):
                 return index
         return None
 

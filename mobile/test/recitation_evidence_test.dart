@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qari/data/models/recitation_model.dart';
+import 'package:qari/data/models/recitation_session_record.dart';
 import 'package:qari/data/services/streaming_recitation_service.dart';
 import 'package:qari/data/services/recitation_auth.dart';
+import 'package:qari/data/services/local_storage_service.dart';
+import 'package:qari/data/services/recitation_history_service.dart';
+import 'package:qari/features/recitation/presentation/pages/recitation_history_page.dart';
 import 'package:qari/features/recitation/presentation/widgets/recitation_results.dart';
 
 Map<String, dynamic> payload() => {
@@ -64,8 +68,101 @@ void main() {
     expect(find.text('Pronunciation'), findsNothing);
     expect(find.text('Tajweed'), findsNothing);
     expect(find.text('Fluency'), findsNothing);
-    expect(find.text('Word accuracy'), findsOneWidget);
+    expect(find.text('Word matching'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('perfect word matches do not certify pronunciation',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final raw = payload()
+      ..['overall_score'] = 1.0
+      ..['word_verdicts'] = [
+        {'word': 'الله', 'word_index': 0, 'is_correct': true},
+      ];
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: RecitationResults(
+          result: RecitationResult.fromJson(raw),
+          onWordTapped: (_) {},
+          onRetry: () {},
+          theme: ThemeData(),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Excellent'), findsNothing);
+    expect(find.text('Word matching'), findsOneWidget);
+    expect(find.text('1 matched'), findsOneWidget);
+    expect(find.textContaining('were not assessed'), findsOneWidget);
+    expect(find.textContaining('words correct'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('saved matches without mistakes do not claim perfect recitation',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final storage = await LocalStorageService.getInstance();
+    await storage.prefs.clear();
+    RecitationHistoryService(storage.prefs).saveSession(
+      scope: 'range',
+      surahNumber: 1,
+      ayahFrom: 1,
+      ayahTo: 1,
+      overallScore: 1,
+      correctCount: 4,
+      totalCount: 4,
+      durationSeconds: 10,
+    );
+    await tester.pumpWidget(const MaterialApp(home: RecitationHistoryPage()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('1:1'));
+    await tester.pumpAndSettle();
+    expect(find.text('No mistakes — perfect recitation!'), findsNothing);
+    expect(find.textContaining('4/4 matched'), findsWidgets);
+    expect(find.text('No word mismatches to review'), findsOneWidget);
+    expect(find.text('Word matching only'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    await storage.prefs.clear();
+  });
+
+  testWidgets('saved session with mistakes labels mismatches honestly',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final storage = await LocalStorageService.getInstance();
+    await storage.prefs.clear();
+    RecitationHistoryService(storage.prefs).saveSession(
+      scope: 'range',
+      surahNumber: 1,
+      ayahFrom: 1,
+      ayahTo: 1,
+      overallScore: 0.75,
+      correctCount: 3,
+      totalCount: 4,
+      durationSeconds: 10,
+      mistakes: [
+        RecitationMistake(
+          word: 'مستقيم',
+          expectedText: 'المستقيم',
+          errorType: 'substitution',
+        ),
+      ],
+    );
+    await tester.pumpWidget(const MaterialApp(home: RecitationHistoryPage()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('1:1'));
+    await tester.pumpAndSettle();
+    expect(find.text('Mispronounced'), findsNothing);
+    expect(find.text('Mismatch'), findsOneWidget);
+    expect(find.textContaining('3/4 matched'), findsWidgets);
+    expect(find.textContaining('1 to review'), findsWidgets);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    await storage.prefs.clear();
   });
 
   test('signed-out live recording fails before asking for microphone access',
