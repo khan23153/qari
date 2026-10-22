@@ -1,6 +1,6 @@
 # Qari — working context and VPS handoff
 
-Last updated: **2026-10-19, 06:42 UTC**. Later progress and exact evidence are appended below. Paths refer to this VPS.
+Last updated: **2026-10-19, 09:29 UTC**. Later progress and exact evidence are appended below. Paths refer to this VPS.
 This file records verified runtime state, historical evidence and unfinished work
 separately. It contains no passwords, API tokens, OAuth codes or signing secrets.
 
@@ -39,7 +39,24 @@ this is feasibility evidence only. Corrected-cache rerun also completed40epochs 
 skip**. All36 human inference diagnostics completed; phoneme errors remain and no
 pronunciation candidate qualifies. **No experimental model is deployed.**
 
-**Latest ongoing work:** larger private GPU phoneme experiment in
+**Current active work:** direct human word-error classifier, isolated branch
+`fix/human-word-error-20261019`, worktree `/tmp/qari-pronunciation-gpu-20261018`,
+draft [PR38](https://github.com/khan23153/qari/pull/38). This is an offline Ikhlas
+research experiment, **not deployed** and not full-Quran pronunciation grading.
+Code `4973de4` passed 1,025 tests / 1 skip and both GitHub CI runs. Actual private
+T4 version1 stopped before training because identical PCM crossed participant
+IDs `187` (test) and `193` (train). This prevented leakage; no epoch ran. A full
+pretraining audio audit now quarantines all clips of every duplicated participant;
+bounded ordered four-source prefetch reduces measured download waits. Three new
+regressions are GREEN; full suite 1,027 passed / 1 skip. Version2 is submitted and
+queued; no epoch yet.
+
+Original CPU reserved features are ready for 35 human clips, using the same new
+44.1k-stereo→16k-float resampling recipe; one conflicting annotation quarantined.
+The experimental classifier is trained on complete ayah clips, not qualified for
+live partial words, app delay, or any other surah. Keep all production guards.
+
+**Earlier completed work:** larger private GPU phoneme experiment in
 `/tmp/qari-pronunciation-gpu-20261018`, branch`fix/pronunciation-gpu-training-20261018`,
 draftPR37 https://github.com/khan23153/qari/pull/37. Code`adadd63` (FP32fix).
 Fullsuite996passed/1skip; earlierstandaloneML/API510passed/1skip; latestGitHubCIbothpassed.
@@ -1004,3 +1021,368 @@ Finalengineeringtests996passed/1skip; bothGitHubCI39207109634/39207104753passedo
 **Next dependency:** correctedhumanrealized-phone/errorlabels. HFauthworksbutIqra_Extra_IS26andIqraEval_Test_GTstill403at06:41UTC; userwasaskedviaasyncrequesttorequest/acceptaccessinthesameShaikhaffanaccount. No newtokenneeded. PublicIqra_train revision`02f9863194faa8aab2de7896c936a6f1f1a55138` wasaudited:71,391train/2588dev,phoneme_ref/phoneme_aug,mostlycanonicalweaklabelsfromMSA/Quran. Sourcepaperexplicitlyassumesvowelizationmatchesaudioandacknowledgesnativevowel deviations. Do NOTrelabeltheseautomaticreferencephonesasactuallearnererrorannotationsortrainincorrectspeechwithcanonicaltargetstoforcepasses. Furtherdatarecipesmustdeclareweaksupervision; theycannotreplacehumanqualification.
 
 Afterlegitimateaccess:pinandinspectschemas,keeptestGT/userrecordingsheldout,trainwithactualspokenphonesfrompropertrainpart,validateword-errorfalseaccepts/falsealarmsacrossrequiredvoices/surahs/kinds. Onlyahumanqualifiedmodelmayintegratewithoriginalspeech/confidence/cursorguards; re-runactualrecitationcontrolsanddeployusingexistingconfigafterthat. No promisesofallpronunciationerrorsbeingfixedfromsyntheticPER. Fullresearchdecision:P4`final-experiment-decision.json`.
+
+
+## 2026-10-19 — follow-up investigation and actual human-label path
+
+The wider pronunciation goal is still open. Fresh runtime check08:40UTC: public
+core/localrecitation health200; recitation/tunnel/edge running0restarts/0OOM,
+original image unchanged; bounded recitation logs since06:40 have0lines. This is
+health evidence, not a new live accuracy claim. Both corrected Iqra datasets still
+403 at08:38, login credential unchanged. No new token needed.
+
+A small alignment-marginalized CTC prefix diagnostic on stored posteriors avoids
+forcing the remaining expected sentence. Six independent checks include exhaustive
+CTC path enumeration, repeat/blank handling and underflow. On5error+5correct held
+Ikhlas opening clips: canonical prefix preferred on3error labels, inserted short
+vowel preferred on1correct label; diagnostic rankAUC.72. This is only a hypothesis
+for l-sukoon vs inserted vowels, not actual erroneous-phone ground truth or a full
+GOP-SF implementation. No threshold fitted/model trained/live changed. Artifacts
+P4/ctc_prefix_probe.py, test_ctc_prefix_probe.py, prefix-contrast-results.json.
+
+**Correction to earlier next-dependency wording:** actual realized-phone labels
+are necessary to supervise phone diagnosis, but a *binary word-error* classifier
+can be researched with existing human word-correctness labels. Gated Iqra access
+is not the only possible next step. Audited all1506 pinned public Ikhlas records:
+384participantIDs,851error/655correct utterances, only one surah. Conservative
+parser quarantines12records (2filename/explicitlabel conflicts,9unmapped/ambiguous
+locations,1correctlabel carrying error annotations). Unlisted words in error clips
+are UNKNOWN, never negative training targets. Bare lam inayah3 is ambiguous.
+All24previously probed speakers are reserved. Deterministic remaining split before
+audio:1129train/290speakers/964error+1742correct knownwordtargets;129validation/
+34speakers/95error+242correct;142test/36speakers/106error+240correct;94reserved/
+24speakers. P4/human-word-experiment/label-manifest.json. No training audio fetched
+yet and no GPU job submitted for this experiment.
+
+Existing isolated worktree reused on new branchfix/human-word-error-20261019,
+parentPR37 docs69f2805; design24d78ec, strictdata contract5321149. Specs/plans under
+docs/superpowers/{specs,plans}/2026-10-19-human-word-error.md. Intent: frozen original
+encoder, small15-position word-query acoustic binary head; train actual human
+labels, not canonical phone targets. Text-only prior baseline required. FP32 and
+finite guards/bounded private T4; test/reserved scores cannot select checkpoint or
+threshold.12contracttestsRED→GREEN; padding-safe classifier/training tests inprogress.
+This research remains Ikhlas-only, qualified=false, no live integration/model/UI
+changes. Multi-surah/actual vowel/consonant/gemination qualification still required.
+
+
+### Human-label experiment reviewed/submitted — 2026-10-19 09:04 UTC
+
+Code4973de4 onfix/human-word-error-20261019, draftPR38
+https://github.com/khan23153/qari/pull/38, baseddraftPR37. Entire recitationAPI+
+ml/tests+api/tests1025passed1skip2knownwarnings108.98s; focused29tests independently
+passed byfreshreviewer. NoCritical/Importantfindings. Minor splitrecipe omitted
+first8hex32bitSHA truncation; prose corrected, actualcohortsunchanged. Full SHA
+recipe wasneverused; auditedmanifestpreserveseveryrole. New head alwaysunqualified.
+
+PrivateKaggleT4 jobtelethonfool/qari-human-word-errors-20261019 version1 submitted.
+Provider source pulledbyte-identical; is_private=true, machine_shapeNvidiaTeslaT4.
+LauncherSHA992d3d9e5808da01fe3267c1bc7f379c7caff5a9b0b63711d02c925988fda214.
+Packet /tmp/qari-conformer-training-20261009/human-word-20261019, submission-record-v1.json;
+monitor.py/monitor-v1.jsonl watchesactualstatusandlogs. ProviderstatusRUNNING,
+butlogendpointreturnedHTTP500 at09:03; no actualtrainingepochclaimyet. Do notblindly
+resubmit. CLIobserverfallbackbeingchecked; periodicmonitorcontinues.
+
+OriginalCPUcomparisonfeaturehelper initiallyfailed fromFW1.0.3 conveniencewrapper
+adding anextra batchdimension to alreadybatchedmel. Privatehelper only: raw CT2
+StorageView encode call fixes dimensionownership; rerunprogressesactualrecordings.
+SourcehumanWAV44.1kstereo -> fixedscipypolyphase16kmono floatPCM; cannotreuse old
+ffmpegPCM16features silently. Existing36probeclips reduce to35eligible because
+ID11V4F has conflictingfilename/correctlabel andwasquarantined. All24sourceparticipant
+IDs reserved, noneusedforoptimization. Newfeatures/logmanifest under
+P4/human-word-experiment/cpu-reserved-*;600stimecap/1200MiBhard/.5CPU; originalmodels
+unchanged. No experimentalmodeldeployed, no newAPK.
+
+
+### Actual data collision and repair — 2026-10-19
+
+Version1 terminalERROR09:11:45UTC, actualfatal line09:11:02: Duplicate actual PCM:
+ID187V1T and ID193V1T. Audited metadata roles aretest/train, respectively; eachID
+hasfourayahclips. Sourcefailure/partialmanifest/featureidentity/log retained at
+`/tmp/qari-conformer-training-20261009/human-word-20261019/output-v1`. No training
+epoch or checkpoint existed. This is a dataset integrity failure caught by the
+guard, separate from pronunciation model accuracy and from core/API health.
+
+Repair rationale: dropping only the later copy can leak one participant's other
+ayahs if the duplicate indicates ambiguous identity. New two-stage pipeline first
+downloads/decodes/hashes all public sources, then quarantines every participant
+involved in any duplicate group (including their other unique clips), preserving
+all original split assignments. Only then encode/train; final training validator
+still stops on any unresolved duplicate. Sourceaudit records all excluded cases
+and exact hashgroups; no case is silently relabelled. At most4ordered requests,
+shared byte reservations, counted partial failed reads, total1GB content-readcap.
+Three meaningful RED regressions→GREEN; new full suite pending before resubmission.
+
+Source category coverage (parallel type/location lists, not actual heard phones):
+train143vowel/8vowel+tajweed/811tajweed error targets; validation11/2/82;test13/0/91;
+reserved23/2/42. Two rows have ambiguous parallel category lists; do not invent
+word-level kinds there. Only3pure-vowel-only utterances remain in training and16
+are reserved; mixed-error utterances contribute most othervoweltargets. This
+explains why aggregate tajweed scores must never be presented as vowel accuracy.
+`P4/human-word-experiment/source-category-coverage.json` retains counts.
+
+Additional source review (no models/code copied):
+- https://huggingface.co/Quran-Lab/zipformer_p-arabic-v3#honest-limitations openly
+  reports canonical-label bias on human error audio (81/94 plain-noon clips decoded
+  as fullikhfa). Its low overallPER is not proof of mispronunciation rejection.
+  New weights not downloaded; same architecture issue as our observed false accepts.
+- https://github.com/harounRhim/sanad calibrates duration/nasality on one reciter,
+  not learner phonemic errors; cannot substitute for our missing broad errorlabels.
+- https://github.com/kaylaque/quranic-pipeline skips acoustic scoring when ASR text
+  fullymatches, and acknowledges ASR diacritic limits; that approach would retain
+  the canonicalized-error blind spot. No borrowed code or changed licensing.
+
+Primary live decoder uses sherpa_onnx.OfflineRecognizer.from_transducer in
+`ml/inference/fastconformer_transcriber.py`, returning words/confidences/times, not
+public hiddenfeatures. Any future shared acoustic head needs a proven feature
+hook or a verified decoder refactor; do not claim zeroextraencodingcost or lower
+app delay from this offline Whisper-head experiment. Core lexical backend/model
+and UI remain unchanged.
+
+
+### 2026-10-19 — version2 queued; original raw diacritics audit
+
+Repaircode50e083a pushedPR38. Full1027passed1skip2knownwarnings108.69s; bothGitHub
+CI39229252334/39229258728 pass recitation+ML andcoreAPI. Version2submittedprivateT4;
+provider sourcebyte-identical, machine_shapeNvidiaTeslaT4, launcherSHA
+`a9959fb7420aca93711a91df8caf7fbfbd2763fd84739b413d05a549a3dffdaa`.
+`submission-record-v2.json`, monitor_v2.py/monitor-v2.jsonl/runtime-v2.log trackactual
+state. At09:28UTC QUEUED, no bootstrap/epochyet. RecentotherQari kernelschecked:
+phonemeCTCcomplete,PCDcorrectedcomplete,Qwencomplete,turbocomplete,oldPCDcleanERROR;
+no recentolderRUNNINGjobwasfoundblockingit. Do not infermodelaccuracyfromqueue.
+
+Raw native inspection completed36/36publicheldclips withoriginalhashedPCD RNNT,
+not `_independent_transcriber`'s already-normalized output. It emitteddiacritics
+on81rawwords; tokeninventoryhas137markedtokensof1025lines. Backendnormalizesraw
+words atstreaming_session.py:639 andonlythenreturnsnativewordevidence. Thus
+prior553normalizedwordobservationswithzeromarksare NOTproofthatrawPCDneveremits
+marks. P4/probe_raw_pcd.py/raw-pcd-probe.log/raw-pcd-observations.jsonretainrawtext,
+tokens/nativeys_log_probs/confidences/sourcePCMhashes. Same frozenmodels, no training
+or productionedits; offline600s/1200MiB/.5CPUguard, exit0.
+
+However10/10contributor-labelledkufuwanvowelerrorsstillhaveexpectedfa-damma`فُ`
+inrawASRoutput, oftenhighconfidence. Missing/variablemarksaffectotherclips. Hence
+keepingmarksalonewouldnotrepairtheseknownfalseaccepts, andanabsenceofmarksisnot
+proofofwrongrecitation. P4/raw-pcd-decision.json. Do notturnoffnormalizationor
+flagallmissingcase-endingsaserrors; legitimatewaqf/partialASRrequireseparatehandling.
+NVIDIA'supstreammaintaineralsodescribesmixedfully/partially/non-diacritizedtraining
+withnocontroloverdiacriticpresence:
+https://github.com/NVIDIA-NeMo/Speech/issues/15452
+(theissuepage/maintainerMarch3commentisthesource; donotassumeacommunityreportthat
+allPCDweightsarewrongappliestothisverifiedexport).
+
+CurrentTarteelcomparisonmustusethelatestofficialsupport,not2022marketing:
+https://support.tarteel.ai/en/articles/16559266-a-mistake-was-flagged-that-i-didn-t-make
+saysoptionalTashkeelmistakedetectionexists,acknowledgesmissedmistakes/falseflags,
+andstatesgeneralTajweedrulesarenotchecked. Thesearedistinctcapabilities; neither
+Qari'swordmatchingnorcompetitorfeatureclaimsprovephonemicgradingisqualified.
+
+
+### REA installed — 2026-10-19T12:07:29.563676+00:00
+
+User requested https://github.com/morluto/rea installation. Installed official
+npm package rea-agents@6.7.0 globally with --ignore-scripts (Node22.23.3).
+Executable: /home/innocent/.nvm/versions/node/v22.23.3/bin/rea.
+Reviewed dry-run then applied `rea setup --client codex --yes --json`.
+Codex MCP entry added to /home/innocent/.codex/config.toml; backup at
+/home/innocent/.codex/config.toml.rea.backup. Semantic comparison confirms all
+unrelated configuration preserved. Matching bundled workflow installed at
+/home/innocent/.agents/skills/reverse-engineer-anything (skill42,207tools).
+`rea doctor --client codex --skill --json`: healthy=true, all scoped checks pass.
+Actual stdio MCP initialize + tools/list smoke check: server6.7.0,207tools.
+Restart/reconnect Codex to discover MCP tools in the agent; this smoke test does
+not establish that the current agent has connected. No optional native engines
+(Hopper/Ghidra/IDA/JADX) installed; engine-dependent analysis needs its provider.
+No Qari production/model/UI changes. npm disposable cache cleared after install;
+filesystem free space ~1.1GiB. Setup/doctor reports under /tmp/qari-rea-*-20261019.json.
+
+Qari human-word-errors-20261019 version2 still QUEUED at this timestamp via
+Kaggle CLI. Existing monitor_v2.py process remains running (PID3961676 at check),
+monitor-v2.jsonl continues status polling; no epoch or training result yet.
+Pronunciation false-acceptance issue remains unresolved; REA is an analysis tool,
+not a new speech model or a demonstrated fix for that issue.
+
+
+### Storage cleanup — 2026-10-19T12:40:51.381608+00:00
+
+User needed room for an APK upload. Removed only unused Python dependency
+environment /tmp/qari-asr-repair-20261009/nemo-venv (~1.9GiB). Verified no active
+host process or running container mount used it. Saved all dependency versions
+and Python metadata first under /home/innocent/qari-training-artifacts/
+storage-cleanup-20261019/: removed-nemo-venv.json, nemo-venv-requirements.txt,
+cleanup-result.json. Old stopped diagnostics need this environment recreated.
+Production models, all source worktrees/local changes, recordings, research
+outputs and running services preserved. Space went from ~906MiB to ~2.7GiB free;
+current free bytes: 2823249920.
+
+Drive qari-training: remains read-only and cannot upload. Prepared a separate
+drive.file backup OAuth login. User then said choro apk upload hogaya: cancelled
+backup per that instruction, stopped pending OAuth, removed unauthenticated
+backup-only configuration. Original Drive login unchanged. NO FILES UPLOADED TO
+DRIVE; no important files deleted awaiting backup. User confirmed APK uploaded.
+
+
+### Tarteel asset analysis and Flutter Madani layouts — 2026-10-19T13:09:01.420647+00:00
+
+User supplied /home/innocent/com.mmmoussa.iqra-5-81-9-android70.xapk
+(Tarteel5.81.9/code420, SHA c89d130535495788c82b99778ec00abcc098dd89416e2725f634ee099ffd35df).
+Used connected REA tools for archive inventory, then bounded local ZIP/SQLite
+inspection and Hermes96 disassembly (P1sec/hermes-dec revision
+2e796663e1fedb93dca51060797ebf3327b3fedb). No APK execution or Tarteel service calls.
+Verified 1405=QPC_V1/qpc_v1_layout/dk_v1/DigitalKhatt Old Madina
+(DigitalKhattQuranic.otf);1421=QPC_V2/qpc_v2_layout/dk_v2/DigitalKhatt New Madina
+(DigitalKhattV2.otf). Classic1405 also has optional QCF_P001..604 glyph-font path.
+Each layout604pages/9046lines/83668tokens including6236ayahmarkers;4662rowdifferences.
+Font-only switching is insufficient. Exact function IDs/offsets and font hashes
+are recorded in docs/tarteel_mushaf_asset_analysis.md and artifact findings.json.
+Implementation isolated in /tmp/qari-mushaf-layouts-20261019, branch
+feat/mushaf-layout-switcher-20261019. New files: mobile/lib/data/models/madani_page.dart,
+data/repositories/madani_page_repository.dart, features/recitation/presentation/
+mushaf/{mushaf_layout_switcher,madani_mushaf_reader}.dart, and
+mobile/lib/main_mushaf_layout_preview.dart. Controlled Flutter selector and paired
+reader use existing MushafTheme. Repository caches4decodedpages and2fontfamilies,
+rejects mismatched data, hides stale content and supports retry. This is a READING
+component/standalone preview; NOT enabled in existing released APK or live Hifz.
+Existing Hifz, confirmations, markers, mistakes, ASR models and backend unchanged.
+Global imported IDs include markers; future live integration must map word refs,
+never feed these IDs directly to ASR. No claim of exact Tarteel Skia elongation.
+scripts/import_madani_assets.py imports only needed paired page data/fonts
+from local APK/XAPK. Generated assets ignored by git; tracked README placeholders
+keep clean checkouts valid. Actual25MiB assets under mobile/assets/madani in worktree.
+Reader requires import before preview/release packaging. Re-imports stage and
+validate the complete result before publication, with rollback and sibling backup
+on publication error. Peer review caught partial-overwrite failure; added a real
+failing-then-passing re-import preservation test and successful retry.
+Verification: full Flutter suite199passed/10opt-in skipped(exit0); additional
+fresh focused run18passed (8unit/widget+10actual-font cases across pages1,3,76,77,604);
+4Python importer tests passed. New Dart files: No issues found. Initial full-project
+analyzer reported252existing warnings/info, no errors. Screenshots and full logs
+under /tmp/qari-tarteel-assets-20261019/. Captures use a local Latin UI font override
+only because Flutter widget tests replace platform fonts; Quran fonts remain
+actual imported edition fonts. Original XAPK preserved; removed only recoverable
+170MB extracted base-APK duplicate after analysis. Current disk free ~2.2GiB.
+Production recitation container remains healthy/0restarts/noOOM. Kaggle human
+word-error experiment remains QUEUED at last check; no pronunciation fix deployed.
+No Drive upload or APK build performed for this component task.
+
+Local component commit: d2829b1e54b73c66bbb0cf6547507e7433d9404f on
+feat/mushaf-layout-switcher-20261019 (not pushed). Worktree clean; imported
+external assets remain ignored. No credentials or external binaries staged.
+
+
+### Tarteel mistake-detection client trace — 2026-10-19T19:21:30.724744+00:00
+
+User asked to inspect mistake detection in the same supplied Tarteel5.81.9 XAPK.
+Static Hermes/native-bridge inspection only; no Tarteel login/service requests,
+recording uploads, runtime accuracy/latency test, or Qari production changes.
+Artifact SHA c89d130535495788c82b99778ec00abcc098dd89416e2725f634ee099ffd35df.
+Detailed report: /tmp/qari-mushaf-layouts-20261019/docs/
+tarteel_mistake_detection_analysis.md. Retained focused disassembly, hashes,
+function references and findings.json: /tmp/qari-tarteel-assets-20261019/
+mistake-detection/. Report function IDs/offsets verified against saved disassembly.
+
+Observed StreamingClient path initializes native MicStream with a production
+voice-v2.tarteel.io WebSocket and selected recitation range/mode. Declared audio
+configuration is 16kHz/16bit/mono/bufferSize512; native buffer unit and actual wire
+cadence are unknown. Separate PARTIAL_TRANSCRIPT and STATES_UPDATE callbacks.
+Mistake types: INCORRECT_WORDS, MISSED_WORDS, EXTRA_WORDS, INCORRECT_TASHKEEL,
+plus PEEKED_WORDS (memorization annotation). Tashkeel has separate detail/highlight
+and isDiacritized session toggle. isDualModel/remote dual-model flag is present,
+but this does NOT reveal architecture, weights, accuracy or active user setting.
+Server updates include newStates/stateIndexOffset and mistakeUpdates. Reducer
+replaces a state suffix, merges mistake IDs and retracts falsey mistake updates;
+latest POSITION drives surah/ayah/word cursor. Client can revise earlier results.
+The APK contains multiple engine paths; static trace does not establish rollout.
+
+No remote detector/model/training data/decision thresholds recovered. Absence of
+common standalone model suffixes in base APK inventory is only a bounded negative
+search, not proof that no embedded/downloaded/offline model exists. Qari still
+reports pronunciation_available=false and tajweed_available=false. Its ASR can
+canonicalize incorrect vowels; client flags/colors or lower confidence cannot
+qualify pronunciation grading. Next research work: held-out human acoustic error
+qualification, typed pronunciation evidence separate from lexical progress, and
+explicit revisions while retaining confidence/speech guards and confirmed-only
+Hifz. This analysis is not a pronunciation fix or deployment. Existing detailed
+Kaggle queue status above is historical, not refreshed by this documentation task.
+
+
+### Human-word training v2 failure and bounded loader repair — 2026-10-19T20:04:16.964736+00:00
+
+Resumed actual pronunciation investigation after Tarteel static trace. Fresh
+Kaggle status is ERROR (v2), not still queued: provider started15:42UTC, failed
+15:43UTC before encoder extraction/optimization. Retained failure.json and logs:
+/tmp/qari-conformer-training-20261009/human-word-20261019/output-v2/ and runtime-v2.log.
+Actual cause: pinned data/ID247V1T.wav is3,310,754bytes, above3MB per-file cap;
+generic fetch exception aborted whole audit instead of excluding invalid source.
+Pinned tree audit1506entries,713,449,399bytes, onlythatoneoversizedfile, so this
+was not total1GBexhaustion. Tree evidence source-size-audit-v2.json in packet.
+
+Repair isolated in /tmp/qari-pronunciation-gpu-20261018 branch
+fix/human-word-error-20261019: typed per-file exception, ordered-prefetch exclusion
+callback, filename/reason/consumed-byte accounting and null full-source hash for
+partialread. Total1GBguard, network/identity failures, original3MBcap, duplicate
+participant quarantine, speaker roles and held24participants unchanged. New real
+fetch/audit regression failed on original byte-limit exception then passed; total
+budget exhaustion remains fatal. Focused12passed. Complete recitation/ML/API suite
+1029passed1skipped2knownwarnings in56.86s, log:
+/home/innocent/qari-training-artifacts/pronunciation-human-data-20261018/
+human-oversized-full-suite.log. Research spec clarified exclusion; no live model,
+backend or UI changes. Private v3 submission is being prepared; do not call it
+running/complete until provider verification. Pronunciation issue still unresolved.
+
+
+### Human-word v3 running / source identity verified — 2026-10-19T20:07:52.523815+00:00
+
+Private Kaggle version3 started20:04UTC onTeslaT4 (notqueued). Provider source
+pulled and verified byte-identical to tested packet; private settings and input
+originalencoder verified. Commitb7c230ae81c3287232bb8d9b6f5fe0c05d3aef19 pushed to
+existingdraftPR38; allfour coreAPI/recitation-ML CI checks passed. LauncherSHA
+ d04f4fa76120d7d7be580e4e1008466f0b7719eebfdaa2f8b440b028f5082ccd.
+Provider7200s/wholejob7100s budget unchanged. Observer monitor_v3.py, logs
+monitor-v3.jsonl/runtime-v3.log/latest-status-v3.json in existingpacket, never
+resubmits. Submission-record-v3.json stores exact private/source/runidentity.
+Actual oversizedsourceexcluded andaudit768clips by20:07:26UTC; no accuracy result
+or trained head yet. OriginalCPUhelper mislabeled mixedbinarywordlabels asvowel;
+backedup then corrected kind tobinary_word_error_unclassified, preserving default
+qualification gates and documenting unknown class coverage. Broader gated HF
+Iqra_Extra_IS26/IqraEval_Test_GT still403 on authenticatedauthcheck20:06UTC.
+Originalbackendhealthy/0restarts/noOOM, revision0c7562b remainsdeployed.
+
+
+### Human-word GPU v3 COMPLETE; harakat qualification FAILED — 2026-10-19T20:15:55.273241+00:00
+
+Actual providerstatusCOMPLETE, training10epochs/best4/threshold0.7857852578163147.
+Private frozen-encoder run finished successfully, no failureartifact. Source/head
+identities verified. HeadSHA f396e657f637eb0c886e58c4ab2c2307455211ad5b02ecb7f6192f8f9ce7fd9a.
+Fullaudit1393cleanclips:1055train/122validation/127test/89reserved;13duplicatePCMgroups,
+19participantIDs/all81theirclipsquarantined,19speech-guardexclusions,1oversized,
+plus12preexistingmetadataexclusions. Limits/splits/unknownmasks preserved.
+
+Actualheldtest:75/96errorsdetected,21missed;13falsealarms/216correctwords
+(6.02%FPR,85.23%precision,78.125%recall).14of21misses onayah3 y alid/yulad
+(7each),8of13falsealarms alsoayah3. Reservedall:34/61detected,27missed,
+5falsealarms/148correctwords. Threshold/checkpoint werevalidation-only; no
+heldtest/reserved tuning. Text-positionpriorbaseline detected0errors withits
+validation-selectedconservative threshold; notanASR/livecomparison.
+
+CrucialoriginalCPUreservedsubset:34of35clipsvalid (ID165V1F excluded fromcleanGPU
+cohort);15contributor-labelledharakaterrorwords,1detected/14missed,0falsealarms
+on70correctwords. All34resampledPCMidentical,0CPU/GPUdecisiondisagreements.
+Thus CPU conversion doesnotexplain the misses. Head-onlyCPUmedian5.51ms excludes
+encoder/buffering/network; no live latencyclaim. Sourceannotationcategories of
+those15errors separatelyverifiedasحركات; diagnosticglobalkindremainsunclassified
+binaryworderror ratherthaninventedphoneclasscoverage. Only2pure-harakattraining
+errorutterances, mosttrainingerrors tajweed/mixed; co-occurrence/generalization
+warning, notprovensolecause. Fullayahattention word-locality also unverified.
+
+Candidate isNOTqualified andNOTdeployed. Original livebackend/model/UIunchanged;
+pronunciation_available=false/tajweed_available=false remain truthful. Report:
+/tmp/qari-pronunciation-gpu-20261018/docs/human_word_error_result_20261019.md,
+durablecopyunder /home/innocent/qari-training-artifacts/pronunciation-human-data-20261018/
+human-word-experiment/human-word-error-result-20261019.md. GPUaudit/head/reports/
+predictions inpacketoutput-v3. CPUresultsandlog inhuman-word-experiment.
+
+Nextresearchrequires separatevowel supervision, enoughpureerror/correcthuman
+examples, qualifiedword-local acoustic evidence and independent speakers/surahs.
+DoNOTlowerguards, labellexicalASRcorrectaspronunciationcorrect, retuneonheldscores
+orclaimfullyfixed. BroadIqragateddatastill403. ExistingresearchdraftPR38contains
+boundedtrainingloaderfixb7c230a; full1029passed1skip2knownwarnings andallCIpass.
