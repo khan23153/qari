@@ -231,9 +231,9 @@ class _ScoreHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Word accuracy', style: theme.textTheme.labelSmall),
+                Text('Word matching', style: theme.textTheme.labelSmall),
                 Text(
-                  result.gradeLabel,
+                  '${result.correctCount} matched',
                   style: theme.textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w800,
                     color: scoreColor,
@@ -241,7 +241,7 @@ class _ScoreHeader extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${result.correctCount} of ${result.wordVerdicts.length} words correct',
+                  '${result.wordVerdicts.length} reference words',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),

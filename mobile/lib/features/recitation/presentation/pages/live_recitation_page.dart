@@ -1393,7 +1393,8 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
         Expanded(
             child: Column(
           children: [
-            RecitationReviewSummary(review: review, mushaf: mushaf, theme: theme),
+            RecitationReviewSummary(
+                review: review, mushaf: mushaf, theme: theme),
             Expanded(
               child: _buildMushafPage(
                 theme,
@@ -1552,7 +1553,7 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
           'tap Stop.\n\n'
           '• The page starts blank. As the engine confirms each word you say, it '
           'appears on the page — right-to-left, like a real Mushaf.\n\n'
-          '• Mispronounced words show in red, skipped words in amber.\n\n'
+          '• Mismatched words show in red, skipped words in amber.\n\n'
           '• Circular markers between words show where each ayah ends.',
         ),
         actions: [

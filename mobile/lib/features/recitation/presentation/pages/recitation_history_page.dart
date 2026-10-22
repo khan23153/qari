@@ -90,9 +90,13 @@ class _RecitationHistoryPageState extends State<RecitationHistoryPage> {
               : ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    _StreakCard(streak: _streak, sessionCount: _records.length, theme: theme),
+                    _StreakCard(
+                        streak: _streak,
+                        sessionCount: _records.length,
+                        theme: theme),
                     const SizedBox(height: 16),
-                    ..._records.map((r) => _SessionTile(record: r, theme: theme, onTap: () => _openReview(r))),
+                    ..._records.map((r) => _SessionTile(
+                        record: r, theme: theme, onTap: () => _openReview(r))),
                   ],
                 ),
     );
@@ -121,11 +125,13 @@ class _EmptyState extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.history_rounded,
-                size: 64, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
+                size: 64,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
             const SizedBox(height: 16),
             Text(
               'No recitations yet',
-              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
             Text(
@@ -161,7 +167,10 @@ class _StreakCard extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [color.withValues(alpha: 0.15), color.withValues(alpha: 0.05)],
+          colors: [
+            color.withValues(alpha: 0.15),
+            color.withValues(alpha: 0.05)
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -176,7 +185,8 @@ class _StreakCard extends StatelessWidget {
               color: color.withValues(alpha: 0.15),
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.local_fire_department_rounded, color: color, size: 32),
+            child: Icon(Icons.local_fire_department_rounded,
+                color: color, size: 32),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -204,7 +214,8 @@ class _StreakCard extends StatelessWidget {
             children: [
               Text(
                 '$sessionCount',
-                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                style: theme.textTheme.titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w800),
               ),
               Text(
                 'sessions',
@@ -278,14 +289,16 @@ class _SessionTile extends StatelessWidget {
                     children: [
                       Text(
                         record.referenceLabel,
-                        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                        style: theme.textTheme.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '$date · ${record.correctCount}/${record.totalCount} correct'
+                        '$date · ${record.correctCount}/${record.totalCount} matched'
                         '${record.mistakes.isNotEmpty ? ' · ${record.mistakes.length} to review' : ''}',
                         style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                          color: theme.colorScheme.onSurface
+                              .withValues(alpha: 0.55),
                         ),
                       ),
                     ],
@@ -335,13 +348,22 @@ class _SessionReviewSheet extends StatelessWidget {
                     children: [
                       Text(
                         'Review · ${record.referenceLabel}',
-                        style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                        style: theme.textTheme.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w800),
                       ),
                       Text(
-                        '${record.correctCount}/${record.totalCount} correct · '
+                        '${record.correctCount}/${record.totalCount} matched · '
                         '${DateFormat('d MMM').format(record.recordedAt)}',
                         style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                          color: theme.colorScheme.onSurface
+                              .withValues(alpha: 0.55),
+                        ),
+                      ),
+                      Text(
+                        'Word matching only',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurface
+                              .withValues(alpha: 0.55),
                         ),
                       ),
                     ],
@@ -364,10 +386,11 @@ class _SessionReviewSheet extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(Icons.check_circle_outline_rounded,
-                              size: 56, color: Colors.green.withValues(alpha: 0.7)),
+                              size: 56,
+                              color: Colors.green.withValues(alpha: 0.7)),
                           const SizedBox(height: 12),
                           Text(
-                            'No mistakes — perfect recitation!',
+                            'No word mismatches to review',
                             style: theme.textTheme.titleMedium,
                             textAlign: TextAlign.center,
                           ),
@@ -383,18 +406,23 @@ class _SessionReviewSheet extends StatelessWidget {
                     itemBuilder: (context, i) {
                       final m = record.mistakes[i];
                       final isSkip = m.errorType == 'skipped';
-                      final color = isSkip ? const Color(0xFFEF6C00) : theme.colorScheme.error;
+                      final color = isSkip
+                          ? const Color(0xFFEF6C00)
+                          : theme.colorScheme.error;
                       return Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
                           color: color.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: color.withValues(alpha: 0.3)),
+                          border:
+                              Border.all(color: color.withValues(alpha: 0.3)),
                         ),
                         child: Row(
                           children: [
                             Icon(
-                              isSkip ? Icons.skip_next_rounded : Icons.record_voice_over_rounded,
+                              isSkip
+                                  ? Icons.skip_next_rounded
+                                  : Icons.record_voice_over_rounded,
                               color: color,
                             ),
                             const SizedBox(width: 12),
@@ -413,8 +441,9 @@ class _SessionReviewSheet extends StatelessWidget {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              isSkip ? 'Skipped' : 'Mispronounced',
-                              style: theme.textTheme.labelSmall?.copyWith(color: color),
+                              isSkip ? 'Skipped' : 'Mismatch',
+                              style: theme.textTheme.labelSmall
+                                  ?.copyWith(color: color),
                             ),
                           ],
                         ),
