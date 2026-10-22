@@ -1393,7 +1393,8 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
         Expanded(
             child: Column(
           children: [
-            RecitationReviewSummary(review: review, mushaf: mushaf, theme: theme),
+            RecitationReviewSummary(
+                review: review, mushaf: mushaf, theme: theme),
             Expanded(
               child: _buildMushafPage(
                 theme,

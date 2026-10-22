@@ -1925,6 +1925,86 @@ class StreamingRecitationSession:
                 logger.info('stream.native_word_repaired', word_index=index,
                             confidence=round(evidence['confidence'], 3), endpoints=evidence['endpoints'])
 
+        self._repair_anchored_native_spans(current)
+
+    def _repair_anchored_native_spans(self, current) -> None:
+        """Recover 2–3 adjacent gaps using their original outside anchors."""
+        import math
+        from ml.alignment.native_evidence import prove_native_span_repair
+        from ml.alignment.streaming_matcher import WordStatus
+
+        delegate = getattr(self._matcher, '_delegate', self._matcher)
+        repair = getattr(self._matcher, 'repair_native_span', None)
+        if (repair is None or self._last_native_view is None or self._is_stub
+                or EVIDENCE_POLICY != 'tier2' or _live_asr_engine() != 'fastconformer_rnnt'):
+            return
+        states = {state.index: state for state in getattr(delegate, '_resolved_states', [])}
+        slots = getattr(delegate, '_live_hyp_indices', {})
+        identity = lambda word: delegate._word_aliases.get(word, word)
+        threshold = getattr(delegate, 'live_confidence_threshold', .55)
+        unresolved = (WordStatus.SKIPPED, WordStatus.ERROR)
+        for left, before in sorted(states.items()):
+            if before.status != WordStatus.MATCHED:
+                continue
+            right = left + 1
+            while right in states and states[right].status in unresolved and right - left <= 3:
+                right += 1
+            count = right - left - 1
+            after = states.get(right)
+            if (not 2 <= count <= 3 or after is None or after.status != WordStatus.MATCHED
+                    or any(not anchor.spoken or not math.isfinite(anchor.confidence)
+                           or not threshold <= anchor.confidence <= 1
+                           or identity(anchor.spoken) != identity(anchor.expected)
+                           for anchor in (before, after))):
+                continue
+            first_slot, last_slot = slots.get(left), slots.get(right)
+            if (first_slot is None or last_slot is None
+                    or not 0 <= first_slot < last_slot < getattr(self._matcher, '_hyp_cursor', 0)
+                    or last_slot >= min(len(self._hypothesis), len(self._hypothesis_timings))
+                    or self._hypothesis[first_slot] != before.spoken
+                    or self._hypothesis[last_slot] != after.spoken):
+                continue
+            proof = prove_native_span_repair(
+                self._last_native_view, current,
+                expected=[states[index].expected for index in range(left, right + 1)],
+                before_span=self._hypothesis_timings[first_slot],
+                after_span=self._hypothesis_timings[last_slot],
+                identity=identity, threshold=threshold, sample_rate=self.sample_rate,
+                total_samples=self._total_samples, right_context_seconds=LIVE_RIGHT_CONTEXT_SEC,
+            )
+            if proof is None:
+                continue
+            # The whole target run is resegmented atomically. Its native frames
+            # cannot belong to a surviving match/error outside these anchors.
+            used = []
+            for other_index, other in states.items():
+                if left <= other_index <= right or other.status not in (WordStatus.MATCHED, WordStatus.ERROR):
+                    continue
+                slot = slots.get(other_index)
+                if slot is not None and 0 <= slot < len(self._hypothesis_timings):
+                    used.append(self._hypothesis_timings[slot])
+                prior = self._native_word_repairs.get(other_index)
+                if prior:
+                    used.append(prior['spans'][1])
+            if (any(not all(math.isfinite(value) for value in bounds) for bounds in used)
+                    or any(max(begin, used_begin) <= min(end + .08, used_end + .08) + 1e-5
+                           for begin, end in proof['spans'][1:-1]
+                           for used_begin, used_end in used)):
+                continue
+            if not repair(left + 1, proof['words'], proof['confidences']):
+                continue
+            for offset, (word, score) in enumerate(zip(proof['words'], proof['confidences']), start=1):
+                index = left + offset
+                # Keep each repaired word at spans[1], preserving the existing
+                # one-word provenance contract used by later ownership checks.
+                self._native_word_repairs[index] = {
+                    'word': word, 'confidence': score, 'endpoints': proof['endpoints'],
+                    'previous_spans': proof['previous_spans'][offset-1:offset+2],
+                    'spans': proof['spans'][offset-1:offset+2],
+                }
+                logger.info('stream.native_span_word_repaired', word_index=index,
+                            confidence=round(score, 3), endpoints=proof['endpoints'])
+
     def _revise_supported_timed_errors(
         self, window_words, window_confs, window_times, *, window_start,
         window_seconds, right_context_seconds, endpoint_samples,
