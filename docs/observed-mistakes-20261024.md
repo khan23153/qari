@@ -37,3 +37,11 @@ Implement immediate *supported* lexical mistake feedback and conservative observ
 - Dagger-alif normalization, partial/absent marks, waqf/sukun/fathatan cases, explicit conflicting final vowels and missed لله/رب have passing controlled-evidence regressions. This is not evidence that an acoustic model detects every deliberately changed vowel.
 - Live baseline 5-case saved-public-audio checks pass before rollout. Candidate private/public real-audio qualification and deployment are the next gates, not implied by unit/widget counts.
 - Source evidence and run logs: `/home/ubuntu/qari-task-artifacts/observed-mistakes-20261024/`. Android SDK and compatible release signing config are absent: no replacement APK has been built or installed.
+
+## Upload qualification follow-up
+
+A real private upload of Ikhlas 112:1 while selecting ayahs 1–2 exposed a false-red suffix: independent Whisper emitted a zero-duration extra token plus a following hallucinated token. The failed gate is retained, not counted as a pass. Native word intervals must now be finite, positive, and within actual clip duration to establish trusted placement; substitutions must continue directly supported native slots. Native confidence is preserved, never raised. A supported following word is also required to assert wasl context.
+
+Fresh review then reproduced a separate gap problem: an invalid/weak native token could be placed into an earlier gap while its actual reference word became falsely missed. All omission positions inside that unresolved native bracket now stay uncertain; clean token-free omissions between supported anchors still produce confirmed red missed verdicts. Both counterexamples have recorded RED→GREEN regressions.
+
+Latest complete backend/ML/API suite: **1,208 passed / 1 optional skip / 2 warnings**. Flutter/core source remains unchanged from the passing suites above. The prior private upload retest passed normal, unread-suffix and silence cases after the tail guard; final gap-closure review and immutable-image requalification remain pending before rollout.

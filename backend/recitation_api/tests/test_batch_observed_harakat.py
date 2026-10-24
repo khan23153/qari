@@ -165,3 +165,59 @@ def test_production_independent_decoder_explicitly_disables_prompts():
     assert words==['قُلْ']
     assert captured['initial_prompt'] is None
     assert captured['condition_on_previous_text'] is False
+
+
+def test_zero_duration_tail_cannot_bridge_to_unread_substitutions():
+    # Real upload failure: a zero-duration hallucination followed by another
+    # confident token borrowed two unread reference slots after a correct ayah.
+    heard = ['قل', 'هو', 'الله', 'أحد', 'ما', 'يغفى']
+    tokens = [ASRToken(text=w, normalized=w, start_time=i*.15,
+                       end_time=(i+1)*.15, confidence=.95)
+              for i, w in enumerate(heard)]
+    tokens[4].start_time = tokens[4].end_time = .6
+    tokens[5].start_time, tokens[5].end_time = .6, .7
+    asr = SimpleNamespace(transcribe=lambda *_: ASRResult(
+        raw_text=' '.join(heard), normalized_text='', tokens=tokens))
+    rows = run_batch(['قل', 'هو', 'الله', 'أحد', 'الله', 'الصمد'], [], asr=asr)
+    assert all(row['is_correct'] for row in rows[:4])
+    assert all(not row['evidence_confirmed'] and row['display_color'] is None
+               for row in rows[4:])
+    assert not any(row['error_type'] in {'missed', 'substituted', 'harakat_mistake'}
+                   for row in rows[4:])
+
+
+@pytest.mark.parametrize('start,end', [
+    (0., 0.), (-.1, .2), (.3, .2), (0., 1.1),
+    (float('nan'), .2), (0., float('inf')),
+])
+def test_invalid_native_span_cannot_confirm_an_error_or_omission(start, end):
+    token = ASRToken(text='شكرا', normalized='شكرا', start_time=start,
+                     end_time=end, confidence=.99)
+    asr = SimpleNamespace(transcribe=lambda *_: ASRResult(
+        raw_text='شكرا', normalized_text='', tokens=[token]))
+    rows = run_batch(['الحمد', 'لله'], [], asr=asr)
+    assert all(not row['evidence_confirmed'] and row['display_color'] is None
+               for row in rows)
+
+
+@pytest.mark.parametrize('next_confidence,conflict', [(.1, False), (.95, True)])
+def test_wasl_context_requires_a_supported_following_native_word(next_confidence, conflict):
+    rows = run_batch(['أَنْعَمْتَ', 'عَلَيْهِمْ'],
+                     ['أَنْعَمْتْ', 'عَلَيْهِمْ'], [.95, next_confidence])
+    assert (rows[0]['error_type'] == 'harakat_mistake') is conflict
+
+
+@pytest.mark.parametrize('confidence,end', [(.95, .2), (.1, .4)])
+def test_unresolved_native_word_makes_the_whole_bracketed_gap_uncertain(confidence, end):
+    tokens = [
+        ASRToken(text='الحمد', normalized='الحمد', start_time=0., end_time=.2, confidence=.95),
+        ASRToken(text='رب', normalized='رب', start_time=.2, end_time=end, confidence=confidence),
+        ASRToken(text='العالمين', normalized='العالمين', start_time=.4, end_time=.6, confidence=.95),
+    ]
+    asr = SimpleNamespace(transcribe=lambda *_: ASRResult(
+        raw_text='الحمد رب العالمين', normalized_text='', tokens=tokens))
+    rows = run_batch(['الحمد', 'لله', 'رب', 'العالمين'], [], asr=asr)
+    assert rows[0]['is_correct'] and rows[3]['is_correct']
+    assert all(row['error_type'] == 'recognition_uncertain' for row in rows[1:3])
+    assert all(not row['evidence_confirmed'] and row['display_color'] is None
+               for row in rows[1:3])

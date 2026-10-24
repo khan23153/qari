@@ -146,6 +146,19 @@ def _batch_confidence(value) -> float:
     return confidence if math.isfinite(confidence) and 0 <= confidence <= 1 else 0.0
 
 
+def _batch_native_span(token, duration: float) -> tuple[int, int] | None:
+    """A word cannot prove speech outside a positive finite native interval."""
+    import math
+
+    try:
+        start, end = float(token.start_time), float(token.end_time)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not (math.isfinite(start) and math.isfinite(end) and 0 <= start < end <= duration):
+        return None
+    return round(start * 1000), round(end * 1000)
+
+
 def _align_batch_prefix(reference, hypothesis, confidences):
     """Align trusted evidence to the earliest supported reference prefix.
 
@@ -253,24 +266,46 @@ class BatchWordMatchingPipeline:
         normalized_heard = [_normalize(token.text or token.normalized)
                             for token in transcription.tokens]
         confidences = [_batch_confidence(token.confidence) for token in transcription.tokens]
-        alignment = _align_batch_prefix(expected_words, normalized_heard, confidences)
+        spans = [_batch_native_span(token, len(audio) / sample_rate)
+                 for token in transcription.tokens]
+        support_confidences = [c if span is not None else 0.0
+                               for c, span in zip(confidences, spans)]
+        alignment = _align_batch_prefix(expected_words, normalized_heard, support_confidences)
         reached = -1
         supported_placements = set()
         for aligned in alignment:
             if aligned.ref_index is None or aligned.hyp_index is None:
                 continue
-            confidence = confidences[aligned.hyp_index]
+            confidence = support_confidences[aligned.hyp_index]
             if not (math.isfinite(confidence) and WORD_CONFIDENCE_THRESHOLD <= confidence <= 1.0):
                 continue
             # Only exact heard text can bracket omissions. A substitution may
             # occupy the next slot, never justify an arbitrary global-DP jump.
-            if aligned.reference == aligned.hypothesis or aligned.ref_index == reached + 1:
+            # A substitution cannot bridge an invalid/weak native token just
+            # because trusted-path alignment removed that token from placement.
+            contiguous = (aligned.ref_index == reached + 1
+                          and (aligned.hyp_index == 0
+                               or aligned.hyp_index - 1 in supported_placements))
+            if aligned.reference == aligned.hypothesis or contiguous:
                 reached = aligned.ref_index
                 supported_placements.add(aligned.hyp_index)
+        uncertain_omissions = set()
+        left_reference = left_native = -1
+        for aligned in alignment:
+            if (aligned.ref_index is None or aligned.hyp_index is None
+                    or aligned.hyp_index not in supported_placements):
+                continue
+            # An unresolved native token anywhere in this bracket can belong
+            # to any gap word; its arbitrary weak placement cannot prove absence.
+            if any(j not in supported_placements
+                   for j in range(left_native + 1, aligned.hyp_index)):
+                uncertain_omissions.update(range(left_reference + 1, aligned.ref_index))
+            left_reference, left_native = aligned.ref_index, aligned.hyp_index
         words = []
         for aligned in alignment:
             token = (transcription.tokens[aligned.hyp_index]
                      if aligned.hyp_index is not None else None)
+            span = spans[aligned.hyp_index] if aligned.hyp_index is not None else None
             confidence = confidences[aligned.hyp_index] if aligned.hyp_index is not None else 0.0
             usable = (math.isfinite(confidence) and WORD_CONFIDENCE_THRESHOLD <= confidence <= 1.0
                       and aligned.hyp_index in supported_placements)
@@ -278,25 +313,29 @@ class BatchWordMatchingPipeline:
                              aligned.reference == aligned.hypothesis)
             # WordAligner's generic low-character-similarity heuristic cannot
             # hide a confidently recognized substitution in production.
-            verdict = ('low_confidence' if token is not None and not usable
+            verdict = ('low_confidence' if (token is not None and not usable)
+                       or aligned.ref_index in uncertain_omissions
                        else 'correct' if lexical_match
                        else 'mispronounced' if token is not None and aligned.reference is not None
                        else aligned.verdict.value)
             harakat = None
             if lexical_match and usable and confidence >= .55:
+                following = (aligned.hyp_index is not None
+                             and aligned.hyp_index + 1 in supported_placements
+                             and confidences[aligned.hyp_index + 1] >= .55)
                 harakat = compare_harakat(
                     expected_surface[aligned.ref_index], token.text,
                     is_ayah_end=aligned.ref_index in ayah_end_positions,
-                    is_stream_end=aligned.hyp_index == len(transcription.tokens) - 1,
-                    next_word_spoken=aligned.hyp_index < len(transcription.tokens) - 1,
+                    is_stream_end=not following,
+                    next_word_spoken=following,
                 )
             words.append(BatchWordMatch(
                 reference=aligned.reference,
                 hypothesis=aligned.hypothesis,
                 verdict=verdict,
                 confidence=confidence if math.isfinite(confidence) and 0 <= confidence <= 1 else 0.0,
-                start_ms=round(token.start_time * 1000) if token is not None else None,
-                end_ms=round(token.end_time * 1000) if token is not None else None,
+                start_ms=span[0] if span is not None else None,
+                end_ms=span[1] if span is not None else None,
                 reference_audio_url=(word_reference_urls[aligned.ref_index]
                                      if aligned.ref_index is not None else None),
                 reached=aligned.ref_index is not None and aligned.ref_index <= reached,
