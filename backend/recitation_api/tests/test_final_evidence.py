@@ -119,7 +119,7 @@ async def test_trusted_final_error_remains_red_and_continuation_keeps_global_ind
     result = await session.finalize()
     assert [verdict['word_index'] for verdict in result['word_verdicts']] == [0, 1, 2, 3]
     assert [verdict['is_correct'] for verdict in result['word_verdicts']] == [True, False, True, True]
-    assert result['word_verdicts'][1]['error_type'] == 'error'
+    assert result['word_verdicts'][1]['error_type'] == 'substituted'
     assert result['confidence'] == .95
     assert all(verdict['evidence_confirmed'] is True for verdict in result['word_verdicts'])
     serialized = RecitationAnalysisResult.model_validate(result).model_dump()
@@ -173,5 +173,5 @@ async def test_configured_final_vocabulary_omits_garbled_word_without_index_drif
     assert [verdict['is_correct'] for verdict in result['word_verdicts']] == correct
     assert result['confidence'] == .9
     if spoken == 'الناس':
-        assert result['word_verdicts'][1]['error_type'] == 'error'
+        assert result['word_verdicts'][1]['error_type'] == 'substituted'
         assert result['word_verdicts'][1]['actual_text'] == 'الناس'

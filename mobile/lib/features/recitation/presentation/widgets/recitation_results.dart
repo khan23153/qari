@@ -386,7 +386,9 @@ class _WordByWordDisplay extends StatelessWidget {
     // this word wrong?" without assuming the two lists are the same length.
     final mistakes = <int, WordVerdict>{};
     for (final v in result.wordVerdicts) {
-      if (!v.isCorrect && v.wordIndex >= 0) mistakes[v.wordIndex] = v;
+      if (v.isReviewMistake && v.wordIndex >= 0) {
+        mistakes[v.wordIndex] = v;
+      }
     }
 
     // Prefer the canonical Quranic text (which carries full tashkeel) over the
@@ -395,7 +397,7 @@ class _WordByWordDisplay extends StatelessWidget {
         ? ayahWords
         : result.wordVerdicts.map((v) => v.displayWord(ayahWords)).toList();
 
-    final mistakeColor = theme.colorScheme.error;
+    const mistakeColor = Color(0xFFEF4444);
     final ink = theme.brightness == Brightness.dark
         ? const Color(0xFFE8E2D4)
         : const Color(0xFF1A1A1A);
@@ -412,7 +414,6 @@ class _WordByWordDisplay extends StatelessWidget {
       child: Directionality(
         textDirection: TextDirection.rtl,
         child: Wrap(
-          alignment: WrapAlignment.start,
           crossAxisAlignment: WrapCrossAlignment.center,
           spacing: 4,
           runSpacing: 12,

@@ -31,7 +31,7 @@ class MushafTheme {
   /// Soft background tint behind the listening cursor.
   final Color activeTint;
 
-  /// Foreground for a confirmed mistake (strictly behind the cursor).
+  /// Foreground for a confirmed, reached mistake.
   final Color mismatchInk;
 
   /// The colour of a decorative Bismillah / surah banner glyph.
@@ -116,7 +116,7 @@ class MushafTheme {
     border: Color(0xFFD8C89A),
     correctTint: Color(0xFFE8F5E9),
     activeTint: Color(0xFFFFF3D0),
-    mismatchInk: Color(0xFFB3261E),
+    mismatchInk: Color(0xFFEF4444),
     ornament: Color(0xFFB8860B),
   );
 
@@ -131,7 +131,7 @@ class MushafTheme {
     border: Color(0xFF30332F),
     correctTint: Color(0xFF1B3B2B),
     activeTint: Color(0xFF284A2D),
-    mismatchInk: Color(0xFFCF6679),
+    mismatchInk: Color(0xFFEF4444),
     ornament: Color(0xFFBAC9B9),
   );
 
@@ -146,7 +146,7 @@ class MushafTheme {
     border: Color(0xFFC9B48C),
     correctTint: Color(0xFFE6EFDF),
     activeTint: Color(0xFFF6E3C8),
-    mismatchInk: Color(0xFF9B3A22),
+    mismatchInk: Color(0xFFEF4444),
     ornament: Color(0xFFB05A3C),
   );
 
@@ -162,7 +162,7 @@ class MushafTheme {
     border: Color(0xFFE2E2E2),
     correctTint: Color(0xFFE8F5E9),
     activeTint: Color(0xFFF0F0F0),
-    mismatchInk: Color(0xFFC5221F),
+    mismatchInk: Color(0xFFEF4444),
     ornament: Color(0xFF9A9A9A),
   );
 

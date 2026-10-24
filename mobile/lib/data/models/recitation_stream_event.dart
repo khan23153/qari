@@ -9,8 +9,12 @@ enum LiveWordStatus {
   /// Correctly recited — reveal + tint green.
   matched,
 
-  /// Mispronounced — reveal + flag red.
+  /// Generic confirmed mistake — reveal + flag red behind the cursor.
   error,
+
+  /// Explicitly confirmed substitution / observed diacritic conflict. Unlike
+  /// a generic skip, this is evidence the current word has been attempted.
+  observedError,
 
   /// Jumped over — reveal + flag (a later word matched instead).
   skipped;
@@ -36,7 +40,9 @@ enum LiveWordStatus {
 
   bool get isResolved => this != LiveWordStatus.pending;
   bool get isMistake =>
-      this == LiveWordStatus.error || this == LiveWordStatus.skipped;
+      this == LiveWordStatus.error ||
+      this == LiveWordStatus.skipped ||
+      this == LiveWordStatus.observedError;
 }
 
 /// Type of message received over the streaming recitation WebSocket.
@@ -64,6 +70,8 @@ class RecitationStreamEvent {
   final String? spoken;
   final double confidence;
   final bool evidenceConfirmed;
+  final String? errorType;
+  final String? observedText;
   final int? timestampMs;
 
   // final
@@ -82,20 +90,32 @@ class RecitationStreamEvent {
     this.spoken,
     this.confidence = 1.0,
     this.evidenceConfirmed = false,
+    this.errorType,
+    this.observedText,
     this.timestampMs,
     this.result,
     this.detail,
   });
 
   /// An uncertain recognition gap may advance the cursor, but cannot turn a
-  /// word red. Matches retain the existing wire contract; spoken mistakes
-  /// require the server's explicit confirmation and the existing 0.55 floor.
+  /// word red. Matches retain the existing wire contract; mistakes require
+  /// explicit confirmation and valid confidence. A confirmed omission has no
+  /// acoustic observation, so zero confidence is legitimate. Actually spoken
+  /// substitutions and harakat conflicts still need the 0.55 floor and text.
   LiveWordStatus get liveStatus {
     if (status.isMistake &&
         (!evidenceConfirmed ||
-            confidence < .55 ||
-            (spoken ?? '').trim().isEmpty)) {
+            !confidence.isFinite ||
+            confidence < 0 ||
+            confidence > 1 ||
+            (errorType != 'missed' && confidence < .55) ||
+            (errorType != 'missed' &&
+                (observedText ?? spoken ?? '').trim().isEmpty))) {
       return LiveWordStatus.pending;
+    }
+    if (status.isMistake &&
+        (errorType == 'substituted' || errorType == 'harakat_mistake')) {
+      return LiveWordStatus.observedError;
     }
     return status;
   }
@@ -128,6 +148,8 @@ class RecitationStreamEvent {
           spoken: json['spoken'] as String?,
           confidence: (json['confidence'] as num?)?.toDouble() ?? 1.0,
           evidenceConfirmed: json['evidence_confirmed'] == true,
+          errorType: json['error_type'] as String?,
+          observedText: json['observed_text'] as String?,
           timestampMs: (json['timestamp_ms'] as num?)?.toInt(),
         );
       case 'final':

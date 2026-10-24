@@ -33,7 +33,16 @@ import struct
 import uuid
 import wave
 from datetime import datetime, timezone
+from dataclasses import dataclass
 from typing import Callable, Optional
+
+from ml.inference.transcript import TimedTranscript
+
+
+@dataclass(frozen=True)
+class ObservedTimedTranscript(TimedTranscript):
+    """Native unprompted surface tokens beside the legacy lexical/time API."""
+    raw_words: list[str]
 
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -597,6 +606,8 @@ def _independent_recording_transcriber(audio, sr: int) -> tuple[list[str], list[
     if sr != 16000:
         raise ValueError("RNNT recording review requires 16000 Hz mono PCM")
     words, confidences = [], []
+    raw_words, timings = [], []
+    observed_complete = True
     chunk_samples = FINAL_RECORDING_CHUNK_SEC * sr
     logger.info("stream.recording_review_chunked", seconds=round(len(audio) / sr, 3),
                 chunk_seconds=FINAL_RECORDING_CHUNK_SEC)
@@ -604,9 +615,41 @@ def _independent_recording_transcriber(audio, sr: int) -> tuple[list[str], list[
         chunk = audio[start:start + chunk_samples]
         if _rms_energy(chunk) < SILENCE_RMS_THRESHOLD:
             continue
-        native_words, native_confidences = _independent_transcriber(chunk, sr)
+        decoded = _independent_transcriber(chunk, sr)
+        native_words, native_confidences = decoded
         words.extend(native_words)
         confidences.extend(native_confidences)
+        if (hasattr(decoded, "raw_words") and hasattr(decoded, "timings")
+                and len(decoded.raw_words) == len(decoded.timings) == len(native_words) == len(native_confidences)):
+            # Validate LOCAL times before offsetting. A negative timestamp in a
+            # later chunk can otherwise become plausible evidence for earlier
+            # audio. Malformed chunks keep lexical output but lose raw-vowel
+            # provenance; no fabricated replacement timestamps are permitted.
+            import math
+            valid = True
+            local_times = []
+            previous_begin = previous_end = 0.0
+            try:
+                for a, b in decoded.timings:
+                    a, b = float(a), float(b)
+                    if (not math.isfinite(a) or not math.isfinite(b)
+                            or not 0 <= a <= b <= len(chunk) / sr
+                            or a < previous_begin or b < previous_end):
+                        valid = False
+                        break
+                    local_times.append((a, b))
+                    previous_begin, previous_end = a, b
+            except (TypeError, ValueError, OverflowError):
+                valid = False
+            if valid:
+                raw_words.extend(decoded.raw_words)
+                timings.extend((a + start / sr, b + start / sr) for a, b in local_times)
+            else:
+                observed_complete = False
+        elif native_words:
+            observed_complete = False
+    if observed_complete and words:
+        return ObservedTimedTranscript(words, confidences, timings, raw_words)
     return words, confidences
 
 
@@ -636,16 +679,18 @@ def _independent_transcriber(audio, sr: int) -> tuple[list[str], list[float]]:
     out_confs: list[float] = []
     timings = getattr(decoded, "timings", None)
     out_timings = []
+    out_raw = []
     for index, (w, c) in enumerate(zip(raw_words, confs)):
         n = _normalize(w)
         if n:
             norm.append(n)
             out_confs.append(c)
+            out_raw.append(w)
             if timings is not None:
                 out_timings.append(timings[index])
     if timings is not None:
         from ml.inference.transcript import TimedTranscript
-        return _join_split_vocatives(TimedTranscript(norm, out_confs, out_timings))
+        return _join_split_vocatives(ObservedTimedTranscript(norm, out_confs, out_timings, out_raw))
     return norm, out_confs
 
 
@@ -660,18 +705,25 @@ def _join_split_vocatives(transcript):
 
     vocabulary = _get_live_error_vocabulary()
     vocatives = {_normalize(word) for word in _PUBLISHED_VOCATIVES}
-    words, confidences, timings = [], [], []
-    for word, confidence, timing in zip(transcript.words, transcript.confidences, transcript.timings):
+    words, confidences, timings, raw = [], [], [], []
+    native_raw = getattr(transcript, "raw_words", None)
+    for index, (word, confidence, timing) in enumerate(zip(transcript.words, transcript.confidences, transcript.timings)):
         if (words and words[-1] == "يا" and "يا" + word in vocatives
                 and "يا" + word in vocabulary
                 and 0 <= timing[0] - timings[-1][1] <= .8 + 1e-6):
             words[-1] += word
             confidences[-1] = min(confidences[-1], confidence)
             timings[-1] = (timings[-1][0], timing[1])
+            if native_raw is not None:
+                raw[-1] += native_raw[index]
         else:
             words.append(word)
             confidences.append(confidence)
             timings.append(timing)
+            if native_raw is not None:
+                raw.append(native_raw[index])
+    if native_raw is not None:
+        return ObservedTimedTranscript(words, confidences, timings, raw)
     return TimedTranscript(words, confidences, timings)
 
 
@@ -811,6 +863,7 @@ def _stitch_timed_hypothesis(
     prefix, prefix_confs, prefix_times, window_words, window_confs,
     window_times, *, consumed, consumed_end, window_start, window_seconds,
     confidence_threshold, right_context_seconds=0.0,
+    selected_indices=None,
 ):
     """Retain consumed evidence and replace the remaining overlapping audio.
 
@@ -909,6 +962,8 @@ def _stitch_timed_hypothesis(
         and not (keep and end <= consumed_end + .08
                  and _words_similar(window_words[index], prefix[keep - 1]))
     ]
+    if selected_indices is not None:
+        selected_indices.extend(fresh)
     return (
         list(prefix[:keep]) + [window_words[i] for i in fresh],
         list(prefix_confs[:keep]) + [window_confs[i] for i in fresh],
@@ -975,6 +1030,11 @@ class StreamingRecitationSession:
         # cumulative words so `finalize()` and existing callers keep working.
         self._hypothesis: list[str] = []
         self._hypothesis_confs: list[float] = []
+        self._hypothesis_raw: list[Optional[str]] = []
+        self._heard_word_evidence: dict[int, dict] = {}
+        self._harakat_errors: dict[int, dict] = {}
+        self._confirmed_live_omissions: set[int] = set()
+        self._canonical_reference_raw = False
         self._hypothesis_timings: list[tuple[float, float]] = []
         self._consumed_audio_end = float("-inf")
         self._timed_evidence_seen = False
@@ -1011,6 +1071,7 @@ class StreamingRecitationSession:
         self.reference_words = norm
         self.reference_audio_url = ref_url
         self.word_entries = entries
+        self._canonical_reference_raw = bool(display) and len(display) == len(norm)
         self.ayah_boundaries = boundaries
         # Per-word tashkeel text used to build the ORACLE decode prompt for the
         # prompt-conditioned V50 ASR model. Falls back to normalized words when
@@ -1427,6 +1488,7 @@ class StreamingRecitationSession:
                     or stall
                 )
                 window_timings = None
+                window_raw = None
                 try:
                     if EVIDENCE_POLICY == "tier2":
                         # The independent witness IS the live hypothesis (see
@@ -1439,6 +1501,7 @@ class StreamingRecitationSession:
                         )
                         win_words, win_confs = decoded
                         window_timings = getattr(decoded, "timings", None)
+                        window_raw = getattr(decoded, "raw_words", None)
                         raw_words, raw_confs = list(win_words), list(win_confs)
                         self._verified_words = [
                             (w, c) for w, c in zip(raw_words, raw_confs) if w
@@ -1613,8 +1676,12 @@ class StreamingRecitationSession:
                     self._hypothesis = self._hypothesis[:keep]
                     self._hypothesis_confs = self._hypothesis_confs[:keep]
                     self._hypothesis_timings = self._hypothesis_timings[:keep]
+                    self._hypothesis_raw = self._hypothesis_raw[:keep]
                 if window_timings is not None:
                     try:
+                        selected = []
+                        retained_raw = list(self._hypothesis_raw)
+                        retained_raw += [None] * (len(self._hypothesis) - len(retained_raw))
                         stitched, stitched_confs, stitched_times = _stitch_timed_hypothesis(
                             self._hypothesis, self._hypothesis_confs,
                             self._hypothesis_timings, win_words, win_confs,
@@ -1625,7 +1692,11 @@ class StreamingRecitationSession:
                             window_seconds=len(audio) / self.sample_rate,
                             confidence_threshold=getattr(self._matcher, "live_confidence_threshold", .55),
                             right_context_seconds=0.0 if force else LIVE_RIGHT_CONTEXT_SEC,
+                            selected_indices=selected,
                         )
+                        keep = min(max(0, int(getattr(self._matcher, "_hyp_cursor", 0))), len(self._hypothesis))
+                        raw_available = window_raw is not None and len(window_raw) == len(win_words)
+                        stitched_raw = retained_raw[:keep] + [window_raw[i] if raw_available else None for i in selected]
                         self._revise_supported_timed_gaps(
                             win_words, win_confs, window_timings,
                             window_start=start / self.sample_rate,
@@ -1668,6 +1739,7 @@ class StreamingRecitationSession:
                         self._hypothesis, self._hypothesis_confs, win_words, win_confs,
                     )
                     stitched_times = []
+                    stitched_raw = [None] * len(stitched)
                 # Clamp the cumulative hypothesis so ASR hallucinations /
                 # repeated-token explosions can't grow it without bound. The
                 # cap must be measured from the matcher's CONSUMED prefix
@@ -1691,6 +1763,7 @@ class StreamingRecitationSession:
                 self._hypothesis = stitched
                 self._hypothesis_confs = stitched_confs
                 self._hypothesis_timings = stitched_times[:cap]
+                self._hypothesis_raw = stitched_raw[:cap]
 
             self._last_hypothesis = self._hypothesis
             _cursor_before = int(getattr(self._matcher, "_cursor", 0) or 0)
@@ -1718,6 +1791,7 @@ class StreamingRecitationSession:
                 )
             if self._last_native_view is not None:
                 self._confirm_timed_error_events(right_context_seconds=0.0 if force else LIVE_RIGHT_CONTEXT_SEC)
+            self._observe_harakat(states, is_stream_end=force)
             return self._diff_events(states)
 
     def _recover_supported_native_anchor(self, *, force=False):
@@ -2261,27 +2335,183 @@ class StreamingRecitationSession:
         for index in set(self._pending_gap_revisions)-eligible:
             self._pending_gap_revisions.pop(index,None)
 
+    def _observe_harakat(self, states, *, is_stream_end=False, native=None, native_slots=None) -> None:
+        """Freeze surface evidence at its exact native occurrence, not a word lookup.
+
+        This is a text observation, never acoustic pronunciation qualification.
+        Repairs without their original raw token abstain rather than borrowing
+        a later/repeated word's marks. Lexical states and cursors are untouched.
+        """
+        import math
+        from ml.alignment.harakat import compare_harakat
+        if (self._is_stub or not self._canonical_reference_raw
+                or EVIDENCE_POLICY != "tier2" or _live_asr_engine() != "fastconformer_rnnt"):
+            return
+        d = getattr(self._matcher, "_delegate", self._matcher)
+        slots = getattr(d, "_live_hyp_indices", {}) if native_slots is None else native_slots
+        raw_words = self._hypothesis_raw if native is None else getattr(native, "raw_words", [])
+        words = self._hypothesis if native is None else native.words
+        scores = self._hypothesis_confs if native is None else native.confidences
+        times = self._hypothesis_timings if native is None else native.timings
+        threshold = max(.55, getattr(d, "live_confidence_threshold", .55))
+        by_index = {state.index: state for state in states}
+        ends = {int(b["word_index_end"]) for b in self.ayah_boundaries}
+        for index, state in by_index.items():
+            if native is not None and index in self._heard_word_evidence:
+                continue  # Never replace a frozen original occurrence.
+            slot = slots.get(index)
+            if index not in self._heard_word_evidence:
+                if (state.status.value != "matched" or slot is None
+                        or list(slots.values()).count(slot) != 1
+                        or not len(raw_words) == len(words) == len(scores) == len(times)
+                        or not 0 <= slot < len(words)
+                        or not 0 <= index < len(self.word_entries)):
+                    continue
+                raw = raw_words[slot]
+                expected = self.word_entries[index].get("text_with_tashkeel", "")
+                score = scores[slot]
+                begin, end = times[slot]
+                if (not isinstance(raw, str) or not raw or not expected
+                        or not all(math.isfinite(v) for v in (score, state.confidence, begin, end))
+                        or not threshold <= score <= 1 or score != state.confidence
+                        or not 0 <= begin <= end <= self.duration_seconds + .08
+                        or words[slot] != state.spoken
+                        or _normalize(raw) != state.expected or state.spoken != state.expected
+                        or _normalize(expected) != state.expected):
+                    continue
+                self._heard_word_evidence[index] = {
+                    "raw": raw, "expected": expected, "confidence": score,
+                    "slot": slot, "span": (begin, end),
+                }
+            evidence = self._heard_word_evidence[index]
+            # Stream end applies to the last observed native word, not to
+            # every reference word before a skip or a spoken substitution.
+            # Require the immediately following owned native slot: unknown
+            # intervening recognition must not manufacture connected speech.
+            following_slot = evidence["slot"] + 1
+            following = next((candidate for next_index, candidate in by_index.items()
+                              if next_index > index and slots.get(next_index) == following_slot), None)
+            next_spoken = bool(
+                following is not None and following.status.value in ("matched", "error")
+                and list(slots.values()).count(following_slot) == 1
+                and following_slot < min(len(words), len(scores), len(times))
+                and all(math.isfinite(v) for v in (following.confidence, scores[following_slot],
+                                                  *times[following_slot]))
+                and threshold <= following.confidence <= 1
+                and following.confidence == scores[following_slot]
+                and following.spoken == words[following_slot]
+                and 0 <= times[following_slot][0] <= times[following_slot][1] <= self.duration_seconds + .08
+                and times[following_slot][0] >= evidence["span"][1] - .08 - 1e-6
+            )
+            comparison = compare_harakat(
+                evidence["expected"], evidence["raw"], is_ayah_end=index in ends,
+                is_stream_end=is_stream_end and not next_spoken, next_word_spoken=next_spoken,
+            )
+            if comparison.mismatch:
+                self._harakat_errors.setdefault(index, {
+                    **evidence, "conflicts": list(comparison.conflicts),
+                    "compared_positions": list(comparison.compared_positions),
+                })
+
+    def _observe_final_harakat(self, states, native) -> None:
+        """Use the final matcher's native slot, including its invocation offset."""
+        if native is None or not hasattr(native, "raw_words") or not hasattr(native, "timings"):
+            return
+        d = getattr(self._matcher, "_delegate", self._matcher)
+        threshold = max(.55, getattr(d, "live_confidence_threshold", .55))
+        limit = min(len(self.reference_words), int(getattr(self._matcher, "max_live_words", 0)))
+        words, scores = native.words, native.confidences
+        def matches(slot, index):
+            return (slot < len(scores) and threshold <= scores[slot] <= 1
+                    and d._is_match(words[slot], self.reference_words[index]))
+        # Mirror only the existing final wrapper's opening offset; the final
+        # WordState supplies the actual aligned slot, so repeats stay distinct.
+        anchor = next(((0, slot) for slot in range(len(words)) if limit and matches(slot, 0)), None)
+        if anchor is None:
+            for slot in range(len(words) - 1):
+                for index in range(min(limit, d.lookahead + 1) - 1):
+                    if (self.reference_words[index] != self.reference_words[index + 1]
+                            and words[slot] != words[slot + 1]
+                            and matches(slot, index) and matches(slot + 1, index + 1)):
+                        anchor = (index, slot)
+                        break
+                if anchor is not None:
+                    break
+        if anchor is None:
+            return
+        slots = {state.index: state.hypothesis_index + anchor[1] for state in states
+                 if state.hypothesis_index is not None}
+        self._observe_harakat(states, is_stream_end=True, native=native, native_slots=slots)
+
+    def _supported_live_omission(self, state) -> bool:
+        """A moved consumed emission is alignment uncertainty, not a missed word."""
+        import math
+        if state.status.value != "skipped" or not state.omission_confirmed:
+            return False
+        if state.index in self._confirmed_live_omissions:
+            return True
+        if not self._timed_evidence_seen:
+            return True
+        if self._last_native_view is None:
+            return False
+        d = getattr(self._matcher, "_delegate", self._matcher)
+        states = {st.index: st for st in getattr(d, "_resolved_states", [])}
+        slots = getattr(d, "_live_hyp_indices", {})
+        before = max((i for i in slots if i < state.index), default=None)
+        after = min((i for i in slots if i > state.index), default=None)
+        if after is None:
+            return False
+        start, _, words, scores, times = self._last_native_view
+        offset, tolerance = start / self.sample_rate, .08 + 1e-6
+        threshold = max(.55, getattr(d, "live_confidence_threshold", .55))
+        anchors = []
+        for index in (before, after):
+            if index is None:
+                continue
+            st, slot = states.get(index), slots[index]
+            if (st is None or st.status.value != "matched" or st.spoken != st.expected
+                    or not math.isfinite(st.confidence) or not threshold <= st.confidence <= 1
+                    or not 0 <= slot < len(self._hypothesis_timings)):
+                return False
+            old_begin, old_end = self._hypothesis_timings[slot]
+            hits = [j for j, (word, score, (a, b)) in enumerate(zip(words, scores, times))
+                    if word == st.expected and all(math.isfinite(v) for v in (score, a, b, old_begin, old_end))
+                    and threshold <= score <= 1
+                    and abs(a + offset - old_begin) <= tolerance
+                    and abs(b + offset - old_end) <= tolerance]
+            if len(hits) != 1:
+                return False
+            anchors.append(hits[0])
+        # No unknown/weak/foreign native tokens may occupy the alleged gap.
+        supported = len(anchors) == 1 or anchors[1] == anchors[0] + 1
+        if supported:
+            self._confirmed_live_omissions.add(state.index)
+        return supported
+
     def _diff_events(self, states) -> list[dict]:
         events: list[dict] = []
         for st in states:
+            harakat = self._harakat_errors.get(st.index)
+            omission = self._supported_live_omission(st)
+            event_state = "harakat_mistake" if harakat else "missed" if omission else st.status.value
             if (_live_asr_engine() == "fastconformer_rnnt" and self._timed_evidence_seen and st.status.value == "error"
                     and st.index not in self._confirmed_native_errors):
                 continue
-            if self._last_status.get(st.index) == st.status.value:
+            if self._last_status.get(st.index) == event_state:
                 continue
-            self._last_status[st.index] = st.status.value
+            self._last_status[st.index] = event_state
             # Blueprint contract: the client receives a stable ``status`` of
             # ``match`` (correctly revealed) or ``error_skipped`` (skipped /
             # mispronounced), keyed by the 1-based ``word_id``. We keep the
             # richer fields (word_index, expected, spoken, confidence) for
             # debugging and richer UI affordances — they are additive.
             blueprint_status = (
-                "match" if st.status.value == "matched" else "error_skipped"
+                "match" if st.status.value == "matched" and not harakat else "error_skipped"
             )
             evidence_confirmed = blueprint_status == "match" or (
                 st.status.value == "error" and bool(st.spoken) and
                 st.confidence >= getattr(self._matcher, "live_confidence_threshold", 0.55)
-            )
+            ) or bool(harakat) or omission
             events.append({
                 "type": "word",
                 "session_id": self.session_id,
@@ -2289,8 +2519,15 @@ class StreamingRecitationSession:
                 "word_id": st.index + 1,
                 "word_index": st.index,
                 "expected": st.expected,
-                "spoken": st.spoken,
-                "confidence": round(st.confidence, 3),
+                "spoken": harakat["raw"] if harakat else st.spoken,
+                "confidence": round(harakat["confidence"] if harakat else st.confidence, 3),
+                "error_type": ("harakat_mistake" if harakat else "missed" if st.status.value == "skipped" and evidence_confirmed
+                               else "substituted" if st.status.value == "error" and evidence_confirmed
+                               else None),
+                "evidence_source": "asr_diacritic" if harakat else "lexical_asr",
+                "observed_text": harakat["raw"] if harakat else st.spoken,
+                "harakat_conflicts": harakat["conflicts"] if harakat else [],
+                "display_color": "#EF4444" if evidence_confirmed and blueprint_status == "error_skipped" else None,
                 "evidence_confirmed": evidence_confirmed,
                 "timestamp_ms": int(self.duration_seconds * 1000),
             })
@@ -2579,6 +2816,16 @@ class StreamingRecitationSession:
         if use_recording_evidence:
             states = independent_finalizer(final_words, final_confs)
             states = self._repair_final_native_words(states, final_native)
+            # The legacy final wrapper intentionally omits unconfirmed gaps.
+            # Preserve only live omissions already proven by exact progress;
+            # no unobserved suffix or unknown recognition becomes an error.
+            d = getattr(self._matcher, "_delegate", self._matcher)
+            by_index = {state.index: state for state in states}
+            for state in getattr(d, "_resolved_states", []):
+                if (self._supported_live_omission(state)
+                        and state.index < int(self._matcher.max_live_words)):
+                    by_index.setdefault(state.index, state)
+            states = [by_index[index] for index in sorted(by_index)]
         else:
             states = (
                 self._matcher.finalize(self._last_hypothesis, self._hypothesis_confs)
@@ -2589,19 +2836,22 @@ class StreamingRecitationSession:
         word_verdicts = []
         matched = 0
         evidence_confidences = []
+        self._observe_harakat(states, is_stream_end=True)
+        self._observe_final_harakat(states, final_native)
         for st in states:
+            harakat = self._harakat_errors.get(st.index)
             supported = (
                 st.status in (WordStatus.MATCHED, WordStatus.ERROR)
                 and bool(st.spoken)
                 and st.confidence >= getattr(self._matcher, 'live_confidence_threshold', 0.55)
-            )
-            if supported:
+            ) or self._supported_live_omission(st)
+            if supported and st.spoken:
                 evidence_confidences.append(st.confidence)
-            elif not self._is_stub:
+            elif not supported and not self._is_stub:
                 # The mobile review falls back to live pending status when an
                 # unconfirmed index is absent. Keep global indices unchanged.
                 continue
-            is_correct = st.status == WordStatus.MATCHED
+            is_correct = st.status == WordStatus.MATCHED and not harakat
             if is_correct:
                 matched += 1
             word_verdicts.append({
@@ -2610,11 +2860,18 @@ class StreamingRecitationSession:
                 "is_correct": is_correct,
                 "confidence": round(st.confidence, 3),
                 "evidence_confirmed": supported,
-                "expected_text": st.expected,
-                "actual_text": st.spoken,
-                "error_type": None if is_correct else st.status.value,
+                "expected_text": harakat["expected"] if harakat else st.expected,
+                "actual_text": harakat["raw"] if harakat else st.spoken,
+                "observed_text": harakat["raw"] if harakat else st.spoken,
+                "evidence_source": "asr_diacritic" if harakat else "lexical_asr",
+                "harakat_conflicts": harakat["conflicts"] if harakat else [],
+                "display_color": "#EF4444" if supported and not is_correct else None,
+                "error_type": ("harakat_mistake" if harakat else None if is_correct
+                               else "missed" if st.omission_confirmed else "substituted"
+                               if st.status == WordStatus.ERROR else st.status.value),
                 "error_description": (
-                    None if is_correct else _describe(st.status.value)
+                    "An explicitly observed vowel differs from the reference." if harakat
+                    else None if is_correct else _describe(st.status.value)
                 ),
                 "reference_audio_url": self.reference_audio_url or None,
                 "user_audio_url": user_audio_url,
