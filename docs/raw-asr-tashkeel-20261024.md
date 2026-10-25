@@ -1,4 +1,6 @@
-# Raw ASR tashkeel probe — 24 October 2026
+# Raw ASR tashkeel probe — 25 October 2026
+
+Probe executed at 04:53 UTC, using the observed-mistakes deployment from 24 October.
 
 ## Runtime inspected
 

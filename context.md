@@ -1,3 +1,13 @@
+# Raw ASR / GitHub checkpoint — 2026-10-25 04:58 UTC
+
+GitHub CLI installed (Ubuntu package 2.46.0) and user-approved device authentication verified as `khan23153`. Feature branch `feat/realtime-red-mistakes-harakat` pushed to origin with deployed code commit `5eb1433` and all backend/Flutter changes. **PR #43 is OPEN:** https://github.com/khan23153/qari/pull/43 (base `main`, not merged). GitHub backend/Flutter checks started; final CI success is not yet established. Release `Build APK` workflow is manual (`workflow_dispatch`): merging alone does not run that release build. Compatible signing still needs verification before distributing the resulting APK.
+
+Direct native decoder probe at 04:53 UTC used the real recovered test recording `ID3V1T.wav` and the deployed image/weights, isolated/offline. No tracked audio exists in the checkout. Live FastConformer native `.text` was exactly `قل هو الله أحد`, zero Arabic combining marks. Upload independent CT2 base Whisper emitted vocalized `قُلْ هُوَ اللَّهُ أَحَدٌ` followed by four raw `مَا يَغْفَى` segments (hallucinations); 16 fathas, 3 dammas, zero kasras across the exact concatenation. No normalization/stripping or target prompt was used. Live RNNT and uploaded Whisper are different active decoders: do not claim that both are undiacritized or that emitted canonical vowels qualify acoustic errors.
+
+Public `tarteel-ai/whisper-base-ar-quran` exists/ungated and is referenced in legacy ASR/training defaults, but is not the selected live RNNT. The local CT2 manifest identifies file hashes, not verified upstream lineage. Exact raw output and limits are committed in `docs/raw-asr-tashkeel-20261024.md`; local complete Unicode/native-token evidence is `qari-task-artifacts/observed-mistakes-20261024/raw-asr-tashkeel.json`. Production configuration/processes were not changed for this probe or PR.
+
+---
+
 # Deployed checkpoint — 2026-10-24 22:17 UTC
 
 **Backend rollout completed:** code revision `5eb14335584618f53dd7ec58a4830b8512deb61b`. `infra-core-api-1`, `infra-recitation-api-1`, and `infra-inference-worker-1` were recreated and remain healthy with zero restarts/OOM. Their exact image IDs, immutable ML mount and packaged source hashes were read back; credentials/database configuration were retained. Persistent automatic Compose override: `/home/ubuntu/qari/infra/docker-compose.override.yml`. Immutable code: `/home/ubuntu/qari-deployments/observed-mistakes-5eb1433`. The editable root checkout is not the deployed ML source; source implementation/mobile changes remain in `fix/observed-mistakes-20261024` at `/home/ubuntu/qari-work/observed-mistakes-20261024`.
