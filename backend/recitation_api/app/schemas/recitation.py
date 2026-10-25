@@ -40,6 +40,10 @@ class WordVerdictOut(BaseModel):
     is_correct: bool
     confidence: float = 1.0
     evidence_confirmed: StrictBool = False
+    evidence_source: Optional[str] = None
+    observed_text: Optional[str] = None
+    harakat_conflicts: list[dict] = Field(default_factory=list)
+    display_color: Optional[str] = None
     expected_text: Optional[str] = None
     actual_text: Optional[str] = None
     start_ms: Optional[int] = None

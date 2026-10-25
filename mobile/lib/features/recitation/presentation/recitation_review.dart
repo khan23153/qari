@@ -29,9 +29,7 @@ class RecitationReview {
   int get correctCount =>
       statuses.where((s) => s == LiveWordStatus.matched).length;
 
-  int get mistakeCount => statuses
-      .where((s) => s == LiveWordStatus.error || s == LiveWordStatus.skipped)
-      .length;
+  int get mistakeCount => statuses.where((s) => s.isMistake).length;
 
   int get unreachedCount => statuses.length - reach;
 
@@ -77,10 +75,14 @@ RecitationReview buildRecitationReview({
   }
   for (final v in server.values) {
     final confirmedError = v.evidenceConfirmed &&
+        v.isReviewMistake &&
         v.confidence >= .55 &&
         (v.actualText ?? '').trim().isNotEmpty &&
-        v.errorType == 'error';
-    if ((v.isCorrect || confirmedError) && v.wordIndex + 1 > reach) {
+        (v.errorType == 'error' ||
+            v.errorType == 'substituted' ||
+            v.errorType == 'harakat_mistake');
+    if ((v.isCorrect || (confirmedError && v.wordIndex <= reach)) &&
+        v.wordIndex + 1 > reach) {
       reach = v.wordIndex + 1;
     }
   }
@@ -96,7 +98,11 @@ RecitationReview buildRecitationReview({
     // verdict is the fallback when the final payload is missing that word.
     final LiveWordStatus status;
     if (sv != null) {
-      status = sv.isCorrect ? LiveWordStatus.matched : LiveWordStatus.error;
+      status = sv.isCorrect
+          ? LiveWordStatus.matched
+          : sv.isReviewMistake
+              ? LiveWordStatus.error
+              : LiveWordStatus.pending;
     } else {
       status = live;
     }

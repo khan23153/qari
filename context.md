@@ -1,3 +1,27 @@
+# Raw ASR / GitHub checkpoint — 2026-10-25 04:58 UTC
+
+GitHub CLI installed (Ubuntu package 2.46.0) and user-approved device authentication verified as `khan23153`. Feature branch `feat/realtime-red-mistakes-harakat` pushed to origin with deployed code commit `5eb1433` and all backend/Flutter changes. **PR #43 is OPEN:** https://github.com/khan23153/qari/pull/43 (base `main`, not merged). GitHub backend/Flutter checks started; final CI success is not yet established. Release `Build APK` workflow is manual (`workflow_dispatch`): merging alone does not run that release build. Compatible signing still needs verification before distributing the resulting APK.
+
+Direct native decoder probe at 04:53 UTC used the real recovered test recording `ID3V1T.wav` and the deployed image/weights, isolated/offline. No tracked audio exists in the checkout. Live FastConformer native `.text` was exactly `قل هو الله أحد`, zero Arabic combining marks. Upload independent CT2 base Whisper emitted vocalized `قُلْ هُوَ اللَّهُ أَحَدٌ` followed by four raw `مَا يَغْفَى` segments (hallucinations); 16 fathas, 3 dammas, zero kasras across the exact concatenation. No normalization/stripping or target prompt was used. Live RNNT and uploaded Whisper are different active decoders: do not claim that both are undiacritized or that emitted canonical vowels qualify acoustic errors.
+
+Public `tarteel-ai/whisper-base-ar-quran` exists/ungated and is referenced in legacy ASR/training defaults, but is not the selected live RNNT. The local CT2 manifest identifies file hashes, not verified upstream lineage. Exact raw output and limits are committed in `docs/raw-asr-tashkeel-20261024.md`; local complete Unicode/native-token evidence is `qari-task-artifacts/observed-mistakes-20261024/raw-asr-tashkeel.json`. Production configuration/processes were not changed for this probe or PR.
+
+---
+
+# Deployed checkpoint — 2026-10-24 22:17 UTC
+
+**Backend rollout completed:** code revision `5eb14335584618f53dd7ec58a4830b8512deb61b`. `infra-core-api-1`, `infra-recitation-api-1`, and `infra-inference-worker-1` were recreated and remain healthy with zero restarts/OOM. Their exact image IDs, immutable ML mount and packaged source hashes were read back; credentials/database configuration were retained. Persistent automatic Compose override: `/home/ubuntu/qari/infra/docker-compose.override.yml`. Immutable code: `/home/ubuntu/qari-deployments/observed-mistakes-5eb1433`. The editable root checkout is not the deployed ML source; source implementation/mobile changes remain in `fix/observed-mistakes-20261024` at `/home/ubuntu/qari-work/observed-mistakes-20261024`.
+
+Final independent gap-closure review passed (33 focused tests, both mutation counterexamples RED). Full backend/ML/API source suite: **1,208 passed / 1 skipped / 2 warnings**; core **43 passed** on a disposable isolated DB; Flutter **267 full / 77 focused passed**, targeted analysis clean. Actual final images passed private qualification and then **all 5 public live + 3 public upload/worker cases** through `https://aiquranic.com`. Correct Ikhlas 112:1 = 4/4; selecting 112:1–2 leaves the unread two-word suffix pending. Live silence/wrong-surah and uploaded silence produced zero matches. Audio bytes are preserved. Public health 200; invalid login 401, valid WSS 101 and invalid token 403. No recitation/worker error-level events were logged after rollout in the checked interval.
+
+Confirmed lexical mistakes and explicitly observed diacritic conflicts carry `#EF4444`; confidence, speech, native-slot and right-context guards remain. Harakat diagnostics compare only actually emitted marks, handle dagger-alif deduplication/waqf and do not infer vowels. Batch independent base Whisper uses no target prompt and does not continue target-conditioned text. All eight owned public test sessions/audio and three acknowledged diagnostic queue entries were removed and verified absent; other production jobs/data were untouched. Rollback images and matching original ML mount are preserved in the artifact rollback override.
+
+**Remaining:** no new signed APK was built/installed (compatible signing config and Android SDK absent), so the new literal red Flutter UI is source/test complete, not delivered to existing devices. Acoustic pronunciation/tajweed qualification remains unavailable; real ASR may omit/canonicalize changed vowels. Neither text-contract tests nor correct-recitation smoke checks prove detection of every spoken vowel error. Old VPS user data was not recovered.
+
+Evidence: `/home/ubuntu/qari-task-artifacts/observed-mistakes-20261024/`, especially `final-verification.json`, `deployed-source-verification.json`, `batch-gap-closure-review.md`, `deployed-public-live/summary.json`, `deployed-public-batch/summary.json`, and `rollback.override.yml`.
+
+---
+
 # Qari — working context and VPS handoff
 
 Last updated: **2026-10-19, 09:29 UTC**. Later progress and exact evidence are appended below. Paths refer to this VPS.

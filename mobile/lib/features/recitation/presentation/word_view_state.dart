@@ -31,10 +31,11 @@ enum LiveWordViewState {
 ///
 /// Precedence (highest first):
 ///   1. index > cursor            -> unspoken   (never red ahead of the cursor)
-///   2. index == cursor           -> active     (listening highlight)
-///   3. wire says match           -> correct
-///   4. wire says error_skipped   -> mismatch   (only reachable behind the cursor)
-///   5. anything else             -> unspoken
+///   2. explicit observed error   -> mismatch   (current word was attempted)
+///   3. index == cursor           -> active     (generic flags cannot prove reach)
+///   4. wire says match           -> correct
+///   5. wire says error_skipped   -> mismatch   (only reachable behind the cursor)
+///   6. anything else             -> unspoken
 LiveWordViewState resolveWordViewState({
   required LiveWordStatus serverStatus,
   required int index,
@@ -42,12 +43,18 @@ LiveWordViewState resolveWordViewState({
 }) {
   // Rule 1 — the guard that prevents the red wall.
   if (index > cursor) return LiveWordViewState.unspoken;
-  // Rule 2 — the listening cursor always wins over any wire status.
+  // Explicit evidence proves this word was attempted, even when the cursor
+  // has not advanced. Never bypass the ahead guard for an observed error.
+  if (serverStatus == LiveWordStatus.observedError) {
+    return LiveWordViewState.mismatch;
+  }
+  // Generic/legacy skips do not prove the current word was attempted.
   if (index == cursor) return LiveWordViewState.active;
   switch (serverStatus) {
     case LiveWordStatus.matched:
       return LiveWordViewState.correct;
     case LiveWordStatus.error:
+    case LiveWordStatus.observedError:
     case LiveWordStatus.skipped:
       return LiveWordViewState.mismatch;
     case LiveWordStatus.pending:
@@ -91,6 +98,7 @@ LiveWordViewState resolveReviewWordViewState({
     case LiveWordStatus.matched:
       return LiveWordViewState.correct;
     case LiveWordStatus.error:
+    case LiveWordStatus.observedError:
     case LiveWordStatus.skipped:
       return LiveWordViewState.mismatch;
     case LiveWordStatus.pending:

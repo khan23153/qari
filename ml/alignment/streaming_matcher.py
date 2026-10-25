@@ -40,6 +40,11 @@ class WordState:
     status: WordStatus
     spoken: Optional[str] = None
     confidence: float = 1.0
+    # Only a token-free gap behind an exact independent progress witness is
+    # an omission. Unknown/weak/misaligned tokens remain recognition gaps.
+    omission_confirmed: bool = False
+    # Local final-decode slot, never a reference index or a word-text lookup.
+    hypothesis_index: Optional[int] = None
 
 
 def _levenshtein(a: str, b: str) -> int:
@@ -732,10 +737,19 @@ class StreamingMatcher:
         # identify a spoken mistake. A missing or uncertain ASR token remains
         # unconfirmed even though the cursor can follow the later word.
         substitutions = {}
+        omissions = set()
         gap_reference = []
         gap_hypothesis = []
         for kind, ii, jj in ops:
             if kind == "pair" and paired(ii, jj):
+                # Unknown/weak tokens cannot prove omissions. The unchanged
+                # bounded DP must reach an exact independent progress witness.
+                import math
+                if (gap_reference and not gap_hypothesis
+                        and hyp[jj] == ref_win[ii]
+                        and math.isfinite(confidence(jj))
+                        and self.live_confidence_threshold <= confidence(jj) <= 1):
+                    omissions.update(gap_reference)
                 if len(gap_reference) == len(gap_hypothesis) == 1:
                     ri, hj = gap_reference[0], gap_hypothesis[0]
                     if (confidence(hj) >= self.live_confidence_threshold
@@ -780,7 +794,8 @@ class StreamingMatcher:
                 # substitution. Clients keep it neutral while the cursor can
                 # follow the later confirmed word; review is scored separately.
                 self._resolved_states.append(
-                    WordState(index, reference[index], WordStatus.SKIPPED, "", 0.0)
+                    WordState(index, reference[index], WordStatus.SKIPPED, "", 0.0,
+                              omission_confirmed=ii in omissions)
                 )
 
         if _DEBUG:
@@ -927,11 +942,12 @@ class StreamingMatcher:
             spoken = hypothesis_words[slot]
             if self._is_match(spoken, self.reference[index]):
                 return WordState(index, self.reference[index], WordStatus.MATCHED,
-                                 spoken, confidence(slot))
+                                 spoken, confidence(slot), hypothesis_index=slot)
             known = self._known_error_words is None or spoken in self._known_error_words
             return WordState(index, self.reference[index],
                              WordStatus.ERROR if known else WordStatus.SKIPPED,
-                             spoken if known else '', confidence(slot) if known else 0.0)
+                             spoken if known else '', confidence(slot) if known else 0.0,
+                             hypothesis_index=slot if known else None)
 
         while i < window_end and j < hypothesis_count:
             # Uncertain recognition is neither a match nor a spoken mistake,
@@ -995,6 +1011,7 @@ class StreamingMatcher:
                 self._resolved_states.append(WordState(
                     i, expected, WordStatus.ERROR if known else WordStatus.SKIPPED,
                     spoken if known else '', confidence(j) if known else 0.0,
+                    hypothesis_index=j if known else None,
                 ))
                 i += 1
                 j += 1
@@ -1013,7 +1030,8 @@ class StreamingMatcher:
 
             if self._known_error_words is None or spoken in self._known_error_words:
                 self._resolved_states.append(
-                    WordState(i, expected, WordStatus.ERROR, spoken, confidence(j))
+                    WordState(i, expected, WordStatus.ERROR, spoken, confidence(j),
+                              hypothesis_index=j)
                 )
             else:
                 # High decoder confidence does not make a garbled token proof
@@ -1081,6 +1099,7 @@ class StreamingMatcher:
                     status=self._resolved.get(index, WordStatus.SKIPPED),
                     spoken=state.spoken if state is not None else None,
                     confidence=state.confidence if state is not None else 0.0,
+                    hypothesis_index=state.hypothesis_index if state is not None else None,
                 )
             )
         return final_states

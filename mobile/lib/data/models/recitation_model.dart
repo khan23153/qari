@@ -127,6 +127,20 @@ bool _isArabic(String s) {
 }
 
 extension WordVerdictX on WordVerdict {
+  /// New evidence-bearing error types require explicit confirmation. Legacy
+  /// saved verdicts remain readable, but an unread suffix is never a mistake.
+  bool get isReviewMistake {
+    if (isCorrect || errorType == 'not_reached') return false;
+    if (!confidence.isFinite || confidence < 0 || confidence > 1) return false;
+    if (errorType == 'missed') return evidenceConfirmed;
+    if (errorType == 'substituted' || errorType == 'harakat_mistake') {
+      return evidenceConfirmed &&
+          confidence >= .55 &&
+          (actualText ?? '').trim().isNotEmpty;
+    }
+    return true;
+  }
+
   /// Resolves the human-readable arabic word to display for this verdict.
   ///
   /// The backend may return either the actual arabic text or a database

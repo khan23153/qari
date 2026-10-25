@@ -80,15 +80,22 @@ class FasterWhisperASRAdapter:
             normalized = normalize_arabic(raw_word)
             if not normalized:
                 continue
-            confidence = float(confidences[index]) if index < len(confidences) else 0.0
+            confidence = _batch_confidence(confidences[index]) if index < len(confidences) else 0.0
             start_ms = starts[index] if index < len(starts) else 0
             end_ms = ends[index] if index < len(ends) else start_ms
-            for normalized_word in normalized.split():
-                raw_words.append(raw_word.strip())
+            normalized_parts = normalized.split()
+            surface_parts = [part for part in raw_word.split() if normalize_arabic(part)]
+            # Keep native surface words one-to-one with normalized tokens. If
+            # normalization created ambiguous boundaries (e.g. interior comma),
+            # retain lexical tokens but provide NO invented raw vowel evidence.
+            if [normalize_arabic(part) for part in surface_parts] != normalized_parts:
+                surface_parts = [''] * len(normalized_parts)
+            raw_words.append(raw_word.strip())
+            for normalized_word, surface in zip(normalized_parts, surface_parts):
                 normalized_words.append(normalized_word)
                 tokens.append(
                     ASRToken(
-                        text=raw_word.strip(),
+                        text=surface,
                         normalized=normalized_word,
                         start_time=start_ms / 1000.0,
                         end_time=end_ms / 1000.0,
@@ -115,12 +122,108 @@ class BatchWordMatch:
     start_ms: Optional[int]
     end_ms: Optional[int]
     reference_audio_url: Optional[str]
+    reached: bool = True
+    error_type: Optional[str] = None
+    observed_text: Optional[str] = None
+    harakat_conflicts: tuple[dict, ...] = ()
+    expected_text: Optional[str] = None
 
 
 @dataclass
 class BatchWordMatchResult:
     words: list[BatchWordMatch]
     reference_audio_url: str
+
+
+def _batch_confidence(value) -> float:
+    """Invalid model metadata must not act as an occurrence/omission anchor."""
+    import math
+
+    try:
+        confidence = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+    return confidence if math.isfinite(confidence) and 0 <= confidence <= 1 else 0.0
+
+
+def _batch_native_span(token, duration: float) -> tuple[int, int] | None:
+    """A word cannot prove speech outside a positive finite native interval."""
+    import math
+
+    try:
+        start, end = float(token.start_time), float(token.end_time)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not (math.isfinite(start) and math.isfinite(end) and 0 <= start < end <= duration):
+        return None
+    return round(start * 1000), round(end * 1000)
+
+
+def _align_batch_prefix(reference, hypothesis, confidences):
+    """Align trusted evidence to the earliest supported reference prefix.
+
+    Unread reference suffixes are free, not gaps to be consumed by traceback.
+    Prefer exact lexical anchors, then fewer edits, then the first occurrence.
+    Weak/invalid tokens are placed only AFTER the trusted path is frozen; their
+    text cannot move a confident word to a later repetition.
+    """
+    from ml.alignment.word_alignment import AlignedWord, WordVerdict
+
+    trusted = [j for j, c in enumerate(confidences) if c >= WORD_CONFIDENCE_THRESHOLD]
+    m, n = len(reference), len(trusted)
+    # Encode (exact anchor count, -edit count) lexicographically in a compact
+    # matrix. One anchor outweighs ALL possible edits; this is not a tuned
+    # similarity weight. Avoid Python tuples per cell for large ayah ranges.
+    priority = m + n + 1
+    scores = np.zeros((m + 1, n + 1), dtype=np.int64)
+    scores[m] = np.arange(n + 1) - n
+    for i in range(m - 1, -1, -1):
+        for j in range(n - 1, -1, -1):
+            exact = reference[i] == hypothesis[trusted[j]]
+            diagonal = scores[i + 1, j + 1] + (priority if exact else -1)
+            deletion = scores[i + 1, j] - 1
+            insertion = scores[i, j + 1] - 1
+            scores[i, j] = max(diagonal, deletion, insertion)
+
+    placements = {}
+    i = j = 0
+    while i < m and j < n:
+        exact = reference[i] == hypothesis[trusted[j]]
+        diagonal = scores[i + 1, j + 1] + (priority if exact else -1)
+        # Forward traceback gives an equal-cost repeated word to the FIRST
+        # occurrence, unlike a backwards global traceback from the range end.
+        if scores[i, j] == diagonal:
+            placements[i] = trusted[j]
+            i, j = i + 1, j + 1
+        elif scores[i, j] == scores[i + 1, j] - 1:
+            i += 1
+        else:
+            j += 1
+
+    frozen = sorted((h, r) for r, h in placements.items())
+    trusted_set = set(trusted)
+    for h in range(len(hypothesis)):
+        if h in trusted_set:
+            continue
+        left = max((r for native, r in frozen if native < h), default=-1)
+        right = min((r for native, r in frozen if native > h), default=m)
+        slot = next((r for r in range(left + 1, right) if r not in placements), None)
+        if slot is not None:
+            placements[slot] = h
+
+    aligned = [AlignedWord(
+        reference=word,
+        hypothesis=hypothesis[placements[r]] if r in placements else None,
+        verdict=WordVerdict.OMITTED if r not in placements else WordVerdict.CORRECT,
+        ref_index=r,
+        hyp_index=placements.get(r),
+    ) for r, word in enumerate(reference)]
+    used = set(placements.values())
+    aligned.extend(AlignedWord(
+        reference=None, hypothesis=word, verdict=WordVerdict.INSERTED_EXTRA,
+        ref_index=None, hyp_index=h,
+    ) for h, word in enumerate(hypothesis) if h not in used)
+    return aligned
 
 
 class BatchWordMatchingPipeline:
@@ -131,55 +234,116 @@ class BatchWordMatchingPipeline:
     """
 
     def __init__(self, reference_store, asr) -> None:
-        from ml.alignment.word_alignment import WordAligner
-
         self.reference_store = reference_store
         self.asr = asr
-        self._word_aligner = WordAligner()
 
     def analyze(
         self, audio, sample_rate, surah, ayahs, session_id, *, user_audio_url=""
     ) -> BatchWordMatchResult:
+        from app.services.streaming_session import _normalize
+        from ml.alignment.harakat import compare_harakat
+        import math
+
         expected_words = []
+        expected_surface = []
+        ayah_end_positions = set()
         word_reference_urls = []
         for ayah in ayahs:
             reference = self.reference_store.get(surah, ayah)
             if reference is None:
                 raise ValueError(f"No reference data for surah {surah}, ayah {ayah}")
-            ayah_words = reference.expected_words
-            expected_words.extend(ayah_words)
+            surface = [w.text_with_tashkeel or w.word for w in reference.words]
+            expected_surface.extend(surface)
+            expected_words.extend(_normalize(w) for w in surface)
+            ayah_end_positions.add(len(expected_words) - 1)
             reference_url = (
                 reference.reference_audio_url or _build_reference_audio_url(surah, ayah)
             )
-            word_reference_urls.extend([reference_url] * len(ayah_words))
+            word_reference_urls.extend([reference_url] * len(surface))
 
-        # Align the entire ordered range once. One hypothesis token can then
-        # support only one reference position, including across repeated ayahs.
+        # Decode independently ONCE. Expected words enter only post-ASR alignment.
         transcription = self.asr.transcribe(audio, sample_rate)
-        alignment = self._word_aligner.align(
-            expected_words,
-            transcription.normalized_words,
-            confidences=[token.confidence for token in transcription.tokens],
-        )
+        normalized_heard = [_normalize(token.text or token.normalized)
+                            for token in transcription.tokens]
+        confidences = [_batch_confidence(token.confidence) for token in transcription.tokens]
+        spans = [_batch_native_span(token, len(audio) / sample_rate)
+                 for token in transcription.tokens]
+        support_confidences = [c if span is not None else 0.0
+                               for c, span in zip(confidences, spans)]
+        alignment = _align_batch_prefix(expected_words, normalized_heard, support_confidences)
+        reached = -1
+        supported_placements = set()
+        for aligned in alignment:
+            if aligned.ref_index is None or aligned.hyp_index is None:
+                continue
+            confidence = support_confidences[aligned.hyp_index]
+            if not (math.isfinite(confidence) and WORD_CONFIDENCE_THRESHOLD <= confidence <= 1.0):
+                continue
+            # Only exact heard text can bracket omissions. A substitution may
+            # occupy the next slot, never justify an arbitrary global-DP jump.
+            # A substitution cannot bridge an invalid/weak native token just
+            # because trusted-path alignment removed that token from placement.
+            contiguous = (aligned.ref_index == reached + 1
+                          and (aligned.hyp_index == 0
+                               or aligned.hyp_index - 1 in supported_placements))
+            if aligned.reference == aligned.hypothesis or contiguous:
+                reached = aligned.ref_index
+                supported_placements.add(aligned.hyp_index)
+        uncertain_omissions = set()
+        left_reference = left_native = -1
+        for aligned in alignment:
+            if (aligned.ref_index is None or aligned.hyp_index is None
+                    or aligned.hyp_index not in supported_placements):
+                continue
+            # An unresolved native token anywhere in this bracket can belong
+            # to any gap word; its arbitrary weak placement cannot prove absence.
+            if any(j not in supported_placements
+                   for j in range(left_native + 1, aligned.hyp_index)):
+                uncertain_omissions.update(range(left_reference + 1, aligned.ref_index))
+            left_reference, left_native = aligned.ref_index, aligned.hyp_index
         words = []
-        for aligned in alignment.aligned_words:
-            token = (
-                transcription.tokens[aligned.hyp_index]
-                if aligned.hyp_index is not None
-                else None
-            )
+        for aligned in alignment:
+            token = (transcription.tokens[aligned.hyp_index]
+                     if aligned.hyp_index is not None else None)
+            span = spans[aligned.hyp_index] if aligned.hyp_index is not None else None
+            confidence = confidences[aligned.hyp_index] if aligned.hyp_index is not None else 0.0
+            usable = (math.isfinite(confidence) and WORD_CONFIDENCE_THRESHOLD <= confidence <= 1.0
+                      and aligned.hyp_index in supported_placements)
+            lexical_match = (aligned.reference is not None and
+                             aligned.reference == aligned.hypothesis)
+            # WordAligner's generic low-character-similarity heuristic cannot
+            # hide a confidently recognized substitution in production.
+            verdict = ('low_confidence' if (token is not None and not usable)
+                       or aligned.ref_index in uncertain_omissions
+                       else 'correct' if lexical_match
+                       else 'mispronounced' if token is not None and aligned.reference is not None
+                       else aligned.verdict.value)
+            harakat = None
+            if lexical_match and usable and confidence >= .55:
+                following = (aligned.hyp_index is not None
+                             and aligned.hyp_index + 1 in supported_placements
+                             and confidences[aligned.hyp_index + 1] >= .55)
+                harakat = compare_harakat(
+                    expected_surface[aligned.ref_index], token.text,
+                    is_ayah_end=aligned.ref_index in ayah_end_positions,
+                    is_stream_end=not following,
+                    next_word_spoken=following,
+                )
             words.append(BatchWordMatch(
                 reference=aligned.reference,
                 hypothesis=aligned.hypothesis,
-                verdict=aligned.verdict.value,
-                confidence=token.confidence if token is not None else 0.0,
-                start_ms=round(token.start_time * 1000) if token is not None else None,
-                end_ms=round(token.end_time * 1000) if token is not None else None,
-                reference_audio_url=(
-                    word_reference_urls[aligned.ref_index]
-                    if aligned.ref_index is not None
-                    else None
-                ),
+                verdict=verdict,
+                confidence=confidence if math.isfinite(confidence) and 0 <= confidence <= 1 else 0.0,
+                start_ms=span[0] if span is not None else None,
+                end_ms=span[1] if span is not None else None,
+                reference_audio_url=(word_reference_urls[aligned.ref_index]
+                                     if aligned.ref_index is not None else None),
+                reached=aligned.ref_index is not None and aligned.ref_index <= reached,
+                error_type='harakat_mistake' if harakat and harakat.mismatch else None,
+                observed_text=token.text if token is not None else None,
+                harakat_conflicts=harakat.conflicts if harakat else (),
+                expected_text=(expected_surface[aligned.ref_index]
+                               if harakat and harakat.mismatch else None),
             ))
         return BatchWordMatchResult(
             words=words,
@@ -258,16 +422,32 @@ def _reference_only_verdicts(
             continue
 
         confidence = float(word_result.confidence)
+        import math
+        finite = math.isfinite(confidence) and 0 <= confidence <= 1
+        if not finite:
+            confidence = 0.0
         confidences.append(confidence)
         is_uncertain = (
-            word_result.verdict == "low_confidence"
+            not finite or word_result.verdict == "low_confidence"
             or (word_result.hypothesis is not None and confidence < WORD_CONFIDENCE_THRESHOLD)
         )
-        is_correct = word_result.verdict == "correct" and not is_uncertain
+        reached = getattr(word_result, 'reached', True)
+        observed_conflict = (getattr(word_result, 'error_type', None) == 'harakat_mistake'
+                             and confidence >= .55 and not is_uncertain)
+        is_correct = word_result.verdict == "correct" and not is_uncertain and not observed_conflict
         if is_correct:
             correct_count += 1
 
-        if is_correct:
+        if not reached and word_result.hypothesis is None:
+            error_type = 'not_reached'
+            error_description = 'This word has not been reached.'
+        elif observed_conflict:
+            error_type = 'harakat_mistake'
+            error_description = (
+                'The unprompted recognizer emitted a conflicting vowel at this letter. '
+                'This is an ASR-text observation, not a qualified acoustic pronunciation assessment.'
+            )
+        elif is_correct:
             error_type = None
             error_description = None
         elif is_uncertain:
@@ -277,12 +457,13 @@ def _reference_only_verdicts(
                 "Please retry; this is not a confirmed pronunciation error."
             )
         else:
-            error_type = word_result.verdict
+            error_type = ('missed' if word_result.hypothesis is None else 'substituted')
             error_description = (
                 "The independent recognizer did not hear this expected word."
                 if word_result.hypothesis is None
                 else "The independently recognized word differs from the reference."
             )
+        error_confirmed = error_type in {'missed', 'substituted', 'harakat_mistake'}
 
         verdicts.append(
             {
@@ -290,8 +471,15 @@ def _reference_only_verdicts(
                 "word_index": next_index,
                 "is_correct": is_correct,
                 "confidence": confidence,
-                "expected_text": expected,
-                "actual_text": word_result.hypothesis,
+                "evidence_confirmed": is_correct or error_confirmed,
+                "evidence_source": 'asr_diacritic' if observed_conflict else 'lexical_asr',
+                "observed_text": getattr(word_result, 'observed_text', None),
+                "harakat_conflicts": list(getattr(word_result, 'harakat_conflicts', ())),
+                "display_color": '#EF4444' if error_confirmed else None,
+                "expected_text": ((getattr(word_result, 'expected_text', None) or expected)
+                                  if observed_conflict else expected),
+                "actual_text": (getattr(word_result, 'observed_text', None)
+                                if observed_conflict else word_result.hypothesis),
                 "start_ms": getattr(word_result, "start_ms", None),
                 "end_ms": getattr(word_result, "end_ms", None),
                 "error_type": error_type,

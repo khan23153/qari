@@ -50,6 +50,12 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('review score with mistakes uses exact red', (tester) async {
+    await tester.pumpWidget(summary());
+    expect(tester.widget<Text>(find.text('50%')).style!.color,
+        const Color(0xFFEF4444));
+  });
+
   testWidgets('availability flag controls pronunciation disclosure',
       (tester) async {
     await tester.pumpWidget(summary(pronunciationAvailable: true));

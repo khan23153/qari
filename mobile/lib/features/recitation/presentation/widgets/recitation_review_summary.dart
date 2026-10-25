@@ -52,7 +52,8 @@ class RecitationReviewSummary extends StatelessWidget {
                     : review.result.scorePercentage,
             style: theme.textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.w800,
-              color: review.mistakeCount == 0 ? mushaf.text : mushaf.accent,
+              color:
+                  review.mistakeCount == 0 ? mushaf.text : mushaf.mismatchInk,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
