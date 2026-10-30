@@ -1,0 +1,174 @@
+{
+ "id": "tirmidhi:4",
+ "collection": {
+  "slug": "tirmidhi",
+  "name_en": "Jami' al-Tirmidhi",
+  "name_ar": "جامع الترمذي"
+ },
+ "number": 4,
+ "arabic_number": 4,
+ "book": {
+  "number": 1,
+  "name_en": "The Book on Purification"
+ },
+ "text_ar": "حَدَّثَنَا أَبُو بَكْرٍ، مُحَمَّدُ بْنُ زَنْجَوَيْهِ الْبَغْدَادِيُّ وَغَيْرُ وَاحِدٍ قَالَ حَدَّثَنَا الْحُسَيْنُ بْنُ مُحَمَّدٍ، حَدَّثَنَا سُلَيْمَانُ بْنُ قَرْمٍ، عَنْ أَبِي يَحْيَى الْقَتَّاتِ، عَنْ مُجَاهِدٍ، عَنْ جَابِرِ بْنِ عَبْدِ اللَّهِ، رضى الله عنهما قَالَ قَالَ رَسُولُ اللَّهِ صلى الله عليه وسلم ‏ \"‏ مِفْتَاحُ الْجَنَّةِ الصَّلاَةُ وَمِفْتَاحُ الصَّلاَةِ الْوُضُوءُ ‏\"‏ ‏.‏",
+ "isnad_ar": "حَدَّثَنَا أَبُو بَكْرٍ، مُحَمَّدُ بْنُ زَنْجَوَيْهِ الْبَغْدَادِيُّ وَغَيْرُ وَاحِدٍ قَالَ حَدَّثَنَا الْحُسَيْنُ بْنُ مُحَمَّدٍ، حَدَّثَنَا سُلَيْمَانُ بْنُ قَرْمٍ، عَنْ أَبِي يَحْيَى الْقَتَّاتِ، عَنْ مُجَاهِدٍ، عَنْ جَابِرِ بْنِ عَبْدِ اللَّهِ، رضى الله عنهما قَالَ قَالَ رَسُولُ اللَّهِ صلى الله عليه وسلم",
+ "matn_ar": "مِفْتَاحُ الْجَنَّةِ الصَّلاَةُ وَمِفْتَاحُ الصَّلاَةِ الْوُضُوءُ",
+ "compiler_note_ar": null,
+ "translation": {
+  "language": "en",
+  "text": "Jabir bin 'Abdullah, may Allah be pleased with them, narrated that :Allah's Messenger said: \"The key to Paradise is Salat, and the key to Salat is Wudu",
+  "source": "fawazahmed0/hadith-api (eng-tirmidhi)",
+  "license_status": "unverified"
+ },
+ "grades": [
+  {
+   "scholar": "Ahmad Shakir",
+   "source_book": null,
+   "source_dataset": "fawazahmed0/hadith-api (eng-tirmidhi)",
+   "grade": "Sahih Lighairihi",
+   "ruling_type": "sahih",
+   "basis": "scholar_grading"
+  },
+  {
+   "scholar": "al-Albani",
+   "source_book": null,
+   "source_dataset": "fawazahmed0/hadith-api (eng-tirmidhi)",
+   "grade": "Sahih",
+   "ruling_type": "sahih",
+   "basis": "scholar_grading"
+  },
+  {
+   "scholar": "Zubair 'Ali Za'i",
+   "source_book": null,
+   "source_dataset": "fawazahmed0/hadith-api (eng-tirmidhi)",
+   "grade": "Daif",
+   "ruling_type": "daif",
+   "basis": "scholar_grading"
+  }
+ ],
+ "defects": [
+  {
+   "cause": "su_al_hifz",
+   "cause_label_en": "Weak memory or precision",
+   "cause_label_ar": "سوء الحفظ",
+   "narrator_id": "sulayman-ibn-qarm",
+   "narrator_name_ar": "سليمان بن قرم الضبي",
+   "scholar": "Ibn Hajar al-'Asqalani",
+   "source_book": "Taqrib al-Tahdhib, no. 2600",
+   "quote_ar": "سيء الحفظ يتشيع",
+   "explanation_en": "Ibn Hajar describes Sulayman ibn Qarm as having poor memory; this weakens the chain on its own.",
+   "review_status": "verified_from_source",
+   "quote_verified": false,
+   "source_text_ar": "٢٦٠٠- سليمان ابن قرم بفتح القاف وسكون الراء ابن معاذ أبو داود البصري النحوي ومنهم من ينسبه إلى جده سيء الحفظ يتشيع من السابعة خت د ت س\r[] سليمان ابن قسيم هو ابن يسير يأتي"
+  },
+  {
+   "cause": "su_al_hifz",
+   "cause_label_en": "Weak memory or precision",
+   "cause_label_ar": "سوء الحفظ",
+   "narrator_id": "abu-yahya-al-qattat",
+   "narrator_name_ar": "أبو يحيى القتات",
+   "scholar": "Ibn Hajar al-'Asqalani",
+   "source_book": "Taqrib al-Tahdhib, no. 8444",
+   "quote_ar": "لين الحديث",
+   "explanation_en": "Abu Yahya al-Qattat is graded 'layyin al-hadith' (soft in narration), a mild weakness in precision.",
+   "review_status": "verified_from_source",
+   "quote_verified": false,
+   "source_text_ar": "٨٤٤٤- أبو يحيى القتات بقاف ومثناة مثقلة وآخره مثناة أيضا الكوفي اسمه زاذان وقيل دينار وقيل مسلم وقيل يزيد وقيل زبان وقيل عبد الرحمن لين الحديث من السادسة بخ د ت ق\r[] أبو يحيى القرشي هو زياد تقدم ويقال فيه مولى الأنصار ومولى قيس ابن مخرمة"
+  }
+ ],
+ "chain": [
+  {
+   "position": 0,
+   "name_ar": "أَبُو عِيسَى التِّرْمِذِيُّ",
+   "narrator_id": null,
+   "role": "compiler",
+   "term_ar": null,
+   "identification": "explicit",
+   "candidates": [],
+   "reliability": "compiler"
+  },
+  {
+   "position": 1,
+   "name_ar": "أَبُو بَكْرٍ مُحَمَّدُ بْنُ زَنْجَوَيْهِ الْبَغْدَادِيُّ وَغَيْرُ وَاحِدٍ",
+   "narrator_id": null,
+   "role": "narrator",
+   "term_ar": "حَدَّثَنَا",
+   "identification": "pending_review",
+   "candidates": [],
+   "reliability": "unknown"
+  },
+  {
+   "position": 2,
+   "name_ar": "الْحُسَيْنُ بْنُ مُحَمَّدٍ",
+   "narrator_id": "al-husayn-ibn-muhammad-al-marrudhi",
+   "role": "narrator",
+   "term_ar": "حَدَّثَنَا",
+   "identification": "pending_review",
+   "candidates": [],
+   "reliability": "thiqah"
+  },
+  {
+   "position": 3,
+   "name_ar": "سُلَيْمَانُ بْنُ قَرْمٍ",
+   "narrator_id": "sulayman-ibn-qarm",
+   "role": "narrator",
+   "term_ar": "حَدَّثَنَا",
+   "identification": "explicit",
+   "candidates": [],
+   "reliability": "daif"
+  },
+  {
+   "position": 4,
+   "name_ar": "أَبُو يَحْيَى الْقَتَّاتُ",
+   "narrator_id": "abu-yahya-al-qattat",
+   "role": "narrator",
+   "term_ar": "عَنْ",
+   "identification": "explicit",
+   "candidates": [],
+   "reliability": "daif"
+  },
+  {
+   "position": 5,
+   "name_ar": "مُجَاهِدٌ",
+   "narrator_id": "mujahid-ibn-jabr",
+   "role": "narrator",
+   "term_ar": "عَنْ",
+   "identification": "pending_review",
+   "candidates": [],
+   "reliability": "thiqah"
+  },
+  {
+   "position": 6,
+   "name_ar": "جَابِرُ بْنُ عَبْدِ اللَّهِ",
+   "narrator_id": "jabir-ibn-abdillah",
+   "role": "narrator",
+   "term_ar": "عَنْ",
+   "identification": "explicit",
+   "candidates": [],
+   "reliability": "sahabi"
+  },
+  {
+   "position": 7,
+   "name_ar": "رَسُولُ اللَّهِ ﷺ",
+   "narrator_id": null,
+   "role": "prophet",
+   "term_ar": "قَالَ",
+   "identification": "explicit",
+   "candidates": [],
+   "reliability": "prophet"
+  }
+ ],
+ "gharib_words": [
+  "مفتاح"
+ ],
+ "source": {
+  "dataset": "fawazahmed0/hadith-api",
+  "editions": [
+   "ara-tirmidhi",
+   "eng-tirmidhi"
+  ],
+  "license": "Unlicense (public domain)"
+ },
+ "review_status": "verified_from_source"
+}

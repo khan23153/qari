@@ -1,0 +1,19 @@
+{
+ "query": "Sufyan",
+ "hadiths": [],
+ "narrators": [
+  {
+   "id": "sufyan-ibn-uyaynah",
+   "name_ar": "سفيان بن عيينة",
+   "name_en": "Sufyan ibn 'Uyaynah",
+   "reliability": "thiqah"
+  },
+  {
+   "id": "sufyan-al-thawri",
+   "name_ar": "سفيان بن سعيد الثوري",
+   "name_en": "Sufyan al-Thawri",
+   "reliability": "thiqah"
+  }
+ ],
+ "collections": []
+}

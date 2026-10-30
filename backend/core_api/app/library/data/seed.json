@@ -1,0 +1,1000 @@
+{
+ "hadiths": [
+  {
+   "id": "bukhari:1",
+   "collection": "bukhari",
+   "number": 1,
+   "arabic_number": 1,
+   "book": {
+    "number": 1,
+    "name_en": "Revelation"
+   },
+   "text_ar": "حَدَّثَنَا الْحُمَيْدِيُّ عَبْدُ اللَّهِ بْنُ الزُّبَيْرِ ، قَالَ : حَدَّثَنَا سُفْيَانُ ، قَالَ : حَدَّثَنَا يَحْيَى بْنُ سَعِيدٍ الْأَنْصَارِيُّ ، قَالَ : أَخْبَرَنِي مُحَمَّدُ بْنُ إِبْرَاهِيمَ التَّيْمِيُّ ، أَنَّهُ سَمِعَ عَلْقَمَةَ بْنَ وَقَّاصٍ اللَّيْثِيَّ ، يَقُولُ : سَمِعْتُ عُمَرَ بْنَ الْخَطَّابِ رَضِيَ اللَّهُ عَنْهُ عَلَى الْمِنْبَرِ، قَالَ : سَمِعْتُ رَسُولَ اللَّهِ صَلَّى اللَّهُ عَلَيْهِ وَسَلَّمَ، يَقُولُ : \" إِنَّمَا الْأَعْمَالُ بِالنِّيَّاتِ، وَإِنَّمَا لِكُلِّ امْرِئٍ مَا نَوَى، فَمَنْ كَانَتْ هِجْرَتُهُ إِلَى دُنْيَا يُصِيبُهَا أَوْ إِلَى امْرَأَةٍ يَنْكِحُهَا، فَهِجْرَتُهُ إِلَى مَا هَاجَرَ إِلَيْهِ",
+   "isnad_ar": "حَدَّثَنَا الْحُمَيْدِيُّ عَبْدُ اللَّهِ بْنُ الزُّبَيْرِ ، قَالَ : حَدَّثَنَا سُفْيَانُ ، قَالَ : حَدَّثَنَا يَحْيَى بْنُ سَعِيدٍ الْأَنْصَارِيُّ ، قَالَ : أَخْبَرَنِي مُحَمَّدُ بْنُ إِبْرَاهِيمَ التَّيْمِيُّ ، أَنَّهُ سَمِعَ عَلْقَمَةَ بْنَ وَقَّاصٍ اللَّيْثِيَّ ، يَقُولُ : سَمِعْتُ عُمَرَ بْنَ الْخَطَّابِ رَضِيَ اللَّهُ عَنْهُ عَلَى الْمِنْبَرِ، قَالَ : سَمِعْتُ رَسُولَ اللَّهِ صَلَّى اللَّهُ عَلَيْهِ وَسَلَّمَ، يَقُولُ",
+   "matn_ar": "إِنَّمَا الْأَعْمَالُ بِالنِّيَّاتِ، وَإِنَّمَا لِكُلِّ امْرِئٍ مَا نَوَى، فَمَنْ كَانَتْ هِجْرَتُهُ إِلَى دُنْيَا يُصِيبُهَا أَوْ إِلَى امْرَأَةٍ يَنْكِحُهَا، فَهِجْرَتُهُ إِلَى مَا هَاجَرَ إِلَيْهِ",
+   "compiler_note_ar": null,
+   "translation": {
+    "language": "en",
+    "text": "Narrated 'Umar bin Al-Khattab: I heard Allah's Messenger (ﷺ) saying, \"The reward of deeds depends upon the intentions and every person will get the reward according to what he has intended. So whoever emigrated for worldly benefits or for a woman to marry, his emigration was for what he emigrated for",
+    "source": "fawazahmed0/hadith-api (eng-bukhari)",
+    "license_status": "unverified"
+   },
+   "dataset_grades": [],
+   "chain": [
+    {
+     "name_ar": "الْبُخَارِيُّ",
+     "narrator_id": null,
+     "role": "compiler",
+     "term_ar": null,
+     "identification": "explicit"
+    },
+    {
+     "name_ar": "الْحُمَيْدِيُّ عَبْدُ اللَّهِ بْنُ الزُّبَيْرِ",
+     "narrator_id": "al-humaydi",
+     "term_ar": "حَدَّثَنَا",
+     "identification": "explicit"
+    },
+    {
+     "name_ar": "سُفْيَانُ",
+     "narrator_id": "sufyan-ibn-uyaynah",
+     "term_ar": "حَدَّثَنَا",
+     "identification": "pending_review"
+    },
+    {
+     "name_ar": "يَحْيَى بْنُ سَعِيدٍ الْأَنْصَارِيُّ",
+     "narrator_id": "yahya-ibn-said-al-ansari",
+     "term_ar": "حَدَّثَنَا",
+     "identification": "explicit"
+    },
+    {
+     "name_ar": "مُحَمَّدُ بْنُ إِبْرَاهِيمَ التَّيْمِيُّ",
+     "narrator_id": "muhammad-ibn-ibrahim-al-taymi",
+     "term_ar": "أَخْبَرَنِي",
+     "identification": "explicit"
+    },
+    {
+     "name_ar": "عَلْقَمَةَ بْنَ وَقَّاصٍ اللَّيْثِيَّ",
+     "narrator_id": "alqamah-ibn-waqqas",
+     "term_ar": "سَمِعَ",
+     "identification": "explicit"
+    },
+    {
+     "name_ar": "عُمَرَ بْنَ الْخَطَّابِ",
+     "narrator_id": "umar-ibn-al-khattab",
+     "term_ar": "سَمِعْتُ",
+     "identification": "explicit"
+    },
+    {
+     "name_ar": "رَسُولَ اللَّهِ ﷺ",
+     "narrator_id": null,
+     "role": "prophet",
+     "term_ar": "سَمِعْتُ",
+     "identification": "explicit"
+    }
+   ],
+   "gharib_words": [
+    "النيات",
+    "هجرته",
+    "يصيبها",
+    "ينكحها"
+   ],
+   "defects": [],
+   "source": {
+    "dataset": "fawazahmed0/hadith-api",
+    "editions": [
+     "ara-bukhari",
+     "eng-bukhari"
+    ],
+    "license": "Unlicense (public domain)"
+   },
+   "review_status": "verified_from_source"
+  },
+  {
+   "id": "abudawud:2201",
+   "collection": "abudawud",
+   "number": 2201,
+   "arabic_number": 2201,
+   "book": {
+    "number": 13,
+    "name_en": "Divorce (Kitab Al-Talaq)"
+   },
+   "text_ar": "حَدَّثَنَا مُحَمَّدُ بْنُ كَثِيرٍ، أَخْبَرَنَا سُفْيَانُ، حَدَّثَنِي يَحْيَى بْنُ سَعِيدٍ، عَنْ مُحَمَّدِ بْنِ إِبْرَاهِيمَ التَّيْمِيِّ، عَنْ عَلْقَمَةَ بْنِ وَقَّاصٍ اللَّيْثِيِّ، قَالَ سَمِعْتُ عُمَرَ بْنَ الْخَطَّابِ، يَقُولُ قَالَ رَسُولُ اللَّهِ صلى الله عليه وسلم ‏ \"‏ إِنَّمَا الأَعْمَالُ بِالنِّيَّاتِ وَإِنَّمَا لِكُلِّ امْرِئٍ مَا نَوَى فَمَنْ كَانَتْ هِجْرَتُهُ إِلَى اللَّهِ وَرَسُولِهِ فَهِجْرَتُهُ إِلَى اللَّهِ وَرَسُولِهِ وَمَنْ كَانَتْ هِجْرَتُهُ لِدُنْيَا يُصِيبُهَا أَوِ امْرَأَةٍ يَتَزَوَّجُهَا فَهِجْرَتُهُ إِلَى مَا هَاجَرَ إِلَيْهِ ‏\"‏ ‏.‏",
+   "isnad_ar": "حَدَّثَنَا مُحَمَّدُ بْنُ كَثِيرٍ، أَخْبَرَنَا سُفْيَانُ، حَدَّثَنِي يَحْيَى بْنُ سَعِيدٍ، عَنْ مُحَمَّدِ بْنِ إِبْرَاهِيمَ التَّيْمِيِّ، عَنْ عَلْقَمَةَ بْنِ وَقَّاصٍ اللَّيْثِيِّ، قَالَ سَمِعْتُ عُمَرَ بْنَ الْخَطَّابِ، يَقُولُ قَالَ رَسُولُ اللَّهِ صلى الله عليه وسلم",
+   "matn_ar": "إِنَّمَا الأَعْمَالُ بِالنِّيَّاتِ وَإِنَّمَا لِكُلِّ امْرِئٍ مَا نَوَى فَمَنْ كَانَتْ هِجْرَتُهُ إِلَى اللَّهِ وَرَسُولِهِ فَهِجْرَتُهُ إِلَى اللَّهِ وَرَسُولِهِ وَمَنْ كَانَتْ هِجْرَتُهُ لِدُنْيَا يُصِيبُهَا أَوِ امْرَأَةٍ يَتَزَوَّجُهَا فَهِجْرَتُهُ إِلَى مَا هَاجَرَ إِلَيْهِ",
+   "compiler_note_ar": null,
+   "translation": {
+    "language": "en",
+    "text": "‘Umar bin Al Khattab reported the Apostle of Allaah(ﷺ) as saying “Actions are to be judged only by intentions and a man will have only what he intended. When one’s emigration is to Allaah and His Apostle, his emigration is to Allaah and His Apostle but his emigration is to a worldly end at which he aims or to a woman whom he marries , his emigration is to that for which he emigrated",
+    "source": "fawazahmed0/hadith-api (eng-abudawud)",
+    "license_status": "unverified"
+   },
+   "dataset_grades": [
+    {
+     "scholar": "Al-Albani",
+     "grade": "Sahih",
+     "source_dataset": "fawazahmed0/hadith-api (eng-abudawud)"
+    },
+    {
+     "scholar": "Muhammad Muhyi Al-Din Abdul Hamid",
+     "grade": "Sahih",
+     "source_dataset": "fawazahmed0/hadith-api (eng-abudawud)"
+    },
+    {
+     "scholar": "Shuaib Al Arnaut",
+     "grade": "Sahih",
+     "source_dataset": "fawazahmed0/hadith-api (eng-abudawud)"
+    },
+    {
+     "scholar": "Zubair Ali Zai",
+     "grade": "Sahih Bukhari (1) Sahih Muslim (1907)",
+     "source_dataset": "fawazahmed0/hadith-api (eng-abudawud)"
+    }
+   ],
+   "chain": [
+    {
+     "name_ar": "أَبُو دَاوُدَ",
+     "narrator_id": null,
+     "role": "compiler",
+     "term_ar": null,
+     "identification": "explicit"
+    },
+    {
+     "name_ar": "مُحَمَّدُ بْنُ كَثِيرٍ",
+     "narrator_id": null,
+     "term_ar": "حَدَّثَنَا",
+     "identification": "pending_review"
+    },
+    {
+     "name_ar": "سُفْيَانُ",
+     "narrator_id": null,
+     "term_ar": "أَخْبَرَنَا",
+     "identification": "ambiguous",
+     "candidates": [
+      "sufyan-ibn-uyaynah",
+      "sufyan-al-thawri"
+     ]
+    },
+    {
+     "name_ar": "يَحْيَى بْنُ سَعِيدٍ",
+     "narrator_id": "yahya-ibn-said-al-ansari",
+     "term_ar": "حَدَّثَنِي",
+     "identification": "pending_review"
+    },
+    {
+     "name_ar": "مُحَمَّدِ بْنِ إِبْرَاهِيمَ التَّيْمِيِّ",
+     "narrator_id": "muhammad-ibn-ibrahim-al-taymi",
+     "term_ar": "عَنْ",
+     "identification": "explicit"
+    },
+    {
+     "name_ar": "عَلْقَمَةَ بْنِ وَقَّاصٍ اللَّيْثِيِّ",
+     "narrator_id": "alqamah-ibn-waqqas",
+     "term_ar": "عَنْ",
+     "identification": "explicit"
+    },
+    {
+     "name_ar": "عُمَرَ بْنَ الْخَطَّابِ",
+     "narrator_id": "umar-ibn-al-khattab",
+     "term_ar": "سَمِعْتُ",
+     "identification": "explicit"
+    },
+    {
+     "name_ar": "رَسُولُ اللَّهِ ﷺ",
+     "narrator_id": null,
+     "role": "prophet",
+     "term_ar": "قَالَ",
+     "identification": "explicit"
+    }
+   ],
+   "gharib_words": [
+    "النيات",
+    "هجرته",
+    "يصيبها"
+   ],
+   "defects": [],
+   "source": {
+    "dataset": "fawazahmed0/hadith-api",
+    "editions": [
+     "ara-abudawud",
+     "eng-abudawud"
+    ],
+    "license": "Unlicense (public domain)"
+   },
+   "review_status": "verified_from_source"
+  },
+  {
+   "id": "tirmidhi:4",
+   "collection": "tirmidhi",
+   "number": 4,
+   "arabic_number": 4,
+   "book": {
+    "number": 1,
+    "name_en": "The Book on Purification"
+   },
+   "text_ar": "حَدَّثَنَا أَبُو بَكْرٍ، مُحَمَّدُ بْنُ زَنْجَوَيْهِ الْبَغْدَادِيُّ وَغَيْرُ وَاحِدٍ قَالَ حَدَّثَنَا الْحُسَيْنُ بْنُ مُحَمَّدٍ، حَدَّثَنَا سُلَيْمَانُ بْنُ قَرْمٍ، عَنْ أَبِي يَحْيَى الْقَتَّاتِ، عَنْ مُجَاهِدٍ، عَنْ جَابِرِ بْنِ عَبْدِ اللَّهِ، رضى الله عنهما قَالَ قَالَ رَسُولُ اللَّهِ صلى الله عليه وسلم ‏ \"‏ مِفْتَاحُ الْجَنَّةِ الصَّلاَةُ وَمِفْتَاحُ الصَّلاَةِ الْوُضُوءُ ‏\"‏ ‏.‏",
+   "isnad_ar": "حَدَّثَنَا أَبُو بَكْرٍ، مُحَمَّدُ بْنُ زَنْجَوَيْهِ الْبَغْدَادِيُّ وَغَيْرُ وَاحِدٍ قَالَ حَدَّثَنَا الْحُسَيْنُ بْنُ مُحَمَّدٍ، حَدَّثَنَا سُلَيْمَانُ بْنُ قَرْمٍ، عَنْ أَبِي يَحْيَى الْقَتَّاتِ، عَنْ مُجَاهِدٍ، عَنْ جَابِرِ بْنِ عَبْدِ اللَّهِ، رضى الله عنهما قَالَ قَالَ رَسُولُ اللَّهِ صلى الله عليه وسلم",
+   "matn_ar": "مِفْتَاحُ الْجَنَّةِ الصَّلاَةُ وَمِفْتَاحُ الصَّلاَةِ الْوُضُوءُ",
+   "compiler_note_ar": null,
+   "translation": {
+    "language": "en",
+    "text": "Jabir bin 'Abdullah, may Allah be pleased with them, narrated that :Allah's Messenger said: \"The key to Paradise is Salat, and the key to Salat is Wudu",
+    "source": "fawazahmed0/hadith-api (eng-tirmidhi)",
+    "license_status": "unverified"
+   },
+   "dataset_grades": [
+    {
+     "scholar": "Ahmad Muhammad Shakir",
+     "grade": "Sahih Lighairihi",
+     "source_dataset": "fawazahmed0/hadith-api (eng-tirmidhi)"
+    },
+    {
+     "scholar": "Al-Albani",
+     "grade": "Sahih",
+     "source_dataset": "fawazahmed0/hadith-api (eng-tirmidhi)"
+    },
+    {
+     "scholar": "Zubair Ali Zai",
+     "grade": "Daif",
+     "source_dataset": "fawazahmed0/hadith-api (eng-tirmidhi)"
+    }
+   ],
+   "chain": [
+    {
+     "name_ar": "أَبُو عِيسَى التِّرْمِذِيُّ",
+     "narrator_id": null,
+     "role": "compiler",
+     "term_ar": null,
+     "identification": "explicit"
+    },
+    {
+     "name_ar": "أَبُو بَكْرٍ مُحَمَّدُ بْنُ زَنْجَوَيْهِ الْبَغْدَادِيُّ وَغَيْرُ وَاحِدٍ",
+     "narrator_id": null,
+     "term_ar": "حَدَّثَنَا",
+     "identification": "pending_review"
+    },
+    {
+     "name_ar": "الْحُسَيْنُ بْنُ مُحَمَّدٍ",
+     "narrator_id": "al-husayn-ibn-muhammad-al-marrudhi",
+     "term_ar": "حَدَّثَنَا",
+     "identification": "pending_review"
+    },
+    {
+     "name_ar": "سُلَيْمَانُ بْنُ قَرْمٍ",
+     "narrator_id": "sulayman-ibn-qarm",
+     "term_ar": "حَدَّثَنَا",
+     "identification": "explicit"
+    },
+    {
+     "name_ar": "أَبُو يَحْيَى الْقَتَّاتُ",
+     "narrator_id": "abu-yahya-al-qattat",
+     "term_ar": "عَنْ",
+     "identification": "explicit"
+    },
+    {
+     "name_ar": "مُجَاهِدٌ",
+     "narrator_id": "mujahid-ibn-jabr",
+     "term_ar": "عَنْ",
+     "identification": "pending_review"
+    },
+    {
+     "name_ar": "جَابِرُ بْنُ عَبْدِ اللَّهِ",
+     "narrator_id": "jabir-ibn-abdillah",
+     "term_ar": "عَنْ",
+     "identification": "explicit"
+    },
+    {
+     "name_ar": "رَسُولُ اللَّهِ ﷺ",
+     "narrator_id": null,
+     "role": "prophet",
+     "term_ar": "قَالَ",
+     "identification": "explicit"
+    }
+   ],
+   "gharib_words": [
+    "مفتاح"
+   ],
+   "defects": [
+    {
+     "cause": "su_al_hifz",
+     "narrator_id": "sulayman-ibn-qarm",
+     "scholar": "Ibn Hajar al-'Asqalani",
+     "source_book": "Taqrib al-Tahdhib, no. 2600",
+     "quote_ar": "سيء الحفظ يتشيع",
+     "explanation_en": "Ibn Hajar describes Sulayman ibn Qarm as having poor memory; this weakens the chain on its own.",
+     "review_status": "verified_from_source",
+     "taqrib_no": 2600,
+     "source_text_ar": "٢٦٠٠- سليمان ابن قرم بفتح القاف وسكون الراء ابن معاذ أبو داود البصري النحوي ومنهم من ينسبه إلى جده سيء الحفظ يتشيع من السابعة خت د ت س\r[] سليمان ابن قسيم هو ابن يسير يأتي"
+    },
+    {
+     "cause": "su_al_hifz",
+     "narrator_id": "abu-yahya-al-qattat",
+     "scholar": "Ibn Hajar al-'Asqalani",
+     "source_book": "Taqrib al-Tahdhib, no. 8444",
+     "quote_ar": "لين الحديث",
+     "explanation_en": "Abu Yahya al-Qattat is graded 'layyin al-hadith' (soft in narration), a mild weakness in precision.",
+     "review_status": "verified_from_source",
+     "taqrib_no": 8444,
+     "source_text_ar": "٨٤٤٤- أبو يحيى القتات بقاف ومثناة مثقلة وآخره مثناة أيضا الكوفي اسمه زاذان وقيل دينار وقيل مسلم وقيل يزيد وقيل زبان وقيل عبد الرحمن لين الحديث من السادسة بخ د ت ق\r[] أبو يحيى القرشي هو زياد تقدم ويقال فيه مولى الأنصار ومولى قيس ابن مخرمة"
+    }
+   ],
+   "source": {
+    "dataset": "fawazahmed0/hadith-api",
+    "editions": [
+     "ara-tirmidhi",
+     "eng-tirmidhi"
+    ],
+    "license": "Unlicense (public domain)"
+   },
+   "review_status": "verified_from_source"
+  },
+  {
+   "id": "tirmidhi:172",
+   "collection": "tirmidhi",
+   "number": 172,
+   "arabic_number": 172,
+   "book": {
+    "number": 2,
+    "name_en": "The Book on Salat (Prayer)"
+   },
+   "text_ar": "حَدَّثَنَا أَحْمَدُ بْنُ مَنِيعٍ، حَدَّثَنَا يَعْقُوبُ بْنُ الْوَلِيدِ الْمَدَنِيُّ، عَنْ عَبْدِ اللَّهِ بْنِ عُمَرَ، عَنْ نَافِعٍ، عَنِ ابْنِ عُمَرَ، قَالَ قَالَ رَسُولُ اللَّهِ صلى الله عليه وسلم ‏ \"‏ الْوَقْتُ الأَوَّلُ مِنَ الصَّلاَةِ رِضْوَانُ اللَّهِ وَالْوَقْتُ الآخِرُ عَفْوُ اللَّهِ ‏\"‏ ‏.‏ قَالَ أَبُو عِيسَى هَذَا حَدِيثٌ غَرِيبٌ ‏.‏ وَقَدْ رَوَى ابْنُ عَبَّاسٍ عَنِ النَّبِيِّ صلى الله عليه وسلم نَحْوَهُ ‏.‏ قَالَ وَفِي الْبَابِ عَنْ عَلِيٍّ وَابْنِ عُمَرَ وَعَائِشَةَ وَابْنِ مَسْعُودٍ ‏.‏ قَالَ أَبُو عِيسَى حَدِيثُ أُمِّ فَرْوَةَ لاَ يُرْوَى إِلاَّ مِنْ حَدِيثِ عَبْدِ اللَّهِ بْنِ عُمَرَ الْعُمَرِيِّ وَلَيْسَ هُوَ بِالْقَوِيِّ عِنْدَ أَهْلِ الْحَدِيثِ وَاضْطَرَبُوا عَنْهُ فِي هَذَا الْحَدِيثِ وَهُوَ صَدُوقٌ وَقَدْ تَكَلَّمَ فِيهِ يَحْيَى بْنُ سَعِيدٍ مِنْ قِبَلِ حِفْظِهِ ‏.‏",
+   "isnad_ar": "حَدَّثَنَا أَحْمَدُ بْنُ مَنِيعٍ، حَدَّثَنَا يَعْقُوبُ بْنُ الْوَلِيدِ الْمَدَنِيُّ، عَنْ عَبْدِ اللَّهِ بْنِ عُمَرَ، عَنْ نَافِعٍ، عَنِ ابْنِ عُمَرَ، قَالَ قَالَ رَسُولُ اللَّهِ صلى الله عليه وسلم",
+   "matn_ar": "الْوَقْتُ الأَوَّلُ مِنَ الصَّلاَةِ رِضْوَانُ اللَّهِ وَالْوَقْتُ الآخِرُ عَفْوُ اللَّهِ",
+   "compiler_note_ar": "قَالَ أَبُو عِيسَى هَذَا حَدِيثٌ غَرِيبٌ ‏.‏ وَقَدْ رَوَى ابْنُ عَبَّاسٍ عَنِ النَّبِيِّ صلى الله عليه وسلم نَحْوَهُ ‏.‏ قَالَ وَفِي الْبَابِ عَنْ عَلِيٍّ وَابْنِ عُمَرَ وَعَائِشَةَ وَابْنِ مَسْعُودٍ ‏.‏ قَالَ أَبُو عِيسَى حَدِيثُ أُمِّ فَرْوَةَ لاَ يُرْوَى إِلاَّ مِنْ حَدِيثِ عَبْدِ اللَّهِ بْنِ عُمَرَ الْعُمَرِيِّ وَلَيْسَ هُوَ بِالْقَوِيِّ عِنْدَ أَهْلِ الْحَدِيثِ وَاضْطَرَبُوا عَنْهُ فِي هَذَا الْحَدِيثِ وَهُوَ صَدُوقٌ وَقَدْ تَكَلَّمَ فِيهِ يَحْيَى بْنُ سَعِيدٍ مِنْ قِبَلِ حِفْظِهِ ‏.‏",
+   "translation": {
+    "language": "en",
+    "text": "Ibn Umar narrated that :Allah's Messenger said: \"The beginning of the time for Salat is pleasing to Allah, and the end of its time is pardoned by Allah",
+    "source": "fawazahmed0/hadith-api (eng-tirmidhi)",
+    "license_status": "unverified"
+   },
+   "dataset_grades": [
+    {
+     "scholar": "Ahmad Muhammad Shakir",
+     "grade": "Mawdu",
+     "source_dataset": "fawazahmed0/hadith-api (eng-tirmidhi)"
+    },
+    {
+     "scholar": "Al-Albani",
+     "grade": "Mawdu",
+     "source_dataset": "fawazahmed0/hadith-api (eng-tirmidhi)"
+    },
+    {
+     "scholar": "Zubair Ali Zai",
+     "grade": "Daif",
+     "source_dataset": "fawazahmed0/hadith-api (eng-tirmidhi)"
+    }
+   ],
+   "chain": [
+    {
+     "name_ar": "أَبُو عِيسَى التِّرْمِذِيُّ",
+     "narrator_id": null,
+     "role": "compiler",
+     "term_ar": null,
+     "identification": "explicit"
+    },
+    {
+     "name_ar": "أَحْمَدُ بْنُ مَنِيعٍ",
+     "narrator_id": "ahmad-ibn-mani",
+     "term_ar": "حَدَّثَنَا",
+     "identification": "explicit"
+    },
+    {
+     "name_ar": "يَعْقُوبُ بْنُ الْوَلِيدِ الْمَدَنِيُّ",
+     "narrator_id": "yaqub-ibn-al-walid",
+     "term_ar": "حَدَّثَنَا",
+     "identification": "explicit"
+    },
+    {
+     "name_ar": "عَبْدِ اللَّهِ بْنِ عُمَرَ",
+     "narrator_id": "abdullah-ibn-umar-al-umari",
+     "term_ar": "عَنْ",
+     "identification": "pending_review"
+    },
+    {
+     "name_ar": "نَافِعٍ",
+     "narrator_id": "nafi-mawla-ibn-umar",
+     "term_ar": "عَنْ",
+     "identification": "pending_review"
+    },
+    {
+     "name_ar": "ابْنِ عُمَرَ",
+     "narrator_id": "abdullah-ibn-umar",
+     "term_ar": "عَنْ",
+     "identification": "explicit"
+    },
+    {
+     "name_ar": "رَسُولُ اللَّهِ ﷺ",
+     "narrator_id": null,
+     "role": "prophet",
+     "term_ar": "قَالَ",
+     "identification": "explicit"
+    }
+   ],
+   "gharib_words": [
+    "رضوان",
+    "عفو"
+   ],
+   "defects": [
+    {
+     "cause": "kadhdhab_matruk",
+     "narrator_id": "yaqub-ibn-al-walid",
+     "scholar": "Ibn Hajar al-'Asqalani",
+     "source_book": "Taqrib al-Tahdhib, no. 7835",
+     "quote_ar": "كذبه أحمد وغيره",
+     "explanation_en": "Ya'qub ibn al-Walid al-Madani was accused of lying by Ahmad ibn Hanbal and others; a chain through such a narrator is rejected.",
+     "review_status": "verified_from_source",
+     "taqrib_no": 7835,
+     "source_text_ar": "٧٨٣٥- يعقوب ابن الوليد ابن عبد الله ابن أبي هلال الأزدي أبو يوسف أو أبو هلال المدني نزيل بغداد كذبه أحمد وغيره من الثامنة ت ق"
+    },
+    {
+     "cause": "su_al_hifz",
+     "narrator_id": "abdullah-ibn-umar-al-umari",
+     "scholar": "al-Tirmidhi",
+     "source_book": "al-Jami' (Sunan al-Tirmidhi), comment in the chapter of hadith 172",
+     "quote_ar": "وَلَيْسَ هُوَ بِالْقَوِيِّ عِنْدَ أَهْلِ الْحَدِيثِ وَاضْطَرَبُوا عَنْهُ فِي هَذَا الْحَدِيثِ وَهُوَ صَدُوقٌ وَقَدْ تَكَلَّمَ فِيهِ يَحْيَى بْنُ سَعِيدٍ مِنْ قِبَلِ حِفْظِهِ",
+     "explanation_en": "Al-Tirmidhi himself says 'Abdullah ibn 'Umar al-'Umari is not strong according to the hadith scholars and was criticised for his memory. The quote is verbatim from the source text; linking it to this chain's narrator is an editorial identification.",
+     "review_status": "pending_scholar_review",
+     "quote_verified": true
+    }
+   ],
+   "source": {
+    "dataset": "fawazahmed0/hadith-api",
+    "editions": [
+     "ara-tirmidhi",
+     "eng-tirmidhi"
+    ],
+    "license": "Unlicense (public domain)"
+   },
+   "review_status": "verified_from_source"
+  }
+ ],
+ "narrators": [
+  {
+   "id": "umar-ibn-al-khattab",
+   "name_ar": "عمر بن الخطاب",
+   "name_en": "'Umar ibn al-Khattab",
+   "kunya_ar": "أبو حفص",
+   "generation": "sahabi",
+   "tabaqah": 1,
+   "death_year_ah": 23,
+   "reliability": "sahabi",
+   "rulings": [
+    {
+     "scholar": "Consensus of the hadith scholars",
+     "source_book": null,
+     "ruling_ar": "صحابي",
+     "ruling_en": "Companion of the Prophet ﷺ; the Companions are accepted as upright ('udul).",
+     "review_status": "pending_scholar_review"
+    }
+   ],
+   "teachers": [],
+   "students": [
+    "alqamah-ibn-waqqas"
+   ]
+  },
+  {
+   "id": "jabir-ibn-abdillah",
+   "name_ar": "جابر بن عبد الله الأنصاري",
+   "name_en": "Jabir ibn 'Abdillah al-Ansari",
+   "kunya_ar": "أبو عبد الله",
+   "generation": "sahabi",
+   "tabaqah": 1,
+   "death_year_ah": null,
+   "death_note": "after 70 AH (reports differ)",
+   "reliability": "sahabi",
+   "rulings": [
+    {
+     "scholar": "Consensus of the hadith scholars",
+     "source_book": null,
+     "ruling_ar": "صحابي",
+     "ruling_en": "Companion of the Prophet ﷺ.",
+     "review_status": "pending_scholar_review"
+    }
+   ],
+   "teachers": [],
+   "students": [
+    "mujahid-ibn-jabr"
+   ]
+  },
+  {
+   "id": "abdullah-ibn-umar",
+   "name_ar": "عبد الله بن عمر بن الخطاب",
+   "name_en": "'Abdullah ibn 'Umar ibn al-Khattab",
+   "kunya_ar": "أبو عبد الرحمن",
+   "generation": "sahabi",
+   "tabaqah": 1,
+   "death_year_ah": 73,
+   "reliability": "sahabi",
+   "rulings": [
+    {
+     "scholar": "Consensus of the hadith scholars",
+     "source_book": null,
+     "ruling_ar": "صحابي",
+     "ruling_en": "Companion of the Prophet ﷺ.",
+     "review_status": "pending_scholar_review"
+    }
+   ],
+   "teachers": [],
+   "students": [
+    "nafi-mawla-ibn-umar"
+   ]
+  },
+  {
+   "id": "alqamah-ibn-waqqas",
+   "name_ar": "علقمة بن وقاص الليثي",
+   "name_en": "'Alqamah ibn Waqqas al-Laythi",
+   "kunya_ar": null,
+   "generation": "tabii",
+   "tabaqah": 2,
+   "death_year_ah": null,
+   "death_note": "during the caliphate of 'Abd al-Malik",
+   "reliability": "thiqah",
+   "rulings": [
+    {
+     "scholar": "Ibn Hajar al-'Asqalani",
+     "source_book": "Taqrib al-Tahdhib, no. 4685",
+     "ruling_ar": "ثقة ثبت ... أخطأ من زعم أن له صحبة",
+     "ruling_en": "Trustworthy and firm; whoever claimed he was a Companion erred.",
+     "review_status": "verified_from_source",
+     "taqrib_no": 4685,
+     "source_text_ar": "٤٦٨٥- علقمة ابن وقاص بتشديد القاف الليثي المدني ثقة ثبت من الثانية أخطأ من زعم أن له صحبة وقيل إنه ولد في عهد النبي ﷺ مات في خلافة عبد الملك ع\rذكر من اسمه علي وكل من لم أذكر له كنية فكنيته أبو الحسن"
+    }
+   ],
+   "teachers": [
+    "umar-ibn-al-khattab"
+   ],
+   "students": [
+    "muhammad-ibn-ibrahim-al-taymi"
+   ]
+  },
+  {
+   "id": "muhammad-ibn-ibrahim-al-taymi",
+   "name_ar": "محمد بن إبراهيم بن الحارث التيمي",
+   "name_en": "Muhammad ibn Ibrahim al-Taymi",
+   "kunya_ar": "أبو عبد الله",
+   "generation": "tabii",
+   "tabaqah": 4,
+   "death_year_ah": 120,
+   "reliability": "thiqah",
+   "rulings": [
+    {
+     "scholar": "Ibn Hajar al-'Asqalani",
+     "source_book": "Taqrib al-Tahdhib, no. 5691",
+     "ruling_ar": "ثقة له أفراد",
+     "ruling_en": "Trustworthy; he has some solitary narrations.",
+     "review_status": "verified_from_source",
+     "taqrib_no": 5691,
+     "source_text_ar": "٥٦٩١- محمد ابن إبراهيم ابن الحارث ابن خالد التيمي أبو عبد الله المدني ثقة له أفراد من الرابعة مات سنة عشرين على الصحيح ع"
+    }
+   ],
+   "teachers": [
+    "alqamah-ibn-waqqas"
+   ],
+   "students": [
+    "yahya-ibn-said-al-ansari"
+   ]
+  },
+  {
+   "id": "yahya-ibn-said-al-ansari",
+   "name_ar": "يحيى بن سعيد بن قيس الأنصاري",
+   "name_en": "Yahya ibn Sa'id al-Ansari",
+   "kunya_ar": "أبو سعيد",
+   "generation": "tabii",
+   "tabaqah": 5,
+   "death_year_ah": 144,
+   "reliability": "thiqah",
+   "rulings": [
+    {
+     "scholar": "Ibn Hajar al-'Asqalani",
+     "source_book": "Taqrib al-Tahdhib, no. 7559",
+     "ruling_ar": "ثقة ثبت",
+     "ruling_en": "Trustworthy and firm.",
+     "review_status": "verified_from_source",
+     "taqrib_no": 7559,
+     "source_text_ar": "٧٥٥٩- يحيى ابن سعيد ابن قيس الأنصاري المدني أبو سعيد القاضي ثقة ثبت من الخامسة مات سنة أربع وأربعين أو بعدها ع"
+    }
+   ],
+   "teachers": [
+    "muhammad-ibn-ibrahim-al-taymi"
+   ],
+   "students": [
+    "sufyan-ibn-uyaynah"
+   ]
+  },
+  {
+   "id": "sufyan-ibn-uyaynah",
+   "name_ar": "سفيان بن عيينة",
+   "name_en": "Sufyan ibn 'Uyaynah",
+   "kunya_ar": "أبو محمد",
+   "generation": "atba_al_tabiin",
+   "tabaqah": 8,
+   "death_year_ah": 198,
+   "reliability": "thiqah",
+   "rulings": [
+    {
+     "scholar": "Ibn Hajar al-'Asqalani",
+     "source_book": "Taqrib al-Tahdhib, no. 2451",
+     "ruling_ar": "ثقة حافظ فقيه إمام حجة إلا أنه تغير حفظه بأخرة وكان ربما دلس لكن عن الثقات",
+     "ruling_en": "Trustworthy, a hafiz, jurist and authoritative imam; his memory changed late in life and he sometimes concealed a link, but only from trustworthy narrators.",
+     "review_status": "verified_from_source",
+     "taqrib_no": 2451,
+     "source_text_ar": "٢٤٥١- سفيان ابن عيينة ابن أبي عمران ميمون الهلالي أبو محمد الكوفي ثم المكي ثقة حافظ فقيه إمام حجة إلا أنه تغير حفظه بأخرة وكان ربما دلس لكن عن الثقات من رؤوس الطبقة الثامنة وكان أثبت الناس في عمرو ابن دينار مات في رجب سنة ثمان وتسعين وله إحدى وتسعون سنة ع"
+    }
+   ],
+   "teachers": [
+    "yahya-ibn-said-al-ansari"
+   ],
+   "students": [
+    "al-humaydi"
+   ]
+  },
+  {
+   "id": "sufyan-al-thawri",
+   "name_ar": "سفيان بن سعيد الثوري",
+   "name_en": "Sufyan al-Thawri",
+   "kunya_ar": "أبو عبد الله",
+   "generation": "atba_al_tabiin",
+   "tabaqah": 7,
+   "death_year_ah": 161,
+   "reliability": "thiqah",
+   "rulings": [
+    {
+     "scholar": "Ibn Hajar al-'Asqalani",
+     "source_book": "Taqrib al-Tahdhib, no. 2445",
+     "ruling_ar": "ثقة حافظ فقيه عابد إمام حجة",
+     "ruling_en": "Trustworthy, a hafiz, jurist, devout worshipper and authoritative imam.",
+     "review_status": "verified_from_source",
+     "taqrib_no": 2445,
+     "source_text_ar": "٢٤٤٥- سفيان ابن سعيد ابن مسروق الثوري أبو عبد الله الكوفي ثقة حافظ فقيه عابد إمام حجة من رؤوس الطبقة السابعة وكان ربما دلس مات سنة إحدى وستين وله أربع وستون ع"
+    }
+   ],
+   "teachers": [],
+   "students": []
+  },
+  {
+   "id": "al-humaydi",
+   "name_ar": "عبد الله بن الزبير الحميدي",
+   "name_en": "'Abdullah ibn al-Zubayr al-Humaydi",
+   "kunya_ar": "أبو بكر",
+   "generation": "taba_atba",
+   "tabaqah": 10,
+   "death_year_ah": 219,
+   "reliability": "thiqah",
+   "rulings": [
+    {
+     "scholar": "Ibn Hajar al-'Asqalani",
+     "source_book": "Taqrib al-Tahdhib, no. 3320",
+     "ruling_ar": "ثقة حافظ فقيه أجل أصحاب ابن عيينة",
+     "ruling_en": "Trustworthy, a hafiz and jurist; the most eminent student of Ibn 'Uyaynah.",
+     "review_status": "verified_from_source",
+     "taqrib_no": 3320,
+     "source_text_ar": "٣٣٢٠- عبد الله ابن الزبير ابن عيسى القرشي الأسدي الحميدي المكي أبو بكر ثقة حافظ فقيه أجل أصحاب ابن عيينة من العاشرة مات بمكة سنة تسع عشرة وقيل بعدها قال الحاكم كان البخاري إذا وجد الحديث عند الحميدي لا يعدوه إلى غيره خ م د ت س فق"
+    }
+   ],
+   "teachers": [
+    "sufyan-ibn-uyaynah"
+   ],
+   "students": []
+  },
+  {
+   "id": "mujahid-ibn-jabr",
+   "name_ar": "مجاهد بن جبر المكي",
+   "name_en": "Mujahid ibn Jabr al-Makki",
+   "kunya_ar": "أبو الحجاج",
+   "generation": "tabii",
+   "tabaqah": 3,
+   "death_year_ah": null,
+   "death_note": "c. 101–104 AH (reports differ)",
+   "reliability": "thiqah",
+   "rulings": [
+    {
+     "scholar": "Ibn Hajar al-'Asqalani",
+     "source_book": "Taqrib al-Tahdhib, no. 6481",
+     "ruling_ar": "ثقة إمام في التفسير وفي العلم",
+     "ruling_en": "Trustworthy; an imam in tafsir and knowledge.",
+     "review_status": "verified_from_source",
+     "taqrib_no": 6481,
+     "source_text_ar": "٦٤٨١- مجاهد ابن جبر بفتح الجيم وسكون الموحدة أبو الحجاج المخزومي مولاهم المكي ثقة إمام في التفسير وفي العلم من الثالثة مات سنة إحدى أو اثنتين أو ثلاث أو أربع ومائة وله ثلاث وثمانون ع"
+    }
+   ],
+   "teachers": [
+    "jabir-ibn-abdillah"
+   ],
+   "students": [
+    "abu-yahya-al-qattat"
+   ]
+  },
+  {
+   "id": "abu-yahya-al-qattat",
+   "name_ar": "أبو يحيى القتات",
+   "name_en": "Abu Yahya al-Qattat",
+   "kunya_ar": "أبو يحيى",
+   "generation": "tabii",
+   "tabaqah": 6,
+   "death_year_ah": null,
+   "reliability": "daif",
+   "rulings": [
+    {
+     "scholar": "Ibn Hajar al-'Asqalani",
+     "source_book": "Taqrib al-Tahdhib, no. 8444",
+     "ruling_ar": "لين الحديث",
+     "ruling_en": "Soft (weak) in narration.",
+     "review_status": "verified_from_source",
+     "taqrib_no": 8444,
+     "source_text_ar": "٨٤٤٤- أبو يحيى القتات بقاف ومثناة مثقلة وآخره مثناة أيضا الكوفي اسمه زاذان وقيل دينار وقيل مسلم وقيل يزيد وقيل زبان وقيل عبد الرحمن لين الحديث من السادسة بخ د ت ق\r[] أبو يحيى القرشي هو زياد تقدم ويقال فيه مولى الأنصار ومولى قيس ابن مخرمة"
+    }
+   ],
+   "teachers": [
+    "mujahid-ibn-jabr"
+   ],
+   "students": [
+    "sulayman-ibn-qarm"
+   ]
+  },
+  {
+   "id": "sulayman-ibn-qarm",
+   "name_ar": "سليمان بن قرم الضبي",
+   "name_en": "Sulayman ibn Qarm al-Dabbi",
+   "kunya_ar": "أبو داود",
+   "generation": "atba_al_tabiin",
+   "tabaqah": 7,
+   "death_year_ah": null,
+   "reliability": "daif",
+   "rulings": [
+    {
+     "scholar": "Ibn Hajar al-'Asqalani",
+     "source_book": "Taqrib al-Tahdhib, no. 2600",
+     "ruling_ar": "سيء الحفظ يتشيع",
+     "ruling_en": "Poor memory; inclined to Shi'ism.",
+     "review_status": "verified_from_source",
+     "taqrib_no": 2600,
+     "source_text_ar": "٢٦٠٠- سليمان ابن قرم بفتح القاف وسكون الراء ابن معاذ أبو داود البصري النحوي ومنهم من ينسبه إلى جده سيء الحفظ يتشيع من السابعة خت د ت س\r[] سليمان ابن قسيم هو ابن يسير يأتي"
+    }
+   ],
+   "teachers": [
+    "abu-yahya-al-qattat"
+   ],
+   "students": [
+    "al-husayn-ibn-muhammad-al-marrudhi"
+   ]
+  },
+  {
+   "id": "al-husayn-ibn-muhammad-al-marrudhi",
+   "name_ar": "الحسين بن محمد بن بهرام المروذي",
+   "name_en": "Al-Husayn ibn Muhammad al-Marrudhi",
+   "kunya_ar": "أبو أحمد",
+   "generation": "taba_atba",
+   "tabaqah": 9,
+   "death_year_ah": null,
+   "reliability": "thiqah",
+   "rulings": [
+    {
+     "scholar": "Ibn Hajar al-'Asqalani",
+     "source_book": "Taqrib al-Tahdhib, no. 1345",
+     "ruling_ar": "ثقة",
+     "ruling_en": "Trustworthy.",
+     "review_status": "verified_from_source",
+     "taqrib_no": 1345,
+     "source_text_ar": "١٣٤٥- الحسين ابن محمد ابن بهرام التميمي أبو أحمد أو أبو علي المروذي بتشديد الراء وبذال معجمة نزيل بغداد ثقة من التاسعة مات سنة ثلاث عشرة أو بعدها بسنة أو سنتين ع"
+    }
+   ],
+   "teachers": [
+    "sulayman-ibn-qarm"
+   ],
+   "students": []
+  },
+  {
+   "id": "nafi-mawla-ibn-umar",
+   "name_ar": "نافع مولى ابن عمر",
+   "name_en": "Nafi', freed slave of Ibn 'Umar",
+   "kunya_ar": "أبو عبد الله",
+   "generation": "tabii",
+   "tabaqah": 3,
+   "death_year_ah": 117,
+   "reliability": "thiqah",
+   "rulings": [
+    {
+     "scholar": "Ibn Hajar al-'Asqalani",
+     "source_book": "Taqrib al-Tahdhib, no. 7086",
+     "ruling_ar": "ثقة ثبت فقيه مشهور",
+     "ruling_en": "Trustworthy, firm, a well-known jurist.",
+     "review_status": "verified_from_source",
+     "taqrib_no": 7086,
+     "source_text_ar": "٧٠٨٦- نافع أبو عبد الله المدني مولى ابن عمر ثقة ثبت فقيه مشهور من الثالثة مات سنة سبع عشره ومائة أو بعد ذلك ع"
+    }
+   ],
+   "teachers": [
+    "abdullah-ibn-umar"
+   ],
+   "students": [
+    "abdullah-ibn-umar-al-umari"
+   ]
+  },
+  {
+   "id": "abdullah-ibn-umar-al-umari",
+   "name_ar": "عبد الله بن عمر بن حفص العمري",
+   "name_en": "'Abdullah ibn 'Umar al-'Umari",
+   "kunya_ar": "أبو عبد الرحمن",
+   "generation": "atba_al_tabiin",
+   "tabaqah": 7,
+   "death_year_ah": 171,
+   "reliability": "daif",
+   "rulings": [
+    {
+     "scholar": "Ibn Hajar al-'Asqalani",
+     "source_book": "Taqrib al-Tahdhib, no. 3489",
+     "ruling_ar": "ضعيف عابد",
+     "ruling_en": "Weak (in narration), a devout worshipper.",
+     "review_status": "verified_from_source",
+     "taqrib_no": 3489,
+     "source_text_ar": "٣٤٨٩- عبد الله ابن عمر ابن حفص ابن عاصم ابن عمر ابن الخطاب أبو عبد الرحمن العمري المدني ضعيف عابد من السابعة مات سنة إحدى وسبعين وقيل بعدها م ٤"
+    },
+    {
+     "scholar": "al-Tirmidhi",
+     "source_book": "al-Jami' (Sunan al-Tirmidhi), after hadith 172",
+     "ruling_ar": "وَلَيْسَ هُوَ بِالْقَوِيِّ عِنْدَ أَهْلِ الْحَدِيثِ ... وَهُوَ صَدُوقٌ وَقَدْ تَكَلَّمَ فِيهِ يَحْيَى بْنُ سَعِيدٍ مِنْ قِبَلِ حِفْظِهِ",
+     "ruling_en": "Not strong according to the hadith scholars; truthful, but Yahya ibn Sa'id criticised his memory.",
+     "review_status": "verified_from_source"
+    }
+   ],
+   "teachers": [
+    "nafi-mawla-ibn-umar"
+   ],
+   "students": [
+    "yaqub-ibn-al-walid"
+   ]
+  },
+  {
+   "id": "ahmad-ibn-mani",
+   "name_ar": "أحمد بن منيع البغوي",
+   "name_en": "Ahmad ibn Mani' al-Baghawi",
+   "kunya_ar": "أبو جعفر",
+   "generation": "taba_atba",
+   "tabaqah": 10,
+   "death_year_ah": 244,
+   "reliability": "thiqah",
+   "rulings": [
+    {
+     "scholar": "Ibn Hajar al-'Asqalani",
+     "source_book": "Taqrib al-Tahdhib, no. 114",
+     "ruling_ar": "ثقة حافظ",
+     "ruling_en": "Trustworthy, a hafiz.",
+     "review_status": "verified_from_source",
+     "taqrib_no": 114,
+     "source_text_ar": "١١٤- أحمد ابن منيع ابن عبد الرحمن أبو جعفر البغوي [نزيل بغداد] الأصم ثقة حافظ من العاشرة مات سنة أربع وأربعين وله أربع وثمانون ع"
+    }
+   ],
+   "teachers": [
+    "yaqub-ibn-al-walid"
+   ],
+   "students": []
+  },
+  {
+   "id": "yaqub-ibn-al-walid",
+   "name_ar": "يعقوب بن الوليد المدني",
+   "name_en": "Ya'qub ibn al-Walid al-Madani",
+   "kunya_ar": null,
+   "generation": "atba_al_tabiin",
+   "tabaqah": 8,
+   "death_year_ah": null,
+   "reliability": "kadhdhab",
+   "rulings": [
+    {
+     "scholar": "Ibn Hajar al-'Asqalani",
+     "source_book": "Taqrib al-Tahdhib, no. 7835",
+     "ruling_ar": "كذبه أحمد وغيره",
+     "ruling_en": "Ahmad (ibn Hanbal) and others called him a liar.",
+     "review_status": "verified_from_source",
+     "taqrib_no": 7835,
+     "source_text_ar": "٧٨٣٥- يعقوب ابن الوليد ابن عبد الله ابن أبي هلال الأزدي أبو يوسف أو أبو هلال المدني نزيل بغداد كذبه أحمد وغيره من الثامنة ت ق"
+    }
+   ],
+   "teachers": [
+    "abdullah-ibn-umar-al-umari"
+   ],
+   "students": [
+    "ahmad-ibn-mani"
+   ]
+  }
+ ],
+ "gharib": [
+  {
+   "id": "niyyah",
+   "word_ar": "النِّيَّات",
+   "forms": [
+    "النيات",
+    "النية",
+    "نيات",
+    "نية"
+   ],
+   "root_ar": "ن و ي",
+   "transliteration": "an-niyyāt",
+   "gloss_en": "intentions: the heart's resolve and purpose behind an act",
+   "definition_ar": "جمع نية، وهي قصد القلب وعزمه على الفعل",
+   "source_book": "an-Nihayah fi Gharib al-Hadith wa al-Athar (Ibn al-Athir), root نوا",
+   "review_status": "pending_scholar_review"
+  },
+  {
+   "id": "hijrah",
+   "word_ar": "هِجْرَة",
+   "forms": [
+    "الهجرة",
+    "هاجر",
+    "هجرة",
+    "هجرته"
+   ],
+   "root_ar": "ه ج ر",
+   "transliteration": "hijrah",
+   "gloss_en": "emigration: leaving one land for another; in the Shari'ah, leaving what Allah has forbidden",
+   "definition_ar": "الخروج من أرض إلى أرض، وترك ما نهى الله عنه",
+   "source_book": "an-Nihayah fi Gharib al-Hadith wa al-Athar (Ibn al-Athir), root هجر",
+   "review_status": "pending_scholar_review"
+  },
+  {
+   "id": "yusibuha",
+   "word_ar": "يُصِيبُهَا",
+   "forms": [
+    "يصيب",
+    "يصيبها"
+   ],
+   "root_ar": "ص و ب",
+   "transliteration": "yuṣībuhā",
+   "gloss_en": "he attains it / obtains it",
+   "definition_ar": "يحصلها وينالها",
+   "source_book": "an-Nihayah fi Gharib al-Hadith wa al-Athar (Ibn al-Athir), root صوب",
+   "review_status": "pending_scholar_review"
+  },
+  {
+   "id": "yankihuha",
+   "word_ar": "يَنْكِحُهَا",
+   "forms": [
+    "ينكح",
+    "ينكحها"
+   ],
+   "root_ar": "ن ك ح",
+   "transliteration": "yankiḥuhā",
+   "gloss_en": "he marries her (by contract)",
+   "definition_ar": "يتزوجها",
+   "source_book": "an-Nihayah fi Gharib al-Hadith wa al-Athar (Ibn al-Athir), root نكح",
+   "review_status": "pending_scholar_review"
+  },
+  {
+   "id": "miftah",
+   "word_ar": "مِفْتَاح",
+   "forms": [
+    "مفتاح"
+   ],
+   "root_ar": "ف ت ح",
+   "transliteration": "miftāḥ",
+   "gloss_en": "key: that by which something is opened",
+   "definition_ar": "ما يفتح به الشيء",
+   "source_book": "an-Nihayah fi Gharib al-Hadith wa al-Athar (Ibn al-Athir), root فتح",
+   "review_status": "pending_scholar_review"
+  },
+  {
+   "id": "ridwan",
+   "word_ar": "رِضْوَان",
+   "forms": [
+    "رضوان"
+   ],
+   "root_ar": "ر ض و",
+   "transliteration": "riḍwān",
+   "gloss_en": "good pleasure (of Allah)",
+   "definition_ar": "الرضا",
+   "source_book": "an-Nihayah fi Gharib al-Hadith wa al-Athar (Ibn al-Athir), root رضا",
+   "review_status": "pending_scholar_review"
+  },
+  {
+   "id": "afw",
+   "word_ar": "عَفْو",
+   "forms": [
+    "عفو"
+   ],
+   "root_ar": "ع ف و",
+   "transliteration": "ʿafw",
+   "gloss_en": "pardon; overlooking a sin",
+   "definition_ar": "التجاوز عن الذنب وترك العقاب عليه",
+   "source_book": "an-Nihayah fi Gharib al-Hadith wa al-Athar (Ibn al-Athir), root عفا",
+   "review_status": "pending_scholar_review"
+  }
+ ]
+}

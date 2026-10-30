@@ -12,6 +12,7 @@ from app.api.routes import (
     scholar,
     content_bundle,
     app_release,
+    library,
 )
 
 api_router = APIRouter()
@@ -26,3 +27,4 @@ api_router.include_router(recitation.router)
 api_router.include_router(scholar.router)
 api_router.include_router(content_bundle.router)
 api_router.include_router(app_release.router)
+api_router.include_router(library.router)

@@ -1,0 +1,29 @@
+{
+ "items": [
+  {
+   "number": 1,
+   "name_en": "Revelation",
+   "hadith_first": 1,
+   "hadith_last": 7,
+   "hadith_count": 7
+  },
+  {
+   "number": 2,
+   "name_en": "Belief",
+   "hadith_first": 8,
+   "hadith_last": 58,
+   "hadith_count": 51
+  },
+  {
+   "number": 3,
+   "name_en": "Knowledge",
+   "hadith_first": 59,
+   "hadith_last": 134,
+   "hadith_count": 76
+  }
+ ],
+ "total": 97,
+ "page": 1,
+ "page_size": 3,
+ "has_next": true
+}

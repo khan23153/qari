@@ -1,0 +1,32 @@
+[
+ {
+  "slug": "hadith",
+  "name_en": "Hadith",
+  "name_ar": "الحديث",
+  "collection_count": 7
+ },
+ {
+  "slug": "tafsir",
+  "name_en": "Tafsir",
+  "name_ar": "التفسير",
+  "collection_count": 3
+ },
+ {
+  "slug": "fiqh",
+  "name_en": "Fiqh",
+  "name_ar": "الفقه",
+  "collection_count": 0
+ },
+ {
+  "slug": "rijal",
+  "name_en": "Ilm al-Rijal",
+  "name_ar": "علم الرجال",
+  "collection_count": 2
+ },
+ {
+  "slug": "daif_mawdu",
+  "name_en": "Weak & Fabricated",
+  "name_ar": "الضعيف والموضوع",
+  "collection_count": 2
+ }
+]

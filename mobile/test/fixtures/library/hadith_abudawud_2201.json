@@ -1,0 +1,158 @@
+{
+ "id": "abudawud:2201",
+ "collection": {
+  "slug": "abudawud",
+  "name_en": "Sunan Abi Dawud",
+  "name_ar": "سنن أبي داود"
+ },
+ "number": 2201,
+ "arabic_number": 2201,
+ "book": {
+  "number": 13,
+  "name_en": "Divorce (Kitab Al-Talaq)"
+ },
+ "text_ar": "حَدَّثَنَا مُحَمَّدُ بْنُ كَثِيرٍ، أَخْبَرَنَا سُفْيَانُ، حَدَّثَنِي يَحْيَى بْنُ سَعِيدٍ، عَنْ مُحَمَّدِ بْنِ إِبْرَاهِيمَ التَّيْمِيِّ، عَنْ عَلْقَمَةَ بْنِ وَقَّاصٍ اللَّيْثِيِّ، قَالَ سَمِعْتُ عُمَرَ بْنَ الْخَطَّابِ، يَقُولُ قَالَ رَسُولُ اللَّهِ صلى الله عليه وسلم ‏ \"‏ إِنَّمَا الأَعْمَالُ بِالنِّيَّاتِ وَإِنَّمَا لِكُلِّ امْرِئٍ مَا نَوَى فَمَنْ كَانَتْ هِجْرَتُهُ إِلَى اللَّهِ وَرَسُولِهِ فَهِجْرَتُهُ إِلَى اللَّهِ وَرَسُولِهِ وَمَنْ كَانَتْ هِجْرَتُهُ لِدُنْيَا يُصِيبُهَا أَوِ امْرَأَةٍ يَتَزَوَّجُهَا فَهِجْرَتُهُ إِلَى مَا هَاجَرَ إِلَيْهِ ‏\"‏ ‏.‏",
+ "isnad_ar": "حَدَّثَنَا مُحَمَّدُ بْنُ كَثِيرٍ، أَخْبَرَنَا سُفْيَانُ، حَدَّثَنِي يَحْيَى بْنُ سَعِيدٍ، عَنْ مُحَمَّدِ بْنِ إِبْرَاهِيمَ التَّيْمِيِّ، عَنْ عَلْقَمَةَ بْنِ وَقَّاصٍ اللَّيْثِيِّ، قَالَ سَمِعْتُ عُمَرَ بْنَ الْخَطَّابِ، يَقُولُ قَالَ رَسُولُ اللَّهِ صلى الله عليه وسلم",
+ "matn_ar": "إِنَّمَا الأَعْمَالُ بِالنِّيَّاتِ وَإِنَّمَا لِكُلِّ امْرِئٍ مَا نَوَى فَمَنْ كَانَتْ هِجْرَتُهُ إِلَى اللَّهِ وَرَسُولِهِ فَهِجْرَتُهُ إِلَى اللَّهِ وَرَسُولِهِ وَمَنْ كَانَتْ هِجْرَتُهُ لِدُنْيَا يُصِيبُهَا أَوِ امْرَأَةٍ يَتَزَوَّجُهَا فَهِجْرَتُهُ إِلَى مَا هَاجَرَ إِلَيْهِ",
+ "compiler_note_ar": null,
+ "translation": {
+  "language": "en",
+  "text": "‘Umar bin Al Khattab reported the Apostle of Allaah(ﷺ) as saying “Actions are to be judged only by intentions and a man will have only what he intended. When one’s emigration is to Allaah and His Apostle, his emigration is to Allaah and His Apostle but his emigration is to a worldly end at which he aims or to a woman whom he marries , his emigration is to that for which he emigrated",
+  "source": "fawazahmed0/hadith-api (eng-abudawud)",
+  "license_status": "unverified"
+ },
+ "grades": [
+  {
+   "scholar": "al-Albani",
+   "source_book": null,
+   "source_dataset": "fawazahmed0/hadith-api (eng-abudawud)",
+   "grade": "Sahih",
+   "ruling_type": "sahih",
+   "basis": "scholar_grading"
+  },
+  {
+   "scholar": "Muhyi al-Din 'Abd al-Hamid",
+   "source_book": null,
+   "source_dataset": "fawazahmed0/hadith-api (eng-abudawud)",
+   "grade": "Sahih",
+   "ruling_type": "sahih",
+   "basis": "scholar_grading"
+  },
+  {
+   "scholar": "Shu'ayb al-Arna'ut",
+   "source_book": null,
+   "source_dataset": "fawazahmed0/hadith-api (eng-abudawud)",
+   "grade": "Sahih",
+   "ruling_type": "sahih",
+   "basis": "scholar_grading"
+  },
+  {
+   "scholar": "Zubair 'Ali Za'i",
+   "source_book": null,
+   "source_dataset": "fawazahmed0/hadith-api (eng-abudawud)",
+   "grade": "Sahih Bukhari (1) Sahih Muslim (1907)",
+   "ruling_type": "sahih",
+   "basis": "scholar_grading"
+  }
+ ],
+ "defects": [],
+ "chain": [
+  {
+   "position": 0,
+   "name_ar": "أَبُو دَاوُدَ",
+   "narrator_id": null,
+   "role": "compiler",
+   "term_ar": null,
+   "identification": "explicit",
+   "candidates": [],
+   "reliability": "compiler"
+  },
+  {
+   "position": 1,
+   "name_ar": "مُحَمَّدُ بْنُ كَثِيرٍ",
+   "narrator_id": null,
+   "role": "narrator",
+   "term_ar": "حَدَّثَنَا",
+   "identification": "pending_review",
+   "candidates": [],
+   "reliability": "unknown"
+  },
+  {
+   "position": 2,
+   "name_ar": "سُفْيَانُ",
+   "narrator_id": null,
+   "role": "narrator",
+   "term_ar": "أَخْبَرَنَا",
+   "identification": "ambiguous",
+   "candidates": [
+    "sufyan-ibn-uyaynah",
+    "sufyan-al-thawri"
+   ],
+   "reliability": "unknown"
+  },
+  {
+   "position": 3,
+   "name_ar": "يَحْيَى بْنُ سَعِيدٍ",
+   "narrator_id": "yahya-ibn-said-al-ansari",
+   "role": "narrator",
+   "term_ar": "حَدَّثَنِي",
+   "identification": "pending_review",
+   "candidates": [],
+   "reliability": "thiqah"
+  },
+  {
+   "position": 4,
+   "name_ar": "مُحَمَّدِ بْنِ إِبْرَاهِيمَ التَّيْمِيِّ",
+   "narrator_id": "muhammad-ibn-ibrahim-al-taymi",
+   "role": "narrator",
+   "term_ar": "عَنْ",
+   "identification": "explicit",
+   "candidates": [],
+   "reliability": "thiqah"
+  },
+  {
+   "position": 5,
+   "name_ar": "عَلْقَمَةَ بْنِ وَقَّاصٍ اللَّيْثِيِّ",
+   "narrator_id": "alqamah-ibn-waqqas",
+   "role": "narrator",
+   "term_ar": "عَنْ",
+   "identification": "explicit",
+   "candidates": [],
+   "reliability": "thiqah"
+  },
+  {
+   "position": 6,
+   "name_ar": "عُمَرَ بْنَ الْخَطَّابِ",
+   "narrator_id": "umar-ibn-al-khattab",
+   "role": "narrator",
+   "term_ar": "سَمِعْتُ",
+   "identification": "explicit",
+   "candidates": [],
+   "reliability": "sahabi"
+  },
+  {
+   "position": 7,
+   "name_ar": "رَسُولُ اللَّهِ ﷺ",
+   "narrator_id": null,
+   "role": "prophet",
+   "term_ar": "قَالَ",
+   "identification": "explicit",
+   "candidates": [],
+   "reliability": "prophet"
+  }
+ ],
+ "gharib_words": [
+  "النيات",
+  "هجرته",
+  "يصيبها"
+ ],
+ "source": {
+  "dataset": "fawazahmed0/hadith-api",
+  "editions": [
+   "ara-abudawud",
+   "eng-abudawud"
+  ],
+  "license": "Unlicense (public domain)"
+ },
+ "review_status": "verified_from_source"
+}
