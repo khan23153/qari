@@ -31,7 +31,10 @@ class _LibrarySearchPageState extends State<LibrarySearchPage> {
   void _submit(String query) {
     final q = query.trim();
     if (q.length < 2) return;
-    setState(() => _results = widget.env.repository.search(q));
+    final results = widget.env.repository.search(q);
+    setState(() {
+      _results = results;
+    });
   }
 
   @override

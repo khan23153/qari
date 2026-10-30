@@ -57,7 +57,12 @@ class _LibraryAsyncState<T> extends State<LibraryAsync<T>> {
                   ),
                   const SizedBox(height: 8),
                   TextButton(
-                    onPressed: () => setState(() => _future = widget.load()),
+                    onPressed: () {
+                      final retry = widget.load();
+                      setState(() {
+                        _future = retry;
+                      });
+                    },
                     child: const Text('Try again'),
                   ),
                 ],

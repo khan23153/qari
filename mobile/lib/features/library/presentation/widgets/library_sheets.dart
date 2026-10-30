@@ -314,13 +314,16 @@ class _NarratorBody extends StatelessWidget {
         ),
         for (final r in n.rulings) ...[
           const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: p.card,
+          // A Material (not a coloured Container) so the ExpansionTile below
+          // can paint its ink on it.
+          Material(
+            color: p.card,
+            shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: p.border),
+              side: BorderSide(color: p.border),
             ),
+            child: Padding(
+            padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -380,6 +383,7 @@ class _NarratorBody extends StatelessWidget {
                     ),
                   ),
               ],
+            ),
             ),
           ),
         ],
