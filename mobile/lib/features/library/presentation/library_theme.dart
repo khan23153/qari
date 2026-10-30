@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/utils/arabic_text_utils.dart';
@@ -9,9 +10,17 @@ import '../data/library_repository.dart';
 /// because pushed routes and modal sheets do NOT inherit widgets placed inside
 /// the page that opened them (the cause of the dark-sheet-on-cream bugs).
 class LibraryEnv {
-  LibraryEnv({required this.repository, required this.themeController});
+  LibraryEnv({
+    required this.repository,
+    required this.themeController,
+    this.usingBundledData,
+  });
 
   final LibraryRepository repository;
+
+  /// True while the library is served from the snapshot bundled in the APK
+  /// (API unreachable or not deployed yet). Null when there is no fallback.
+  final ValueListenable<bool>? usingBundledData;
 
   /// The same persisted paper preset the Mushaf uses (Classic, Night,
   /// Parchment, Minimal), so Light / Sepia / Dark stay consistent app-wide.

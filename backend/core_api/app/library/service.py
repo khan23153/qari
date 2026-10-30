@@ -60,6 +60,15 @@ class LibraryService:
     def remote_base_url(self) -> Optional[str]:
         return self._source.get("base_url")
 
+    def seed_hadith_ids(self) -> list[str]:
+        return list(self._hadiths)
+
+    def narrator_ids(self) -> list[str]:
+        return list(self._narrators)
+
+    def gharib_entries(self) -> list[dict]:
+        return list(self._gharib)
+
     # --- catalog ----------------------------------------------------------
 
     def categories(self) -> list[dict]:
