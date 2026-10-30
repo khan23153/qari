@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/theme/app_theme.dart';
+import 'features/library/presentation/library_theme.dart';
 import 'features/library/presentation/pages/library_tab.dart';
 import 'features/recitation/presentation/pages/live_recitation_page.dart';
 import 'features/recitation/presentation/recitation_mode.dart';
@@ -17,7 +18,10 @@ Future<void> main() async {
 }
 
 class QariUiPreviewApp extends StatelessWidget {
-  const QariUiPreviewApp({super.key});
+  const QariUiPreviewApp({super.key, this.libraryEnvBuilder});
+
+  /// Overridable for tests; the APK uses the real library environment.
+  final LibraryEnv Function()? libraryEnvBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -25,13 +29,15 @@ class QariUiPreviewApp extends StatelessWidget {
       title: 'Qari UI Preview',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      home: const _PreviewHome(),
+      home: _PreviewHome(libraryEnvBuilder: libraryEnvBuilder),
     );
   }
 }
 
 class _PreviewHome extends StatelessWidget {
-  const _PreviewHome();
+  const _PreviewHome({this.libraryEnvBuilder});
+
+  final LibraryEnv Function()? libraryEnvBuilder;
 
   void _open(BuildContext context, RecitationMode mode) {
     Navigator.of(context).push(
@@ -100,7 +106,10 @@ class _PreviewHome extends StatelessWidget {
                     // Same tab as the real app: API when reachable, otherwise
                     // the library bundled in the APK.
                     onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const LibraryTab()),
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            LibraryTab(envBuilder: libraryEnvBuilder),
+                      ),
                     ),
                     icon: const Icon(Icons.local_library_rounded),
                     label: const Text('Islamic Library'),
