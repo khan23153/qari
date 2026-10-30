@@ -9,6 +9,7 @@ on:
       - ".github/workflows/build-ui-preview-apk.yml"
       - "mobile/lib/main_ui_preview.dart"
       - "mobile/test/ui_preview_test.dart"
+      - "mobile/android/app/build.gradle.kts"
   workflow_dispatch:
 permissions:
   contents: read
@@ -33,13 +34,8 @@ jobs:
         run: |
           python3 - <<'PY'
           import pathlib, re, json, os
-          gradle = pathlib.Path("mobile/android/app/build.gradle.kts")
-          text = gradle.read_text()
-          old = 'applicationId = "com.qari.app"'
-          assert text.count(old) == 1
-          gradle.write_text(text.replace(old, 'applicationId = "com.qari.app.uipreview"'))
-          manifest = pathlib.Path("mobile/android/app/src/main/AndroidManifest.xml")
-          manifest.write_text(manifest.read_text().replace('android:label="qari"', 'android:label="Qari UI Preview"'))
+          # App id and label come from the qariUiPreview Gradle property
+          # (see the build step), not from editing build files here.
           spec = pathlib.Path("mobile/pubspec.yaml").read_text()
           match = re.search(r"^version:\s*([\d.]+)\+(\d+)", spec, re.M)
           release = json.loads(pathlib.Path("releases/app_release.json").read_text())
@@ -56,9 +52,11 @@ jobs:
         run: dart format lib/main_ui_preview.dart test/ui_preview_test.dart
       - name: Verify offline entry and Quran modes
         working-directory: mobile
-        run: flutter test test/ui_preview_test.dart test/full_page_recitation_test.dart test/mushaf_modes_test.dart
+        run: flutter test test/ui_preview_test.dart test/full_page_recitation_test.dart test/mushaf_modes_test.dart test/library_offline_test.dart
       - name: Build ARM64 preview APK
         working-directory: mobile
+        env:
+          ORG_GRADLE_PROJECT_qariUiPreview: "true"
         run: flutter build apk --release --target lib/main_ui_preview.dart --target-platform android-arm64 --build-name "$PREVIEW_VERSION" --build-number "$PREVIEW_CODE"
       - name: Verify Android package and signature
         run: |
