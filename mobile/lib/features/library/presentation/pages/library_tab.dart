@@ -1,15 +1,25 @@
 import 'package:flutter/material.dart';
 
 import '../../../recitation/presentation/mushaf/mushaf_theme.dart';
+import '../../data/fallback_library_repository.dart';
 import '../../data/library_repository.dart';
+import '../../data/local_library_repository.dart';
 import '../library_theme.dart';
 import 'library_home_page.dart';
 
-/// The API-backed library environment with the persisted paper preset.
-LibraryEnv defaultLibraryEnv() => LibraryEnv(
-      repository: ApiLibraryRepository(),
-      themeController: MushafThemeController()..load(),
-    );
+/// The production library environment: the API when it answers, otherwise
+/// the snapshot bundled in the APK, with the persisted paper preset.
+LibraryEnv defaultLibraryEnv() {
+  final repository = FallbackLibraryRepository(
+    remote: ApiLibraryRepository(),
+    local: LocalLibraryRepository(),
+  );
+  return LibraryEnv(
+    repository: repository,
+    themeController: MushafThemeController()..load(),
+    usingBundledData: repository.usingBundledData,
+  );
+}
 
 /// The Library as a bottom-navigation tab. Owns its environment for the
 /// lifetime of the tab.

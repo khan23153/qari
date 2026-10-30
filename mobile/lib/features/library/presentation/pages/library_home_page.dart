@@ -73,9 +73,16 @@ class LibraryHomePage extends StatelessWidget {
                   ],
                 ),
               ),
-              body: TabBarView(
+              body: Column(
                 children: [
-                  for (final c in shelves) _ShelfView(env: env, category: c),
+                  _OfflineBanner(env: env, palette: p),
+                  Expanded(
+                    child: TabBarView(
+                      children: [
+                        for (final c in shelves) _ShelfView(env: env, category: c),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -83,6 +90,45 @@ class LibraryHomePage extends StatelessWidget {
         },
       ),
       ),
+    );
+  }
+}
+
+/// Shown while the library is served from the snapshot bundled in the APK.
+class _OfflineBanner extends StatelessWidget {
+  const _OfflineBanner({required this.env, required this.palette});
+
+  final LibraryEnv env;
+  final LibraryPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    final notice = env.usingBundledData;
+    if (notice == null) return const SizedBox.shrink();
+    final p = palette;
+    return ValueListenableBuilder<bool>(
+      valueListenable: notice,
+      builder: (context, offline, _) => !offline
+          ? const SizedBox.shrink()
+          : Container(
+              key: const ValueKey('library-offline-banner'),
+              width: double.infinity,
+              color: p.card,
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+              child: Row(
+                children: [
+                  Icon(Icons.cloud_off_rounded, size: 18, color: p.muted),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Offline library: showing the collection bundled with the '
+                      'app. More books load when the server is reachable.',
+                      style: TextStyle(color: p.ink, fontSize: 13, height: 1.35),
+                    ),
+                  ),
+                ],
+              ),
+            ),
     );
   }
 }
