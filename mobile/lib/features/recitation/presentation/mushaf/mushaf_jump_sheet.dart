@@ -67,15 +67,21 @@ class MushafJumpSheet extends StatefulWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
-      builder: (ctx) => MushafJumpSheet(
-        theme: theme,
-        initialSurah: initialSurah,
-        initialAyahFrom: initialAyahFrom,
-        initialAyahTo: initialAyahTo,
-        initialAyahCount: initialAyahCount,
-        totalSurahs: totalSurahs,
-        pageMode: pageMode,
-        onPick: (target) => Navigator.of(ctx).pop(target),
+      // The caller's context may sit above the page's Mushaf `Theme`, so the
+      // route would otherwise capture the app-wide theme (dark filled inputs)
+      // while painting the Mushaf paper. Re-apply the preset explicitly.
+      builder: (ctx) => Theme(
+        data: theme.toThemeData(),
+        child: MushafJumpSheet(
+          theme: theme,
+          initialSurah: initialSurah,
+          initialAyahFrom: initialAyahFrom,
+          initialAyahTo: initialAyahTo,
+          initialAyahCount: initialAyahCount,
+          totalSurahs: totalSurahs,
+          pageMode: pageMode,
+          onPick: (target) => Navigator.of(ctx).pop(target),
+        ),
       ),
     );
   }
@@ -131,7 +137,6 @@ class _MushafJumpSheetState extends State<MushafJumpSheet> {
   @override
   Widget build(BuildContext context) {
     final t = widget.theme;
-    final name = surahNameArabic(_surah);
     return Padding(
       padding: EdgeInsets.only(
         left: 20,
@@ -165,8 +170,7 @@ class _MushafJumpSheetState extends State<MushafJumpSheet> {
           const SizedBox(height: 2),
           Text(
             'انتقل إلى سورة',
-            style:
-                TextStyle(color: t.text.withValues(alpha: 0.55), fontSize: 13),
+            style: TextStyle(color: t.mutedInk, fontSize: 13),
           ),
           const SizedBox(height: 16),
           _MushafNumberField(
@@ -174,21 +178,16 @@ class _MushafJumpSheetState extends State<MushafJumpSheet> {
             value: _surah,
             count: widget.totalSurahs,
             theme: t,
+            fieldKey: const ValueKey('mushaf-jump-surah-field'),
+            itemLabel: surahPickerLabel,
             onChanged: (v) {
               setState(() => _surah = v);
               _loadCount(v);
             },
           ),
-          if (name != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              name,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: t.accent, fontSize: 22, height: 1.6),
-            ),
-          ],
           const SizedBox(height: 16),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Expanded(
                 child: _MushafNumberField(
@@ -196,6 +195,7 @@ class _MushafJumpSheetState extends State<MushafJumpSheet> {
                   value: _from,
                   count: _count,
                   theme: t,
+                  fieldKey: const ValueKey('mushaf-jump-ayah-field'),
                   onChanged: (v) => setState(() {
                     _from = v;
                     if (_to < v) _to = v;
@@ -204,7 +204,7 @@ class _MushafJumpSheetState extends State<MushafJumpSheet> {
               ),
               if (!widget.pageMode)
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  padding: const EdgeInsets.fromLTRB(10, 0, 10, 14),
                   child:
                       Text('→', style: TextStyle(color: t.text, fontSize: 18)),
                 ),
@@ -252,8 +252,7 @@ class _MushafJumpSheetState extends State<MushafJumpSheet> {
             style: FilledButton.styleFrom(
               minimumSize: const Size.fromHeight(50),
               backgroundColor: t.accent,
-              foregroundColor:
-                  t.isDark ? const Color(0xFF1A1409) : Colors.white,
+              foregroundColor: t.onAccent,
             ),
             child: const Text('Jump here'),
           ),
@@ -263,7 +262,21 @@ class _MushafJumpSheetState extends State<MushafJumpSheet> {
   }
 }
 
+/// The text shown for a surah in the picker: `1. Al-Fatihah — الفاتحة`.
+String surahPickerLabel(int surah) {
+  final english = surahNameEnglish(surah);
+  final arabic = surahNameArabic(surah);
+  if (english == null && arabic == null) return '$surah';
+  if (arabic == null) return '$surah. $english';
+  if (english == null) return '$surah. $arabic';
+  return '$surah. $english \u2014 $arabic';
+}
+
 /// A themed number picker styled like the rest of the Mushaf page.
+///
+/// The label sits ABOVE the box (not as a floating Material label notched
+/// into the outline), and the box fill, ink, chevron and border all come from
+/// [theme] — never from the app-wide input theme.
 class _MushafNumberField extends StatelessWidget {
   const _MushafNumberField({
     required this.label,
@@ -271,6 +284,8 @@ class _MushafNumberField extends StatelessWidget {
     required this.count,
     required this.theme,
     required this.onChanged,
+    this.fieldKey,
+    this.itemLabel,
   });
 
   final String label;
@@ -278,39 +293,82 @@ class _MushafNumberField extends StatelessWidget {
   final int count;
   final MushafTheme theme;
   final ValueChanged<int> onChanged;
+  final Key? fieldKey;
+
+  /// Text for item [n]; defaults to the bare number.
+  final String Function(int n)? itemLabel;
 
   @override
   Widget build(BuildContext context) {
     final t = theme;
     final max = count < 1 ? 1 : count;
     final safe = value.clamp(1, max);
-    return InputDecorator(
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(color: t.text.withValues(alpha: 0.6)),
-        enabledBorder: OutlineInputBorder(
-          borderSide: BorderSide(color: t.border),
+    final radius = BorderRadius.circular(12);
+    final itemStyle = TextStyle(color: t.text, fontSize: 15, height: 1.3);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsetsDirectional.only(start: 4, bottom: 6),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: t.mutedInk,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ),
-        focusedBorder: OutlineInputBorder(
-          borderSide: BorderSide(color: t.accent, width: 1.6),
+        InputDecorator(
+          key: fieldKey,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: t.card,
+            isDense: true,
+            border: OutlineInputBorder(
+              borderRadius: radius,
+              borderSide: BorderSide(color: t.border),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: radius,
+              borderSide: BorderSide(color: t.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: radius,
+              borderSide: BorderSide(color: t.accent, width: 1.6),
+            ),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<int>(
+              isExpanded: true,
+              value: safe,
+              dropdownColor: t.card,
+              iconEnabledColor: t.text,
+              borderRadius: radius,
+              style: itemStyle,
+              menuMaxHeight: 360,
+              items: [
+                for (var i = 1; i <= max; i++)
+                  DropdownMenuItem(
+                    value: i,
+                    child: Text(
+                      itemLabel?.call(i) ?? '$i',
+                      style: itemStyle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: (v) {
+                if (v != null) onChanged(v);
+              },
+            ),
+          ),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<int>(
-          isExpanded: true,
-          value: safe,
-          dropdownColor: t.background,
-          style: TextStyle(color: t.text, fontSize: 15),
-          items: [
-            for (var i = 1; i <= max; i++)
-              DropdownMenuItem(value: i, child: Text('$i')),
-          ],
-          onChanged: (v) {
-            if (v != null) onChanged(v);
-          },
-        ),
-      ),
+      ],
     );
   }
 }

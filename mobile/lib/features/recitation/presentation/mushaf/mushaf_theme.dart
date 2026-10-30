@@ -61,22 +61,51 @@ class MushafTheme {
   /// recognised before the reciter spoke (Tarteel's upcoming-text treatment).
   Color get ghostInk => text.withValues(alpha: isDark ? 0.30 : 0.32);
 
+  /// Secondary ink for sub-labels and inactive icons on this paper.
+  ///
+  /// Derived from [text] so it keeps the same contrast direction as the body
+  /// ink on every preset (dark ink on cream, light ink on charcoal), and stays
+  /// at or above 4.5:1 on [card] even with the accent wash of an "on" toggle.
+  Color get mutedInk => text.withValues(alpha: 0.72);
+
+  /// A raised card / input surface drawn on top of the paper inside a sheet.
+  ///
+  /// A faint tint of the ink over the paper, so a card is always a shade of
+  /// the current page and never a fixed dark (or light) block.
+  Color get card {
+    final tint = text.withValues(alpha: isDark ? 0.07 : 0.05);
+    return Color.alphaBlend(tint, background);
+  }
+
+  /// Ink placed on the accent (button labels, an active switch thumb).
+  Color get onAccent => isDark ? const Color(0xFF1A1409) : Colors.white;
+
   /// Maps onto a Flutter [ThemeData] so Material widgets in the same subtree
-  /// (app bar, bottom sheet, buttons) adopt the same paper.
+  /// (app bar, bottom sheet, list tiles, switches, inputs) adopt the paper.
+  ///
+  /// Every Material component used inside a Mushaf sheet gets an explicit
+  /// sub-theme here, so nothing silently falls back to the app-wide theme
+  /// (whose dark input fill and light list-tile ink were invisible on cream).
   ThemeData toThemeData() {
     final scheme = ColorScheme(
       brightness: isDark ? Brightness.dark : Brightness.light,
       primary: accent,
-      onPrimary: isDark ? const Color(0xFF1A1409) : Colors.white,
+      onPrimary: onAccent,
       secondary: accent,
-      onSecondary: isDark ? const Color(0xFF1A1409) : Colors.white,
+      onSecondary: onAccent,
       error: mismatchInk,
       onError: Colors.white,
       surface: background,
       onSurface: text,
+      onSurfaceVariant: mutedInk,
       surfaceContainerHighest:
           Color.alphaBlend(accent.withValues(alpha: 0.06), background),
       outline: border,
+      outlineVariant: border,
+    );
+    final fieldBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: border),
     );
     return ThemeData(
       useMaterial3: true,
@@ -84,6 +113,37 @@ class MushafTheme {
       scaffoldBackgroundColor: background,
       canvasColor: background,
       dividerColor: border,
+      iconTheme: IconThemeData(color: text),
+      listTileTheme: ListTileThemeData(
+        iconColor: mutedInk,
+        textColor: text,
+      ),
+      // Unfilled by default (matches the page's existing setup dropdowns);
+      // sheets that want a raised field set `fillColor: card` explicitly.
+      inputDecorationTheme: InputDecorationTheme(
+        filled: false,
+        labelStyle: TextStyle(color: mutedInk),
+        floatingLabelStyle: TextStyle(color: accent),
+        border: fieldBorder,
+        enabledBorder: fieldBorder,
+        focusedBorder: fieldBorder.copyWith(
+          borderSide: BorderSide(color: accent, width: 1.6),
+        ),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith(
+          (states) =>
+              states.contains(WidgetState.selected) ? onAccent : mutedInk,
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? accent
+              : Color.alphaBlend(text.withValues(alpha: 0.10), background),
+        ),
+        trackOutlineColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? accent : mutedInk,
+        ),
+      ),
       appBarTheme: AppBarTheme(
         backgroundColor: background,
         foregroundColor: text,

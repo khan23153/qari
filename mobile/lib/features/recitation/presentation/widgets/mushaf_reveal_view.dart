@@ -497,13 +497,10 @@ class _MushafRevealViewState extends State<MushafRevealView> {
           color: widget.mushaf.isDark
               ? Colors.black.withValues(alpha: .045)
               : null,
+          // One faint hairline per row boundary. A second, near-black top edge
+          // used to sit directly under the previous row's light rule, which
+          // read as a hard double divider once Hifz hid the words.
           border: Border(
-            top: BorderSide(
-              color: widget.mushaf.isDark
-                  ? Colors.black.withValues(alpha: .45)
-                  : Colors.transparent,
-              width: .5,
-            ),
             bottom: BorderSide(
               color: widget.mushaf.isDark
                   ? widget.mushaf.text.withValues(alpha: .07)
