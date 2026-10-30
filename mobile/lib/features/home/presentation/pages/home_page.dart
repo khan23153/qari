@@ -20,6 +20,7 @@ import '../widgets/daily_goal_ring.dart';
 import '../widgets/learning_path_map.dart';
 import '../../../flashcards/presentation/pages/flashcard_page.dart';
 import '../../../tasbih/presentation/pages/tasbih_page.dart';
+import '../../../library/presentation/widgets/library_entry_card.dart';
 import '../../../../core/theme/serene_decorations.dart';
 
 /// S3: Home screen with bottom nav (Home, Quran, Tilawat, Tasbih + the
@@ -510,6 +511,14 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                         ),
                       ],
                     ),
+                  ),
+                ),
+
+                // ─── Islamic Library ─────────────────────────────────────
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(20, 8, 20, 8),
+                    child: LibraryEntryCard(),
                   ),
                 ),
 

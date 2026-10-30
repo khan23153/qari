@@ -1,0 +1,38 @@
+{
+ "id": "sulayman-ibn-qarm",
+ "name_ar": "سليمان بن قرم الضبي",
+ "name_en": "Sulayman ibn Qarm al-Dabbi",
+ "reliability": "daif",
+ "kunya_ar": "أبو داود",
+ "generation": "atba_al_tabiin",
+ "tabaqah": 7,
+ "birth_year_ah": null,
+ "death_year_ah": null,
+ "death_note": null,
+ "rulings": [
+  {
+   "scholar": "Ibn Hajar al-'Asqalani",
+   "source_book": "Taqrib al-Tahdhib, no. 2600",
+   "ruling_ar": "سيء الحفظ يتشيع",
+   "ruling_en": "Poor memory; inclined to Shi'ism.",
+   "review_status": "verified_from_source",
+   "source_text_ar": "٢٦٠٠- سليمان ابن قرم بفتح القاف وسكون الراء ابن معاذ أبو داود البصري النحوي ومنهم من ينسبه إلى جده سيء الحفظ يتشيع من السابعة خت د ت س\r[] سليمان ابن قسيم هو ابن يسير يأتي"
+  }
+ ],
+ "teachers": [
+  {
+   "id": "abu-yahya-al-qattat",
+   "name_ar": "أبو يحيى القتات",
+   "name_en": "Abu Yahya al-Qattat",
+   "reliability": "daif"
+  }
+ ],
+ "students": [
+  {
+   "id": "al-husayn-ibn-muhammad-al-marrudhi",
+   "name_ar": "الحسين بن محمد بن بهرام المروذي",
+   "name_en": "Al-Husayn ibn Muhammad al-Marrudhi",
+   "reliability": "thiqah"
+  }
+ ]
+}

@@ -1,0 +1,76 @@
+{
+ "items": [
+  {
+   "id": "tirmidhi:4",
+   "collection": "tirmidhi",
+   "number": 4,
+   "book_number": 1,
+   "matn_ar": "مِفْتَاحُ الْجَنَّةِ الصَّلاَةُ وَمِفْتَاحُ الصَّلاَةِ الْوُضُوءُ",
+   "translation_text": "Jabir bin 'Abdullah, may Allah be pleased with them, narrated that :Allah's Messenger said: \"The key to Paradise is Salat, and the key to Salat is Wudu",
+   "grades": [
+    {
+     "scholar": "Ahmad Shakir",
+     "source_book": null,
+     "source_dataset": "fawazahmed0/hadith-api (eng-tirmidhi)",
+     "grade": "Sahih Lighairihi",
+     "ruling_type": "sahih",
+     "basis": "scholar_grading"
+    },
+    {
+     "scholar": "al-Albani",
+     "source_book": null,
+     "source_dataset": "fawazahmed0/hadith-api (eng-tirmidhi)",
+     "grade": "Sahih",
+     "ruling_type": "sahih",
+     "basis": "scholar_grading"
+    },
+    {
+     "scholar": "Zubair 'Ali Za'i",
+     "source_book": null,
+     "source_dataset": "fawazahmed0/hadith-api (eng-tirmidhi)",
+     "grade": "Daif",
+     "ruling_type": "daif",
+     "basis": "scholar_grading"
+    }
+   ]
+  },
+  {
+   "id": "tirmidhi:172",
+   "collection": "tirmidhi",
+   "number": 172,
+   "book_number": 2,
+   "matn_ar": "الْوَقْتُ الأَوَّلُ مِنَ الصَّلاَةِ رِضْوَانُ اللَّهِ وَالْوَقْتُ الآخِرُ عَفْوُ اللَّهِ",
+   "translation_text": "Ibn Umar narrated that :Allah's Messenger said: \"The beginning of the time for Salat is pleasing to Allah, and the end of its time is pardoned by Allah",
+   "grades": [
+    {
+     "scholar": "Ahmad Shakir",
+     "source_book": null,
+     "source_dataset": "fawazahmed0/hadith-api (eng-tirmidhi)",
+     "grade": "Mawdu",
+     "ruling_type": "mawdu",
+     "basis": "scholar_grading"
+    },
+    {
+     "scholar": "al-Albani",
+     "source_book": null,
+     "source_dataset": "fawazahmed0/hadith-api (eng-tirmidhi)",
+     "grade": "Mawdu",
+     "ruling_type": "mawdu",
+     "basis": "scholar_grading"
+    },
+    {
+     "scholar": "Zubair 'Ali Za'i",
+     "source_book": null,
+     "source_dataset": "fawazahmed0/hadith-api (eng-tirmidhi)",
+     "grade": "Daif",
+     "ruling_type": "daif",
+     "basis": "scholar_grading"
+    }
+   ]
+  }
+ ],
+ "total": 2,
+ "page": 1,
+ "page_size": 20,
+ "has_next": false
+}

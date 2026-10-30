@@ -1,0 +1,212 @@
+{
+ "items": [
+  {
+   "slug": "bukhari",
+   "category": "hadith",
+   "name_en": "Sahih al-Bukhari",
+   "name_ar": "صحيح البخاري",
+   "author_en": "Muhammad ibn Isma'il al-Bukhari",
+   "author_ar": "محمد بن إسماعيل البخاري",
+   "author_death_ah": 256,
+   "availability": "remote",
+   "hadith_count": 7589,
+   "book_count": 97,
+   "tags": [
+    "kutub_sittah",
+    "sahihayn"
+   ]
+  },
+  {
+   "slug": "muslim",
+   "category": "hadith",
+   "name_en": "Sahih Muslim",
+   "name_ar": "صحيح مسلم",
+   "author_en": "Muslim ibn al-Hajjaj",
+   "author_ar": "مسلم بن الحجاج",
+   "author_death_ah": 261,
+   "availability": "remote",
+   "hadith_count": 7563,
+   "book_count": 56,
+   "tags": [
+    "kutub_sittah",
+    "sahihayn"
+   ]
+  },
+  {
+   "slug": "abudawud",
+   "category": "hadith",
+   "name_en": "Sunan Abi Dawud",
+   "name_ar": "سنن أبي داود",
+   "author_en": "Abu Dawud al-Sijistani",
+   "author_ar": "أبو داود السجستاني",
+   "author_death_ah": 275,
+   "availability": "remote",
+   "hadith_count": 5274,
+   "book_count": 43,
+   "tags": [
+    "kutub_sittah"
+   ]
+  },
+  {
+   "slug": "tirmidhi",
+   "category": "hadith",
+   "name_en": "Jami' al-Tirmidhi",
+   "name_ar": "جامع الترمذي",
+   "author_en": "Abu 'Isa al-Tirmidhi",
+   "author_ar": "أبو عيسى الترمذي",
+   "author_death_ah": 279,
+   "availability": "remote",
+   "hadith_count": 3998,
+   "book_count": 49,
+   "tags": [
+    "kutub_sittah"
+   ]
+  },
+  {
+   "slug": "nasai",
+   "category": "hadith",
+   "name_en": "Sunan al-Nasa'i",
+   "name_ar": "سنن النسائي",
+   "author_en": "Ahmad ibn Shu'ayb al-Nasa'i",
+   "author_ar": "أحمد بن شعيب النسائي",
+   "author_death_ah": 303,
+   "availability": "remote",
+   "hadith_count": 5765,
+   "book_count": 51,
+   "tags": [
+    "kutub_sittah"
+   ]
+  },
+  {
+   "slug": "ibnmajah",
+   "category": "hadith",
+   "name_en": "Sunan Ibn Majah",
+   "name_ar": "سنن ابن ماجه",
+   "author_en": "Ibn Majah al-Qazwini",
+   "author_ar": "ابن ماجه القزويني",
+   "author_death_ah": 273,
+   "availability": "remote",
+   "hadith_count": 4343,
+   "book_count": 37,
+   "tags": [
+    "kutub_sittah"
+   ]
+  },
+  {
+   "slug": "malik",
+   "category": "hadith",
+   "name_en": "Muwatta Malik",
+   "name_ar": "موطأ مالك",
+   "author_en": "Malik ibn Anas",
+   "author_ar": "مالك بن أنس",
+   "author_death_ah": 179,
+   "availability": "remote",
+   "hadith_count": 1858,
+   "book_count": 61,
+   "tags": []
+  },
+  {
+   "slug": "tafsir-ibn-kathir",
+   "category": "tafsir",
+   "name_en": "Tafsir al-Qur'an al-'Azim",
+   "name_ar": "تفسير القرآن العظيم",
+   "author_en": "Ibn Kathir",
+   "author_ar": "ابن كثير",
+   "author_death_ah": 774,
+   "availability": "planned",
+   "hadith_count": null,
+   "book_count": 0,
+   "tags": []
+  },
+  {
+   "slug": "tafsir-al-tabari",
+   "category": "tafsir",
+   "name_en": "Jami' al-Bayan",
+   "name_ar": "جامع البيان عن تأويل آي القرآن",
+   "author_en": "Ibn Jarir al-Tabari",
+   "author_ar": "ابن جرير الطبري",
+   "author_death_ah": 310,
+   "availability": "planned",
+   "hadith_count": null,
+   "book_count": 0,
+   "tags": []
+  },
+  {
+   "slug": "tafsir-al-qurtubi",
+   "category": "tafsir",
+   "name_en": "Al-Jami' li-Ahkam al-Qur'an",
+   "name_ar": "الجامع لأحكام القرآن",
+   "author_en": "Al-Qurtubi",
+   "author_ar": "القرطبي",
+   "author_death_ah": 671,
+   "availability": "planned",
+   "hadith_count": null,
+   "book_count": 0,
+   "tags": []
+  },
+  {
+   "slug": "taqrib-al-tahdhib",
+   "category": "rijal",
+   "name_en": "Taqrib al-Tahdhib",
+   "name_ar": "تقريب التهذيب",
+   "author_en": "Ibn Hajar al-'Asqalani",
+   "author_ar": "ابن حجر العسقلاني",
+   "author_death_ah": 852,
+   "availability": "partial",
+   "hadith_count": null,
+   "book_count": 0,
+   "tags": [
+    "jarh_wa_tadil"
+   ]
+  },
+  {
+   "slug": "mizan-al-itidal",
+   "category": "rijal",
+   "name_en": "Mizan al-I'tidal",
+   "name_ar": "ميزان الاعتدال في نقد الرجال",
+   "author_en": "Al-Dhahabi",
+   "author_ar": "الذهبي",
+   "author_death_ah": 748,
+   "availability": "planned",
+   "hadith_count": null,
+   "book_count": 0,
+   "tags": [
+    "jarh_wa_tadil"
+   ]
+  },
+  {
+   "slug": "al-mawduat",
+   "category": "daif_mawdu",
+   "name_en": "Al-Mawdu'at",
+   "name_ar": "الموضوعات",
+   "author_en": "Ibn al-Jawzi",
+   "author_ar": "ابن الجوزي",
+   "author_death_ah": 597,
+   "availability": "planned",
+   "hadith_count": null,
+   "book_count": 0,
+   "tags": [
+    "critical_work"
+   ]
+  },
+  {
+   "slug": "silsilat-al-daifa",
+   "category": "daif_mawdu",
+   "name_en": "Silsilat al-Ahadith al-Da'ifa wa al-Mawdu'a",
+   "name_ar": "سلسلة الأحاديث الضعيفة والموضوعة",
+   "author_en": "Muhammad Nasir al-Din al-Albani",
+   "author_ar": "محمد ناصر الدين الألباني",
+   "author_death_ah": 1420,
+   "availability": "planned",
+   "hadith_count": null,
+   "book_count": 0,
+   "tags": [
+    "critical_work"
+   ]
+  }
+ ],
+ "total": 14,
+ "page": 1,
+ "page_size": 100,
+ "has_next": false
+}

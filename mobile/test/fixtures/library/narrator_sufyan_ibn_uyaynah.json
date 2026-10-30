@@ -1,0 +1,38 @@
+{
+ "id": "sufyan-ibn-uyaynah",
+ "name_ar": "سفيان بن عيينة",
+ "name_en": "Sufyan ibn 'Uyaynah",
+ "reliability": "thiqah",
+ "kunya_ar": "أبو محمد",
+ "generation": "atba_al_tabiin",
+ "tabaqah": 8,
+ "birth_year_ah": null,
+ "death_year_ah": 198,
+ "death_note": null,
+ "rulings": [
+  {
+   "scholar": "Ibn Hajar al-'Asqalani",
+   "source_book": "Taqrib al-Tahdhib, no. 2451",
+   "ruling_ar": "ثقة حافظ فقيه إمام حجة إلا أنه تغير حفظه بأخرة وكان ربما دلس لكن عن الثقات",
+   "ruling_en": "Trustworthy, a hafiz, jurist and authoritative imam; his memory changed late in life and he sometimes concealed a link, but only from trustworthy narrators.",
+   "review_status": "verified_from_source",
+   "source_text_ar": "٢٤٥١- سفيان ابن عيينة ابن أبي عمران ميمون الهلالي أبو محمد الكوفي ثم المكي ثقة حافظ فقيه إمام حجة إلا أنه تغير حفظه بأخرة وكان ربما دلس لكن عن الثقات من رؤوس الطبقة الثامنة وكان أثبت الناس في عمرو ابن دينار مات في رجب سنة ثمان وتسعين وله إحدى وتسعون سنة ع"
+  }
+ ],
+ "teachers": [
+  {
+   "id": "yahya-ibn-said-al-ansari",
+   "name_ar": "يحيى بن سعيد بن قيس الأنصاري",
+   "name_en": "Yahya ibn Sa'id al-Ansari",
+   "reliability": "thiqah"
+  }
+ ],
+ "students": [
+  {
+   "id": "al-humaydi",
+   "name_ar": "عبد الله بن الزبير الحميدي",
+   "name_en": "'Abdullah ibn al-Zubayr al-Humaydi",
+   "reliability": "thiqah"
+  }
+ ]
+}

@@ -1,0 +1,165 @@
+{
+ "id": "tirmidhi:172",
+ "collection": {
+  "slug": "tirmidhi",
+  "name_en": "Jami' al-Tirmidhi",
+  "name_ar": "جامع الترمذي"
+ },
+ "number": 172,
+ "arabic_number": 172,
+ "book": {
+  "number": 2,
+  "name_en": "The Book on Salat (Prayer)"
+ },
+ "text_ar": "حَدَّثَنَا أَحْمَدُ بْنُ مَنِيعٍ، حَدَّثَنَا يَعْقُوبُ بْنُ الْوَلِيدِ الْمَدَنِيُّ، عَنْ عَبْدِ اللَّهِ بْنِ عُمَرَ، عَنْ نَافِعٍ، عَنِ ابْنِ عُمَرَ، قَالَ قَالَ رَسُولُ اللَّهِ صلى الله عليه وسلم ‏ \"‏ الْوَقْتُ الأَوَّلُ مِنَ الصَّلاَةِ رِضْوَانُ اللَّهِ وَالْوَقْتُ الآخِرُ عَفْوُ اللَّهِ ‏\"‏ ‏.‏ قَالَ أَبُو عِيسَى هَذَا حَدِيثٌ غَرِيبٌ ‏.‏ وَقَدْ رَوَى ابْنُ عَبَّاسٍ عَنِ النَّبِيِّ صلى الله عليه وسلم نَحْوَهُ ‏.‏ قَالَ وَفِي الْبَابِ عَنْ عَلِيٍّ وَابْنِ عُمَرَ وَعَائِشَةَ وَابْنِ مَسْعُودٍ ‏.‏ قَالَ أَبُو عِيسَى حَدِيثُ أُمِّ فَرْوَةَ لاَ يُرْوَى إِلاَّ مِنْ حَدِيثِ عَبْدِ اللَّهِ بْنِ عُمَرَ الْعُمَرِيِّ وَلَيْسَ هُوَ بِالْقَوِيِّ عِنْدَ أَهْلِ الْحَدِيثِ وَاضْطَرَبُوا عَنْهُ فِي هَذَا الْحَدِيثِ وَهُوَ صَدُوقٌ وَقَدْ تَكَلَّمَ فِيهِ يَحْيَى بْنُ سَعِيدٍ مِنْ قِبَلِ حِفْظِهِ ‏.‏",
+ "isnad_ar": "حَدَّثَنَا أَحْمَدُ بْنُ مَنِيعٍ، حَدَّثَنَا يَعْقُوبُ بْنُ الْوَلِيدِ الْمَدَنِيُّ، عَنْ عَبْدِ اللَّهِ بْنِ عُمَرَ، عَنْ نَافِعٍ، عَنِ ابْنِ عُمَرَ، قَالَ قَالَ رَسُولُ اللَّهِ صلى الله عليه وسلم",
+ "matn_ar": "الْوَقْتُ الأَوَّلُ مِنَ الصَّلاَةِ رِضْوَانُ اللَّهِ وَالْوَقْتُ الآخِرُ عَفْوُ اللَّهِ",
+ "compiler_note_ar": "قَالَ أَبُو عِيسَى هَذَا حَدِيثٌ غَرِيبٌ ‏.‏ وَقَدْ رَوَى ابْنُ عَبَّاسٍ عَنِ النَّبِيِّ صلى الله عليه وسلم نَحْوَهُ ‏.‏ قَالَ وَفِي الْبَابِ عَنْ عَلِيٍّ وَابْنِ عُمَرَ وَعَائِشَةَ وَابْنِ مَسْعُودٍ ‏.‏ قَالَ أَبُو عِيسَى حَدِيثُ أُمِّ فَرْوَةَ لاَ يُرْوَى إِلاَّ مِنْ حَدِيثِ عَبْدِ اللَّهِ بْنِ عُمَرَ الْعُمَرِيِّ وَلَيْسَ هُوَ بِالْقَوِيِّ عِنْدَ أَهْلِ الْحَدِيثِ وَاضْطَرَبُوا عَنْهُ فِي هَذَا الْحَدِيثِ وَهُوَ صَدُوقٌ وَقَدْ تَكَلَّمَ فِيهِ يَحْيَى بْنُ سَعِيدٍ مِنْ قِبَلِ حِفْظِهِ ‏.‏",
+ "translation": {
+  "language": "en",
+  "text": "Ibn Umar narrated that :Allah's Messenger said: \"The beginning of the time for Salat is pleasing to Allah, and the end of its time is pardoned by Allah",
+  "source": "fawazahmed0/hadith-api (eng-tirmidhi)",
+  "license_status": "unverified"
+ },
+ "grades": [
+  {
+   "scholar": "Ahmad Shakir",
+   "source_book": null,
+   "source_dataset": "fawazahmed0/hadith-api (eng-tirmidhi)",
+   "grade": "Mawdu",
+   "ruling_type": "mawdu",
+   "basis": "scholar_grading"
+  },
+  {
+   "scholar": "al-Albani",
+   "source_book": null,
+   "source_dataset": "fawazahmed0/hadith-api (eng-tirmidhi)",
+   "grade": "Mawdu",
+   "ruling_type": "mawdu",
+   "basis": "scholar_grading"
+  },
+  {
+   "scholar": "Zubair 'Ali Za'i",
+   "source_book": null,
+   "source_dataset": "fawazahmed0/hadith-api (eng-tirmidhi)",
+   "grade": "Daif",
+   "ruling_type": "daif",
+   "basis": "scholar_grading"
+  }
+ ],
+ "defects": [
+  {
+   "cause": "kadhdhab_matruk",
+   "cause_label_en": "Liar or abandoned narrator",
+   "cause_label_ar": "راوٍ كذاب أو متروك",
+   "narrator_id": "yaqub-ibn-al-walid",
+   "narrator_name_ar": "يعقوب بن الوليد المدني",
+   "scholar": "Ibn Hajar al-'Asqalani",
+   "source_book": "Taqrib al-Tahdhib, no. 7835",
+   "quote_ar": "كذبه أحمد وغيره",
+   "explanation_en": "Ya'qub ibn al-Walid al-Madani was accused of lying by Ahmad ibn Hanbal and others; a chain through such a narrator is rejected.",
+   "review_status": "verified_from_source",
+   "quote_verified": false,
+   "source_text_ar": "٧٨٣٥- يعقوب ابن الوليد ابن عبد الله ابن أبي هلال الأزدي أبو يوسف أو أبو هلال المدني نزيل بغداد كذبه أحمد وغيره من الثامنة ت ق"
+  },
+  {
+   "cause": "su_al_hifz",
+   "cause_label_en": "Weak memory or precision",
+   "cause_label_ar": "سوء الحفظ",
+   "narrator_id": "abdullah-ibn-umar-al-umari",
+   "narrator_name_ar": "عبد الله بن عمر بن حفص العمري",
+   "scholar": "al-Tirmidhi",
+   "source_book": "al-Jami' (Sunan al-Tirmidhi), comment in the chapter of hadith 172",
+   "quote_ar": "وَلَيْسَ هُوَ بِالْقَوِيِّ عِنْدَ أَهْلِ الْحَدِيثِ وَاضْطَرَبُوا عَنْهُ فِي هَذَا الْحَدِيثِ وَهُوَ صَدُوقٌ وَقَدْ تَكَلَّمَ فِيهِ يَحْيَى بْنُ سَعِيدٍ مِنْ قِبَلِ حِفْظِهِ",
+   "explanation_en": "Al-Tirmidhi himself says 'Abdullah ibn 'Umar al-'Umari is not strong according to the hadith scholars and was criticised for his memory. The quote is verbatim from the source text; linking it to this chain's narrator is an editorial identification.",
+   "review_status": "pending_scholar_review",
+   "quote_verified": true,
+   "source_text_ar": null
+  }
+ ],
+ "chain": [
+  {
+   "position": 0,
+   "name_ar": "أَبُو عِيسَى التِّرْمِذِيُّ",
+   "narrator_id": null,
+   "role": "compiler",
+   "term_ar": null,
+   "identification": "explicit",
+   "candidates": [],
+   "reliability": "compiler"
+  },
+  {
+   "position": 1,
+   "name_ar": "أَحْمَدُ بْنُ مَنِيعٍ",
+   "narrator_id": "ahmad-ibn-mani",
+   "role": "narrator",
+   "term_ar": "حَدَّثَنَا",
+   "identification": "explicit",
+   "candidates": [],
+   "reliability": "thiqah"
+  },
+  {
+   "position": 2,
+   "name_ar": "يَعْقُوبُ بْنُ الْوَلِيدِ الْمَدَنِيُّ",
+   "narrator_id": "yaqub-ibn-al-walid",
+   "role": "narrator",
+   "term_ar": "حَدَّثَنَا",
+   "identification": "explicit",
+   "candidates": [],
+   "reliability": "kadhdhab"
+  },
+  {
+   "position": 3,
+   "name_ar": "عَبْدِ اللَّهِ بْنِ عُمَرَ",
+   "narrator_id": "abdullah-ibn-umar-al-umari",
+   "role": "narrator",
+   "term_ar": "عَنْ",
+   "identification": "pending_review",
+   "candidates": [],
+   "reliability": "daif"
+  },
+  {
+   "position": 4,
+   "name_ar": "نَافِعٍ",
+   "narrator_id": "nafi-mawla-ibn-umar",
+   "role": "narrator",
+   "term_ar": "عَنْ",
+   "identification": "pending_review",
+   "candidates": [],
+   "reliability": "thiqah"
+  },
+  {
+   "position": 5,
+   "name_ar": "ابْنِ عُمَرَ",
+   "narrator_id": "abdullah-ibn-umar",
+   "role": "narrator",
+   "term_ar": "عَنْ",
+   "identification": "explicit",
+   "candidates": [],
+   "reliability": "sahabi"
+  },
+  {
+   "position": 6,
+   "name_ar": "رَسُولُ اللَّهِ ﷺ",
+   "narrator_id": null,
+   "role": "prophet",
+   "term_ar": "قَالَ",
+   "identification": "explicit",
+   "candidates": [],
+   "reliability": "prophet"
+  }
+ ],
+ "gharib_words": [
+  "رضوان",
+  "عفو"
+ ],
+ "source": {
+  "dataset": "fawazahmed0/hadith-api",
+  "editions": [
+   "ara-tirmidhi",
+   "eng-tirmidhi"
+  ],
+  "license": "Unlicense (public domain)"
+ },
+ "review_status": "verified_from_source"
+}

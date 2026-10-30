@@ -1,0 +1,132 @@
+{
+ "id": "bukhari:1",
+ "collection": {
+  "slug": "bukhari",
+  "name_en": "Sahih al-Bukhari",
+  "name_ar": "صحيح البخاري"
+ },
+ "number": 1,
+ "arabic_number": 1,
+ "book": {
+  "number": 1,
+  "name_en": "Revelation"
+ },
+ "text_ar": "حَدَّثَنَا الْحُمَيْدِيُّ عَبْدُ اللَّهِ بْنُ الزُّبَيْرِ ، قَالَ : حَدَّثَنَا سُفْيَانُ ، قَالَ : حَدَّثَنَا يَحْيَى بْنُ سَعِيدٍ الْأَنْصَارِيُّ ، قَالَ : أَخْبَرَنِي مُحَمَّدُ بْنُ إِبْرَاهِيمَ التَّيْمِيُّ ، أَنَّهُ سَمِعَ عَلْقَمَةَ بْنَ وَقَّاصٍ اللَّيْثِيَّ ، يَقُولُ : سَمِعْتُ عُمَرَ بْنَ الْخَطَّابِ رَضِيَ اللَّهُ عَنْهُ عَلَى الْمِنْبَرِ، قَالَ : سَمِعْتُ رَسُولَ اللَّهِ صَلَّى اللَّهُ عَلَيْهِ وَسَلَّمَ، يَقُولُ : \" إِنَّمَا الْأَعْمَالُ بِالنِّيَّاتِ، وَإِنَّمَا لِكُلِّ امْرِئٍ مَا نَوَى، فَمَنْ كَانَتْ هِجْرَتُهُ إِلَى دُنْيَا يُصِيبُهَا أَوْ إِلَى امْرَأَةٍ يَنْكِحُهَا، فَهِجْرَتُهُ إِلَى مَا هَاجَرَ إِلَيْهِ",
+ "isnad_ar": "حَدَّثَنَا الْحُمَيْدِيُّ عَبْدُ اللَّهِ بْنُ الزُّبَيْرِ ، قَالَ : حَدَّثَنَا سُفْيَانُ ، قَالَ : حَدَّثَنَا يَحْيَى بْنُ سَعِيدٍ الْأَنْصَارِيُّ ، قَالَ : أَخْبَرَنِي مُحَمَّدُ بْنُ إِبْرَاهِيمَ التَّيْمِيُّ ، أَنَّهُ سَمِعَ عَلْقَمَةَ بْنَ وَقَّاصٍ اللَّيْثِيَّ ، يَقُولُ : سَمِعْتُ عُمَرَ بْنَ الْخَطَّابِ رَضِيَ اللَّهُ عَنْهُ عَلَى الْمِنْبَرِ، قَالَ : سَمِعْتُ رَسُولَ اللَّهِ صَلَّى اللَّهُ عَلَيْهِ وَسَلَّمَ، يَقُولُ",
+ "matn_ar": "إِنَّمَا الْأَعْمَالُ بِالنِّيَّاتِ، وَإِنَّمَا لِكُلِّ امْرِئٍ مَا نَوَى، فَمَنْ كَانَتْ هِجْرَتُهُ إِلَى دُنْيَا يُصِيبُهَا أَوْ إِلَى امْرَأَةٍ يَنْكِحُهَا، فَهِجْرَتُهُ إِلَى مَا هَاجَرَ إِلَيْهِ",
+ "compiler_note_ar": null,
+ "translation": {
+  "language": "en",
+  "text": "Narrated 'Umar bin Al-Khattab: I heard Allah's Messenger (ﷺ) saying, \"The reward of deeds depends upon the intentions and every person will get the reward according to what he has intended. So whoever emigrated for worldly benefits or for a woman to marry, his emigration was for what he emigrated for",
+  "source": "fawazahmed0/hadith-api (eng-bukhari)",
+  "license_status": "unverified"
+ },
+ "grades": [
+  {
+   "scholar": "al-Bukhari",
+   "source_book": "al-Jami' al-Sahih",
+   "source_dataset": null,
+   "grade": "Sahih",
+   "ruling_type": "sahih",
+   "basis": "inclusion_in_sahih"
+  }
+ ],
+ "defects": [],
+ "chain": [
+  {
+   "position": 0,
+   "name_ar": "الْبُخَارِيُّ",
+   "narrator_id": null,
+   "role": "compiler",
+   "term_ar": null,
+   "identification": "explicit",
+   "candidates": [],
+   "reliability": "compiler"
+  },
+  {
+   "position": 1,
+   "name_ar": "الْحُمَيْدِيُّ عَبْدُ اللَّهِ بْنُ الزُّبَيْرِ",
+   "narrator_id": "al-humaydi",
+   "role": "narrator",
+   "term_ar": "حَدَّثَنَا",
+   "identification": "explicit",
+   "candidates": [],
+   "reliability": "thiqah"
+  },
+  {
+   "position": 2,
+   "name_ar": "سُفْيَانُ",
+   "narrator_id": "sufyan-ibn-uyaynah",
+   "role": "narrator",
+   "term_ar": "حَدَّثَنَا",
+   "identification": "pending_review",
+   "candidates": [],
+   "reliability": "thiqah"
+  },
+  {
+   "position": 3,
+   "name_ar": "يَحْيَى بْنُ سَعِيدٍ الْأَنْصَارِيُّ",
+   "narrator_id": "yahya-ibn-said-al-ansari",
+   "role": "narrator",
+   "term_ar": "حَدَّثَنَا",
+   "identification": "explicit",
+   "candidates": [],
+   "reliability": "thiqah"
+  },
+  {
+   "position": 4,
+   "name_ar": "مُحَمَّدُ بْنُ إِبْرَاهِيمَ التَّيْمِيُّ",
+   "narrator_id": "muhammad-ibn-ibrahim-al-taymi",
+   "role": "narrator",
+   "term_ar": "أَخْبَرَنِي",
+   "identification": "explicit",
+   "candidates": [],
+   "reliability": "thiqah"
+  },
+  {
+   "position": 5,
+   "name_ar": "عَلْقَمَةَ بْنَ وَقَّاصٍ اللَّيْثِيَّ",
+   "narrator_id": "alqamah-ibn-waqqas",
+   "role": "narrator",
+   "term_ar": "سَمِعَ",
+   "identification": "explicit",
+   "candidates": [],
+   "reliability": "thiqah"
+  },
+  {
+   "position": 6,
+   "name_ar": "عُمَرَ بْنَ الْخَطَّابِ",
+   "narrator_id": "umar-ibn-al-khattab",
+   "role": "narrator",
+   "term_ar": "سَمِعْتُ",
+   "identification": "explicit",
+   "candidates": [],
+   "reliability": "sahabi"
+  },
+  {
+   "position": 7,
+   "name_ar": "رَسُولَ اللَّهِ ﷺ",
+   "narrator_id": null,
+   "role": "prophet",
+   "term_ar": "سَمِعْتُ",
+   "identification": "explicit",
+   "candidates": [],
+   "reliability": "prophet"
+  }
+ ],
+ "gharib_words": [
+  "النيات",
+  "هجرته",
+  "يصيبها",
+  "ينكحها"
+ ],
+ "source": {
+  "dataset": "fawazahmed0/hadith-api",
+  "editions": [
+   "ara-bukhari",
+   "eng-bukhari"
+  ],
+  "license": "Unlicense (public domain)"
+ },
+ "review_status": "verified_from_source"
+}
