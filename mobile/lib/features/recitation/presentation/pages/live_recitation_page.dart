@@ -17,6 +17,7 @@ import '../../../../data/services/local_storage_service.dart';
 import '../../../../data/services/recitation_history_service.dart';
 import '../../../../data/services/streaming_recitation_service.dart';
 import '../mushaf/floating_recitation_bar.dart';
+import '../mushaf/mushaf_appearance_sheet.dart';
 import '../mushaf/mushaf_jump_sheet.dart';
 import '../mushaf/mushaf_page_frame.dart';
 import '../mushaf/mushaf_theme.dart';
@@ -1180,42 +1181,20 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   }
 
   Future<void> _showAppearance(MushafTheme mushaf) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: mushaf.background,
-      useSafeArea: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (sheetContext, updateSheet) => Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _TajweedToggle(
-                value: _tajweedOn,
-                theme: Theme.of(sheetContext),
-                onChanged: (value) {
-                  setState(() => _tajweedOn = value);
-                  updateSheet(() {});
-                  LocalStorageService.getInstance().then(
-                    (storage) => storage.setTajweedColorsEnabled(value),
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-              ListTile(
-                leading: const Icon(Icons.palette_outlined),
-                title: const Text('Page theme'),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  MushafThemeController.showSheet(context,
-                      controller: _mushafController);
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
+    await MushafAppearanceSheet.show(
+      context,
+      theme: mushaf,
+      tajweedOn: _tajweedOn,
+      onTajweedChanged: (value) {
+        setState(() => _tajweedOn = value);
+        LocalStorageService.getInstance().then(
+          (storage) => storage.setTajweedColorsEnabled(value),
+        );
+      },
+      onPageTheme: () {
+        if (!mounted) return;
+        MushafThemeController.showSheet(context, controller: _mushafController);
+      },
     );
   }
 
@@ -1738,68 +1717,6 @@ class _NumberDropdown extends StatelessWidget {
           onChanged: (v) {
             if (v != null) onChanged(v);
           },
-        ),
-      ),
-    );
-  }
-}
-
-/// Inline toggle for live per-letter tajweed colouring, mirroring the Surah
-/// reader's tajweed switch so the live canvas and the reader look identical.
-class _TajweedToggle extends StatelessWidget {
-  final bool value;
-  final ValueChanged<bool> onChanged;
-  final ThemeData theme;
-
-  const _TajweedToggle({
-    required this.value,
-    required this.onChanged,
-    required this.theme,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = theme.colorScheme.primary;
-    return GestureDetector(
-      onTap: () => onChanged(!value),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color:
-              value ? color.withValues(alpha: 0.08) : theme.colorScheme.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: value
-                ? color.withValues(alpha: 0.4)
-                : theme.colorScheme.outline.withValues(alpha: 0.2),
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.palette_rounded, size: 20, color: value ? color : null),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Tajweed colours',
-                      style: theme.textTheme.labelMedium
-                          ?.copyWith(fontWeight: FontWeight.w600)),
-                  Text(
-                    'Colour each letter by its tajweed rule as it appears',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Switch(
-              value: value,
-              onChanged: onChanged,
-              activeColor: color,
-            ),
-          ],
         ),
       ),
     );
