@@ -3,11 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/theme/app_theme.dart';
+import 'features/library/presentation/library_theme.dart';
+import 'features/library/presentation/pages/library_tab.dart';
 import 'features/recitation/presentation/pages/live_recitation_page.dart';
 import 'features/recitation/presentation/recitation_mode.dart';
 
-/// Separate entry point for inspecting the Quran UI without login.
-/// Production builds continue to use main.dart and their normal auth flow.
+/// Separate entry point for inspecting the Quran UI and the Islamic Library
+/// without login. Production builds continue to use main.dart and their
+/// normal auth flow.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
@@ -15,7 +18,10 @@ Future<void> main() async {
 }
 
 class QariUiPreviewApp extends StatelessWidget {
-  const QariUiPreviewApp({super.key});
+  const QariUiPreviewApp({super.key, this.libraryEnvBuilder});
+
+  /// Overridable for tests; the APK uses the real library environment.
+  final LibraryEnv Function()? libraryEnvBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -23,13 +29,15 @@ class QariUiPreviewApp extends StatelessWidget {
       title: 'Qari UI Preview',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      home: const _PreviewHome(),
+      home: _PreviewHome(libraryEnvBuilder: libraryEnvBuilder),
     );
   }
 }
 
 class _PreviewHome extends StatelessWidget {
-  const _PreviewHome();
+  const _PreviewHome({this.libraryEnvBuilder});
+
+  final LibraryEnv Function()? libraryEnvBuilder;
 
   void _open(BuildContext context, RecitationMode mode) {
     Navigator.of(context).push(
@@ -92,6 +100,19 @@ class _PreviewHome extends StatelessWidget {
                     onPressed: () => _open(context, RecitationMode.hifz),
                     icon: const Icon(Icons.mic_rounded),
                     label: const Text('AI Recitation'),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    // Same tab as the real app: API when reachable, otherwise
+                    // the library bundled in the APK.
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            LibraryTab(envBuilder: libraryEnvBuilder),
+                      ),
+                    ),
+                    icon: const Icon(Icons.local_library_rounded),
+                    label: const Text('Islamic Library'),
                   ),
                   const SizedBox(height: 20),
                   Text(
