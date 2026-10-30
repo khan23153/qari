@@ -41,8 +41,18 @@ android {
 
     defaultConfig {
         val micPilot = providers.gradleProperty("qariMicPilot").orNull == "true"
-        applicationId = if (micPilot) "com.qari.app.micpilot" else "com.qari.app"
-        manifestPlaceholders["appLabel"] = if (micPilot) "Qari Mic Test" else "Qari"
+        // Login-free preview (lib/main_ui_preview.dart) installs next to the app.
+        val uiPreview = providers.gradleProperty("qariUiPreview").orNull == "true"
+        applicationId = when {
+            uiPreview -> "com.qari.app.uipreview"
+            micPilot -> "com.qari.app.micpilot"
+            else -> "com.qari.app"
+        }
+        manifestPlaceholders["appLabel"] = when {
+            uiPreview -> "Qari UI Preview"
+            micPilot -> "Qari Mic Test"
+            else -> "Qari"
+        }
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
