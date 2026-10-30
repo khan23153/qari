@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:qari/features/library/presentation/pages/library_home_page.dart';
 import 'package:qari/main_ui_preview.dart';
 import 'package:qari/features/recitation/presentation/widgets/mushaf_reveal_view.dart';
 
@@ -40,6 +41,23 @@ void main() {
     expect(page.hideUnspoken, isTrue);
     expect(find.text('Tilawat'), findsNothing);
     expect(find.text('Hifz'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('preview opens the Islamic Library without an account or server',
+      (tester) async {
+    tester.view.physicalSize = const Size(900, 3000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(const QariUiPreviewApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Islamic Library'));
+    await tester.pumpAndSettle();
+    // Tests have no network, so this is the bundled offline library.
+    expect(find.byType(LibraryHomePage), findsOneWidget);
+    expect(find.text('Sahih al-Bukhari'), findsOneWidget);
+    expect(find.byKey(const ValueKey('library-offline-banner')), findsOneWidget);
+    expect(find.byType(BackButton), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 }
