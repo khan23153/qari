@@ -75,3 +75,4 @@ releases/
 
 # Trained model weights and tokenizers (large; see ml/models/ in .gitignore)
 models/
+.library-cache/

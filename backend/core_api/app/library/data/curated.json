@@ -1,0 +1,130 @@
+{
+  "_comment": "Hand-curated library content merged by scripts/build_library_seed.py. Every record carries review_status. 'verified_from_source' = text copied verbatim from the cited source dataset; 'pending_scholar_review' = entered by an editor and must be checked by a qualified scholar before it is presented as settled.",
+  "categories": [
+    {"slug": "hadith", "name_en": "Hadith", "name_ar": "الحديث"},
+    {"slug": "tafsir", "name_en": "Tafsir", "name_ar": "التفسير"},
+    {"slug": "fiqh", "name_en": "Fiqh", "name_ar": "الفقه"},
+    {"slug": "rijal", "name_en": "Ilm al-Rijal", "name_ar": "علم الرجال"},
+    {"slug": "daif_mawdu", "name_en": "Weak & Fabricated", "name_ar": "الضعيف والموضوع"}
+  ],
+  "collections": [
+    {"slug": "bukhari", "category": "hadith", "name_en": "Sahih al-Bukhari", "name_ar": "صحيح البخاري", "author_en": "Muhammad ibn Isma'il al-Bukhari", "author_ar": "محمد بن إسماعيل البخاري", "author_death_ah": 256, "tags": ["kutub_sittah", "sahihayn"], "dataset_key": "bukhari", "grade_by_inclusion": true},
+    {"slug": "muslim", "category": "hadith", "name_en": "Sahih Muslim", "name_ar": "صحيح مسلم", "author_en": "Muslim ibn al-Hajjaj", "author_ar": "مسلم بن الحجاج", "author_death_ah": 261, "tags": ["kutub_sittah", "sahihayn"], "dataset_key": "muslim", "grade_by_inclusion": true},
+    {"slug": "abudawud", "category": "hadith", "name_en": "Sunan Abi Dawud", "name_ar": "سنن أبي داود", "author_en": "Abu Dawud al-Sijistani", "author_ar": "أبو داود السجستاني", "author_death_ah": 275, "tags": ["kutub_sittah"], "dataset_key": "abudawud"},
+    {"slug": "tirmidhi", "category": "hadith", "name_en": "Jami' al-Tirmidhi", "name_ar": "جامع الترمذي", "author_en": "Abu 'Isa al-Tirmidhi", "author_ar": "أبو عيسى الترمذي", "author_death_ah": 279, "tags": ["kutub_sittah"], "dataset_key": "tirmidhi"},
+    {"slug": "nasai", "category": "hadith", "name_en": "Sunan al-Nasa'i", "name_ar": "سنن النسائي", "author_en": "Ahmad ibn Shu'ayb al-Nasa'i", "author_ar": "أحمد بن شعيب النسائي", "author_death_ah": 303, "tags": ["kutub_sittah"], "dataset_key": "nasai"},
+    {"slug": "ibnmajah", "category": "hadith", "name_en": "Sunan Ibn Majah", "name_ar": "سنن ابن ماجه", "author_en": "Ibn Majah al-Qazwini", "author_ar": "ابن ماجه القزويني", "author_death_ah": 273, "tags": ["kutub_sittah"], "dataset_key": "ibnmajah"},
+    {"slug": "malik", "category": "hadith", "name_en": "Muwatta Malik", "name_ar": "موطأ مالك", "author_en": "Malik ibn Anas", "author_ar": "مالك بن أنس", "author_death_ah": 179, "tags": [], "dataset_key": "malik"},
+    {"slug": "tafsir-ibn-kathir", "category": "tafsir", "name_en": "Tafsir al-Qur'an al-'Azim", "name_ar": "تفسير القرآن العظيم", "author_en": "Ibn Kathir", "author_ar": "ابن كثير", "author_death_ah": 774, "tags": [], "availability": "planned"},
+    {"slug": "tafsir-al-tabari", "category": "tafsir", "name_en": "Jami' al-Bayan", "name_ar": "جامع البيان عن تأويل آي القرآن", "author_en": "Ibn Jarir al-Tabari", "author_ar": "ابن جرير الطبري", "author_death_ah": 310, "tags": [], "availability": "planned"},
+    {"slug": "tafsir-al-qurtubi", "category": "tafsir", "name_en": "Al-Jami' li-Ahkam al-Qur'an", "name_ar": "الجامع لأحكام القرآن", "author_en": "Al-Qurtubi", "author_ar": "القرطبي", "author_death_ah": 671, "tags": [], "availability": "planned"},
+    {"slug": "taqrib-al-tahdhib", "category": "rijal", "name_en": "Taqrib al-Tahdhib", "name_ar": "تقريب التهذيب", "author_en": "Ibn Hajar al-'Asqalani", "author_ar": "ابن حجر العسقلاني", "author_death_ah": 852, "tags": ["jarh_wa_tadil"], "availability": "partial"},
+    {"slug": "mizan-al-itidal", "category": "rijal", "name_en": "Mizan al-I'tidal", "name_ar": "ميزان الاعتدال في نقد الرجال", "author_en": "Al-Dhahabi", "author_ar": "الذهبي", "author_death_ah": 748, "tags": ["jarh_wa_tadil"], "availability": "planned"},
+    {"slug": "al-mawduat", "category": "daif_mawdu", "name_en": "Al-Mawdu'at", "name_ar": "الموضوعات", "author_en": "Ibn al-Jawzi", "author_ar": "ابن الجوزي", "author_death_ah": 597, "tags": ["critical_work"], "availability": "planned"},
+    {"slug": "silsilat-al-daifa", "category": "daif_mawdu", "name_en": "Silsilat al-Ahadith al-Da'ifa wa al-Mawdu'a", "name_ar": "سلسلة الأحاديث الضعيفة والموضوعة", "author_en": "Muhammad Nasir al-Din al-Albani", "author_ar": "محمد ناصر الدين الألباني", "author_death_ah": 1420, "tags": ["critical_work"], "availability": "planned"}
+  ],
+  "hadiths": [
+    {
+      "id": "bukhari:1",
+      "matn_marker": "إِنَّمَا",
+      "chain": [
+        {"name_ar": "الْبُخَارِيُّ", "narrator_id": null, "role": "compiler", "term_ar": null, "identification": "explicit"},
+        {"name_ar": "الْحُمَيْدِيُّ عَبْدُ اللَّهِ بْنُ الزُّبَيْرِ", "narrator_id": "al-humaydi", "term_ar": "حَدَّثَنَا", "identification": "explicit"},
+        {"name_ar": "سُفْيَانُ", "narrator_id": "sufyan-ibn-uyaynah", "term_ar": "حَدَّثَنَا", "identification": "pending_review"},
+        {"name_ar": "يَحْيَى بْنُ سَعِيدٍ الْأَنْصَارِيُّ", "narrator_id": "yahya-ibn-said-al-ansari", "term_ar": "حَدَّثَنَا", "identification": "explicit"},
+        {"name_ar": "مُحَمَّدُ بْنُ إِبْرَاهِيمَ التَّيْمِيُّ", "narrator_id": "muhammad-ibn-ibrahim-al-taymi", "term_ar": "أَخْبَرَنِي", "identification": "explicit"},
+        {"name_ar": "عَلْقَمَةَ بْنَ وَقَّاصٍ اللَّيْثِيَّ", "narrator_id": "alqamah-ibn-waqqas", "term_ar": "سَمِعَ", "identification": "explicit"},
+        {"name_ar": "عُمَرَ بْنَ الْخَطَّابِ", "narrator_id": "umar-ibn-al-khattab", "term_ar": "سَمِعْتُ", "identification": "explicit"},
+        {"name_ar": "رَسُولَ اللَّهِ ﷺ", "narrator_id": null, "role": "prophet", "term_ar": "سَمِعْتُ", "identification": "explicit"}
+      ],
+      "gharib_words": ["النيات", "هجرته", "يصيبها", "ينكحها"],
+      "defects": []
+    },
+    {
+      "id": "abudawud:2201",
+      "matn_marker": "إِنَّمَا",
+      "chain": [
+        {"name_ar": "أَبُو دَاوُدَ", "narrator_id": null, "role": "compiler", "term_ar": null, "identification": "explicit"},
+        {"name_ar": "مُحَمَّدُ بْنُ كَثِيرٍ", "narrator_id": null, "term_ar": "حَدَّثَنَا", "identification": "pending_review"},
+        {"name_ar": "سُفْيَانُ", "narrator_id": null, "term_ar": "أَخْبَرَنَا", "identification": "ambiguous", "candidates": ["sufyan-ibn-uyaynah", "sufyan-al-thawri"]},
+        {"name_ar": "يَحْيَى بْنُ سَعِيدٍ", "narrator_id": "yahya-ibn-said-al-ansari", "term_ar": "حَدَّثَنِي", "identification": "pending_review"},
+        {"name_ar": "مُحَمَّدِ بْنِ إِبْرَاهِيمَ التَّيْمِيِّ", "narrator_id": "muhammad-ibn-ibrahim-al-taymi", "term_ar": "عَنْ", "identification": "explicit"},
+        {"name_ar": "عَلْقَمَةَ بْنِ وَقَّاصٍ اللَّيْثِيِّ", "narrator_id": "alqamah-ibn-waqqas", "term_ar": "عَنْ", "identification": "explicit"},
+        {"name_ar": "عُمَرَ بْنَ الْخَطَّابِ", "narrator_id": "umar-ibn-al-khattab", "term_ar": "سَمِعْتُ", "identification": "explicit"},
+        {"name_ar": "رَسُولُ اللَّهِ ﷺ", "narrator_id": null, "role": "prophet", "term_ar": "قَالَ", "identification": "explicit"}
+      ],
+      "gharib_words": ["النيات", "هجرته", "يصيبها"],
+      "defects": []
+    },
+    {
+      "id": "tirmidhi:4",
+      "matn_marker": "مِفْتَاحُ",
+      "chain": [
+        {"name_ar": "أَبُو عِيسَى التِّرْمِذِيُّ", "narrator_id": null, "role": "compiler", "term_ar": null, "identification": "explicit"},
+        {"name_ar": "أَبُو بَكْرٍ مُحَمَّدُ بْنُ زَنْجَوَيْهِ الْبَغْدَادِيُّ وَغَيْرُ وَاحِدٍ", "narrator_id": null, "term_ar": "حَدَّثَنَا", "identification": "pending_review"},
+        {"name_ar": "الْحُسَيْنُ بْنُ مُحَمَّدٍ", "narrator_id": "al-husayn-ibn-muhammad-al-marrudhi", "term_ar": "حَدَّثَنَا", "identification": "pending_review"},
+        {"name_ar": "سُلَيْمَانُ بْنُ قَرْمٍ", "narrator_id": "sulayman-ibn-qarm", "term_ar": "حَدَّثَنَا", "identification": "explicit"},
+        {"name_ar": "أَبُو يَحْيَى الْقَتَّاتُ", "narrator_id": "abu-yahya-al-qattat", "term_ar": "عَنْ", "identification": "explicit"},
+        {"name_ar": "مُجَاهِدٌ", "narrator_id": "mujahid-ibn-jabr", "term_ar": "عَنْ", "identification": "pending_review"},
+        {"name_ar": "جَابِرُ بْنُ عَبْدِ اللَّهِ", "narrator_id": "jabir-ibn-abdillah", "term_ar": "عَنْ", "identification": "explicit"},
+        {"name_ar": "رَسُولُ اللَّهِ ﷺ", "narrator_id": null, "role": "prophet", "term_ar": "قَالَ", "identification": "explicit"}
+      ],
+      "gharib_words": ["مفتاح"],
+      "defects": [
+        {"cause": "su_al_hifz", "narrator_id": "sulayman-ibn-qarm", "scholar": "Ibn Hajar al-'Asqalani", "source_book": "Taqrib al-Tahdhib", "quote_ar": "سيء الحفظ يتشيع", "explanation_en": "Ibn Hajar describes Sulayman ibn Qarm as having poor memory; this weakens the chain on its own.", "review_status": "pending_scholar_review"},
+        {"cause": "su_al_hifz", "narrator_id": "abu-yahya-al-qattat", "scholar": "Ibn Hajar al-'Asqalani", "source_book": "Taqrib al-Tahdhib", "quote_ar": "لين الحديث", "explanation_en": "Abu Yahya al-Qattat is graded 'layyin al-hadith' (soft in narration), a mild weakness in precision.", "review_status": "pending_scholar_review"}
+      ]
+    },
+    {
+      "id": "tirmidhi:172",
+      "matn_marker": "الْوَقْتُ",
+      "matn_end_marker": "قَالَ أَبُو عِيسَى",
+      "compiler_note_marker": "قَالَ أَبُو عِيسَى هَذَا حَدِيثٌ غَرِيبٌ",
+      "chain": [
+        {"name_ar": "أَبُو عِيسَى التِّرْمِذِيُّ", "narrator_id": null, "role": "compiler", "term_ar": null, "identification": "explicit"},
+        {"name_ar": "أَحْمَدُ بْنُ مَنِيعٍ", "narrator_id": "ahmad-ibn-mani", "term_ar": "حَدَّثَنَا", "identification": "explicit"},
+        {"name_ar": "يَعْقُوبُ بْنُ الْوَلِيدِ الْمَدَنِيُّ", "narrator_id": "yaqub-ibn-al-walid", "term_ar": "حَدَّثَنَا", "identification": "explicit"},
+        {"name_ar": "عَبْدِ اللَّهِ بْنِ عُمَرَ", "narrator_id": "abdullah-ibn-umar-al-umari", "term_ar": "عَنْ", "identification": "pending_review"},
+        {"name_ar": "نَافِعٍ", "narrator_id": "nafi-mawla-ibn-umar", "term_ar": "عَنْ", "identification": "pending_review"},
+        {"name_ar": "ابْنِ عُمَرَ", "narrator_id": "abdullah-ibn-umar", "term_ar": "عَنْ", "identification": "explicit"},
+        {"name_ar": "رَسُولُ اللَّهِ ﷺ", "narrator_id": null, "role": "prophet", "term_ar": "قَالَ", "identification": "explicit"}
+      ],
+      "gharib_words": ["رضوان", "عفو"],
+      "defects": [
+        {"cause": "kadhdhab_matruk", "narrator_id": "yaqub-ibn-al-walid", "scholar": "Ibn Hajar al-'Asqalani", "source_book": "Taqrib al-Tahdhib", "quote_ar": "كذبه أحمد وغيره", "explanation_en": "Ya'qub ibn al-Walid al-Madani was accused of lying by Ahmad ibn Hanbal and others; a chain through such a narrator is rejected.", "review_status": "pending_scholar_review"},
+        {"cause": "su_al_hifz", "narrator_id": "abdullah-ibn-umar-al-umari", "scholar": "al-Tirmidhi", "source_book": "al-Jami' (Sunan al-Tirmidhi), comment in the chapter of hadith 172", "quote_ar": "وَلَيْسَ هُوَ بِالْقَوِيِّ عِنْدَ أَهْلِ الْحَدِيثِ وَاضْطَرَبُوا عَنْهُ فِي هَذَا الْحَدِيثِ وَهُوَ صَدُوقٌ وَقَدْ تَكَلَّمَ فِيهِ يَحْيَى بْنُ سَعِيدٍ مِنْ قِبَلِ حِفْظِهِ", "explanation_en": "Al-Tirmidhi himself says 'Abdullah ibn 'Umar al-'Umari is not strong according to the hadith scholars and was criticised for his memory. The quote is verbatim from the source text; linking it to this chain's narrator is an editorial identification.", "review_status": "pending_scholar_review", "quote_verified": true}
+      ]
+    }
+  ],
+  "narrators": [
+    {"id": "umar-ibn-al-khattab", "name_ar": "عمر بن الخطاب", "name_en": "'Umar ibn al-Khattab", "kunya_ar": "أبو حفص", "generation": "sahabi", "tabaqah": 1, "death_year_ah": 23, "reliability": "sahabi", "rulings": [{"scholar": "Consensus of the hadith scholars", "source_book": null, "ruling_ar": "صحابي", "ruling_en": "Companion of the Prophet ﷺ; the Companions are accepted as upright ('udul).", "review_status": "pending_scholar_review"}]},
+    {"id": "jabir-ibn-abdillah", "name_ar": "جابر بن عبد الله الأنصاري", "name_en": "Jabir ibn 'Abdillah al-Ansari", "kunya_ar": "أبو عبد الله", "generation": "sahabi", "tabaqah": 1, "death_year_ah": null, "death_note": "after 70 AH (reports differ)", "reliability": "sahabi", "rulings": [{"scholar": "Consensus of the hadith scholars", "source_book": null, "ruling_ar": "صحابي", "ruling_en": "Companion of the Prophet ﷺ.", "review_status": "pending_scholar_review"}]},
+    {"id": "abdullah-ibn-umar", "name_ar": "عبد الله بن عمر بن الخطاب", "name_en": "'Abdullah ibn 'Umar ibn al-Khattab", "kunya_ar": "أبو عبد الرحمن", "generation": "sahabi", "tabaqah": 1, "death_year_ah": 73, "reliability": "sahabi", "rulings": [{"scholar": "Consensus of the hadith scholars", "source_book": null, "ruling_ar": "صحابي", "ruling_en": "Companion of the Prophet ﷺ.", "review_status": "pending_scholar_review"}]},
+    {"id": "alqamah-ibn-waqqas", "name_ar": "علقمة بن وقاص الليثي", "name_en": "'Alqamah ibn Waqqas al-Laythi", "kunya_ar": null, "generation": "tabii", "tabaqah": 2, "death_year_ah": null, "death_note": "during the caliphate of 'Abd al-Malik", "reliability": "thiqah", "rulings": [{"scholar": "Ibn Hajar al-'Asqalani", "source_book": "Taqrib al-Tahdhib", "ruling_ar": "ثقة ثبت، أخطأ من زعم أن له صحبة", "ruling_en": "Trustworthy and firm; whoever claimed he was a Companion erred.", "review_status": "pending_scholar_review"}]},
+    {"id": "muhammad-ibn-ibrahim-al-taymi", "name_ar": "محمد بن إبراهيم بن الحارث التيمي", "name_en": "Muhammad ibn Ibrahim al-Taymi", "kunya_ar": "أبو عبد الله", "generation": "tabii", "tabaqah": 4, "death_year_ah": 120, "reliability": "thiqah", "rulings": [{"scholar": "Ibn Hajar al-'Asqalani", "source_book": "Taqrib al-Tahdhib", "ruling_ar": "ثقة له أفراد", "ruling_en": "Trustworthy; he has some solitary narrations.", "review_status": "pending_scholar_review"}]},
+    {"id": "yahya-ibn-said-al-ansari", "name_ar": "يحيى بن سعيد بن قيس الأنصاري", "name_en": "Yahya ibn Sa'id al-Ansari", "kunya_ar": "أبو سعيد", "generation": "tabii", "tabaqah": 5, "death_year_ah": 144, "reliability": "thiqah", "rulings": [{"scholar": "Ibn Hajar al-'Asqalani", "source_book": "Taqrib al-Tahdhib", "ruling_ar": "ثقة ثبت", "ruling_en": "Trustworthy and firm.", "review_status": "pending_scholar_review"}]},
+    {"id": "sufyan-ibn-uyaynah", "name_ar": "سفيان بن عيينة", "name_en": "Sufyan ibn 'Uyaynah", "kunya_ar": "أبو محمد", "generation": "atba_al_tabiin", "tabaqah": 8, "death_year_ah": 198, "reliability": "thiqah", "rulings": [{"scholar": "Ibn Hajar al-'Asqalani", "source_book": "Taqrib al-Tahdhib", "ruling_ar": "ثقة حافظ فقيه إمام حجة، إلا أنه تغير حفظه بأخرة، وكان ربما دلس لكن عن الثقات", "ruling_en": "Trustworthy, a hafiz, jurist and authoritative imam; his memory changed late in life and he sometimes concealed a link, but only from trustworthy narrators.", "review_status": "pending_scholar_review"}]},
+    {"id": "sufyan-al-thawri", "name_ar": "سفيان بن سعيد الثوري", "name_en": "Sufyan al-Thawri", "kunya_ar": "أبو عبد الله", "generation": "atba_al_tabiin", "tabaqah": 7, "death_year_ah": 161, "reliability": "thiqah", "rulings": [{"scholar": "Ibn Hajar al-'Asqalani", "source_book": "Taqrib al-Tahdhib", "ruling_ar": "ثقة حافظ فقيه عابد إمام حجة", "ruling_en": "Trustworthy, a hafiz, jurist, devout worshipper and authoritative imam.", "review_status": "pending_scholar_review"}]},
+    {"id": "al-humaydi", "name_ar": "عبد الله بن الزبير الحميدي", "name_en": "'Abdullah ibn al-Zubayr al-Humaydi", "kunya_ar": "أبو بكر", "generation": "taba_atba", "tabaqah": 10, "death_year_ah": 219, "reliability": "thiqah", "rulings": [{"scholar": "Ibn Hajar al-'Asqalani", "source_book": "Taqrib al-Tahdhib", "ruling_ar": "ثقة حافظ فقيه، أجل أصحاب ابن عيينة", "ruling_en": "Trustworthy, a hafiz and jurist; the most eminent student of Ibn 'Uyaynah.", "review_status": "pending_scholar_review"}]},
+    {"id": "mujahid-ibn-jabr", "name_ar": "مجاهد بن جبر المكي", "name_en": "Mujahid ibn Jabr al-Makki", "kunya_ar": "أبو الحجاج", "generation": "tabii", "tabaqah": 3, "death_year_ah": null, "death_note": "c. 101–104 AH (reports differ)", "reliability": "thiqah", "rulings": [{"scholar": "Ibn Hajar al-'Asqalani", "source_book": "Taqrib al-Tahdhib", "ruling_ar": "ثقة إمام في التفسير وفي العلم", "ruling_en": "Trustworthy; an imam in tafsir and knowledge.", "review_status": "pending_scholar_review"}]},
+    {"id": "abu-yahya-al-qattat", "name_ar": "أبو يحيى القتات", "name_en": "Abu Yahya al-Qattat", "kunya_ar": "أبو يحيى", "generation": "tabii", "tabaqah": null, "death_year_ah": null, "reliability": "daif", "rulings": [{"scholar": "Ibn Hajar al-'Asqalani", "source_book": "Taqrib al-Tahdhib", "ruling_ar": "لين الحديث", "ruling_en": "Soft (weak) in narration.", "review_status": "pending_scholar_review"}]},
+    {"id": "sulayman-ibn-qarm", "name_ar": "سليمان بن قرم الضبي", "name_en": "Sulayman ibn Qarm al-Dabbi", "kunya_ar": "أبو داود", "generation": "atba_al_tabiin", "tabaqah": null, "death_year_ah": null, "reliability": "daif", "rulings": [{"scholar": "Ibn Hajar al-'Asqalani", "source_book": "Taqrib al-Tahdhib", "ruling_ar": "سيء الحفظ يتشيع", "ruling_en": "Poor memory; inclined to Shi'ism.", "review_status": "pending_scholar_review"}]},
+    {"id": "al-husayn-ibn-muhammad-al-marrudhi", "name_ar": "الحسين بن محمد بن بهرام المروذي", "name_en": "Al-Husayn ibn Muhammad al-Marrudhi", "kunya_ar": "أبو أحمد", "generation": "taba_atba", "tabaqah": null, "death_year_ah": null, "reliability": "thiqah", "rulings": [{"scholar": "Ibn Hajar al-'Asqalani", "source_book": "Taqrib al-Tahdhib", "ruling_ar": "ثقة", "ruling_en": "Trustworthy.", "review_status": "pending_scholar_review"}]},
+    {"id": "nafi-mawla-ibn-umar", "name_ar": "نافع مولى ابن عمر", "name_en": "Nafi', freed slave of Ibn 'Umar", "kunya_ar": "أبو عبد الله", "generation": "tabii", "tabaqah": 3, "death_year_ah": 117, "reliability": "thiqah", "rulings": [{"scholar": "Ibn Hajar al-'Asqalani", "source_book": "Taqrib al-Tahdhib", "ruling_ar": "ثقة ثبت فقيه مشهور", "ruling_en": "Trustworthy, firm, a well-known jurist.", "review_status": "pending_scholar_review"}]},
+    {"id": "abdullah-ibn-umar-al-umari", "name_ar": "عبد الله بن عمر بن حفص العمري", "name_en": "'Abdullah ibn 'Umar al-'Umari", "kunya_ar": "أبو عبد الرحمن", "generation": "atba_al_tabiin", "tabaqah": 7, "death_year_ah": 171, "reliability": "daif", "rulings": [
+      {"scholar": "Ibn Hajar al-'Asqalani", "source_book": "Taqrib al-Tahdhib", "ruling_ar": "ضعيف عابد", "ruling_en": "Weak (in narration), a devout worshipper.", "review_status": "pending_scholar_review"},
+      {"scholar": "al-Tirmidhi", "source_book": "al-Jami' (Sunan al-Tirmidhi), after hadith 172", "ruling_ar": "وَلَيْسَ هُوَ بِالْقَوِيِّ عِنْدَ أَهْلِ الْحَدِيثِ ... وَهُوَ صَدُوقٌ وَقَدْ تَكَلَّمَ فِيهِ يَحْيَى بْنُ سَعِيدٍ مِنْ قِبَلِ حِفْظِهِ", "ruling_en": "Not strong according to the hadith scholars; truthful, but Yahya ibn Sa'id criticised his memory.", "review_status": "verified_from_source"}
+    ]},
+    {"id": "ahmad-ibn-mani", "name_ar": "أحمد بن منيع البغوي", "name_en": "Ahmad ibn Mani' al-Baghawi", "kunya_ar": "أبو جعفر", "generation": "taba_atba", "tabaqah": 10, "death_year_ah": 244, "reliability": "thiqah", "rulings": [{"scholar": "Ibn Hajar al-'Asqalani", "source_book": "Taqrib al-Tahdhib", "ruling_ar": "ثقة حافظ", "ruling_en": "Trustworthy, a hafiz.", "review_status": "pending_scholar_review"}]},
+    {"id": "yaqub-ibn-al-walid", "name_ar": "يعقوب بن الوليد المدني", "name_en": "Ya'qub ibn al-Walid al-Madani", "kunya_ar": null, "generation": "atba_al_tabiin", "tabaqah": null, "death_year_ah": null, "reliability": "kadhdhab", "rulings": [{"scholar": "Ibn Hajar al-'Asqalani", "source_book": "Taqrib al-Tahdhib", "ruling_ar": "كذبه أحمد وغيره", "ruling_en": "Ahmad (ibn Hanbal) and others called him a liar.", "review_status": "pending_scholar_review"}]}
+  ],
+  "gharib": [
+    {"id": "niyyah", "word_ar": "النِّيَّات", "forms": ["النيات", "نيات", "نية", "النية"], "root_ar": "ن و ي", "transliteration": "an-niyyāt", "gloss_en": "intentions: the heart's resolve and purpose behind an act", "definition_ar": "جمع نية، وهي قصد القلب وعزمه على الفعل", "source_book": "an-Nihayah fi Gharib al-Hadith wa al-Athar (Ibn al-Athir), root نوا", "review_status": "pending_scholar_review"},
+    {"id": "hijrah", "word_ar": "هِجْرَة", "forms": ["هجرة", "الهجرة", "هجرته", "هاجر"], "root_ar": "ه ج ر", "transliteration": "hijrah", "gloss_en": "emigration: leaving one land for another; in the Shari'ah, leaving what Allah has forbidden", "definition_ar": "الخروج من أرض إلى أرض، وترك ما نهى الله عنه", "source_book": "an-Nihayah fi Gharib al-Hadith wa al-Athar (Ibn al-Athir), root هجر", "review_status": "pending_scholar_review"},
+    {"id": "yusibuha", "word_ar": "يُصِيبُهَا", "forms": ["يصيبها", "يصيب"], "root_ar": "ص و ب", "transliteration": "yuṣībuhā", "gloss_en": "he attains it / obtains it", "definition_ar": "يحصلها وينالها", "source_book": "an-Nihayah fi Gharib al-Hadith wa al-Athar (Ibn al-Athir), root صوب", "review_status": "pending_scholar_review"},
+    {"id": "yankihuha", "word_ar": "يَنْكِحُهَا", "forms": ["ينكحها", "ينكح"], "root_ar": "ن ك ح", "transliteration": "yankiḥuhā", "gloss_en": "he marries her (by contract)", "definition_ar": "يتزوجها", "source_book": "an-Nihayah fi Gharib al-Hadith wa al-Athar (Ibn al-Athir), root نكح", "review_status": "pending_scholar_review"},
+    {"id": "miftah", "word_ar": "مِفْتَاح", "forms": ["مفتاح"], "root_ar": "ف ت ح", "transliteration": "miftāḥ", "gloss_en": "key: that by which something is opened", "definition_ar": "ما يفتح به الشيء", "source_book": "an-Nihayah fi Gharib al-Hadith wa al-Athar (Ibn al-Athir), root فتح", "review_status": "pending_scholar_review"},
+    {"id": "ridwan", "word_ar": "رِضْوَان", "forms": ["رضوان"], "root_ar": "ر ض و", "transliteration": "riḍwān", "gloss_en": "good pleasure (of Allah)", "definition_ar": "الرضا", "source_book": "an-Nihayah fi Gharib al-Hadith wa al-Athar (Ibn al-Athir), root رضا", "review_status": "pending_scholar_review"},
+    {"id": "afw", "word_ar": "عَفْو", "forms": ["عفو"], "root_ar": "ع ف و", "transliteration": "ʿafw", "gloss_en": "pardon; overlooking a sin", "definition_ar": "التجاوز عن الذنب وترك العقاب عليه", "source_book": "an-Nihayah fi Gharib al-Hadith wa al-Athar (Ibn al-Athir), root عفا", "review_status": "pending_scholar_review"}
+  ]
+}

@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     # --- Recitation API ---
     recitation_api_url: str = "http://recitation-api:8001"
 
+    # --- Islamic Library (on-demand remote catalog, size-capped disk cache) ---
+    library_remote_enabled: bool = True
+    library_remote_timeout_sec: float = 15.0
+    library_cache_dir: str = "/tmp/qari-library-cache"
+    library_cache_max_mb: int = 64
+
     # --- Prometheus ---
     prometheus_enabled: bool = True
 
