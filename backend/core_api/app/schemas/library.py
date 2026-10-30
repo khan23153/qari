@@ -74,6 +74,7 @@ class DefectOut(BaseModel):
     explanation_en: Optional[str] = None
     review_status: ReviewStatus
     quote_verified: bool = False
+    source_text_ar: Optional[str] = None
 
 
 class ChainNodeOut(BaseModel):
@@ -153,6 +154,8 @@ class RulingOut(BaseModel):
     ruling_ar: str
     ruling_en: str
     review_status: ReviewStatus
+    # The full verbatim entry the ruling is quoted from (e.g. a Taqrib entry).
+    source_text_ar: Optional[str] = None
 
 
 class NarratorOut(NarratorBrief):

@@ -13,6 +13,14 @@ Usage (needs network access to raw.githubusercontent.com):
     python scripts/build_library_seed.py [--cache-dir .library-cache]
 
 Writes ``catalog.json`` and ``seed.json`` next to ``curated.json``.
+
+Narrator rulings and defects that cite Taqrib al-Tahdhib carry a
+``taqrib_no``. They are checked letter-for-letter against the verbatim
+entries in ``taqrib_excerpts.json``; a match is marked
+``verified_from_source`` and the full entry is attached. Refresh the
+excerpts from a full Taqrib text (one JSON list of numbered entries, e.g.
+parsed from the Islamic_Library_Dataset Drive export) with
+``--taqrib-entries PATH``.
 """
 
 from __future__ import annotations
@@ -130,8 +138,55 @@ def split_text(text: str, first_word: str, end_marker: str | None) -> tuple[str,
     return isnad, matn, note
 
 
-def build(cache_dir: Path) -> None:
+_ARABIC_DIGITS = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")
+TAQRIB_SOURCE = "Taqrib al-Tahdhib (Ibn Hajar, d. 852 AH), entry text from the Islamic_Library_Dataset export"
+
+
+def taqrib_excerpts(curated: dict, entries_path: Path | None) -> dict[str, str]:
+    """Verbatim Taqrib entries for every taqrib_no the curated data cites."""
+    excerpts_file = DATA_DIR / "taqrib_excerpts.json"
+    wanted = sorted({
+        r["taqrib_no"] for n in curated["narrators"] for r in n["rulings"] if r.get("taqrib_no")
+    } | {
+        d["taqrib_no"] for h in curated["hadiths"] for d in h.get("defects", []) if d.get("taqrib_no")
+    })
+    if entries_path is not None:
+        entries = json.loads(entries_path.read_text(encoding="utf-8"))
+        by_no = {}
+        for e in entries:
+            head = e.split("-", 1)[0].strip()
+            by_no[head] = e.strip()
+        excerpts = {}
+        for no in wanted:
+            key = str(no).translate(_ARABIC_DIGITS)
+            if key not in by_no:
+                raise ValueError(f"Taqrib entry {no} not found in {entries_path}")
+            excerpts[str(no)] = by_no[key]
+        excerpts_file.write_text(json.dumps(excerpts, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    if not excerpts_file.exists():
+        return {}
+    return json.loads(excerpts_file.read_text(encoding="utf-8"))
+
+
+def verify_taqrib(record: dict, text_field: str, excerpts: dict[str, str]) -> dict:
+    """Mark a Taqrib-cited record verified if its wording is in the entry."""
+    no = record.get("taqrib_no")
+    entry = excerpts.get(str(no)) if no else None
+    if entry is None:
+        return record
+    quoted = verbatim([entry], record[text_field])  # raises if not present
+    return {
+        **record,
+        text_field: quoted,
+        "source_book": f"Taqrib al-Tahdhib, no. {no}",
+        "source_text_ar": entry,
+        "review_status": "verified_from_source",
+    }
+
+
+def build(cache_dir: Path, taqrib_entries: Path | None = None) -> None:
     curated = json.loads((DATA_DIR / "curated.json").read_text(encoding="utf-8"))
+    excerpts = taqrib_excerpts(curated, taqrib_entries)
     info = fetch_json("info.json", cache_dir)
 
     collections = []
@@ -193,7 +248,11 @@ def build(cache_dir: Path) -> None:
             "chain": h["chain"],
             "gharib_words": h.get("gharib_words", []),
             "defects": [
-                {**d, "quote_ar": verbatim([a["text"]], d["quote_ar"])} if d.get("quote_verified") else d
+                verify_taqrib(
+                    {**d, "quote_ar": verbatim([a["text"]], d["quote_ar"])} if d.get("quote_verified") else d,
+                    "quote_ar",
+                    excerpts,
+                )
                 for d in h.get("defects", [])
             ],
             "source": {"dataset": DATASET, "editions": [f"ara-{slug}", f"eng-{slug}"], "license": DATASET_LICENSE},
@@ -206,7 +265,9 @@ def build(cache_dir: Path) -> None:
     narrators = {}
     for n in curated["narrators"]:
         rulings = [
-            {**r, "ruling_ar": verbatim(sources, r["ruling_ar"])} if r["review_status"] == "verified_from_source" else r
+            verify_taqrib(r, "ruling_ar", excerpts) if r.get("taqrib_no")
+            else {**r, "ruling_ar": verbatim(sources, r["ruling_ar"])} if r["review_status"] == "verified_from_source"
+            else r
             for r in n["rulings"]
         ]
         narrators[n["id"]] = {**n, "rulings": rulings, "teachers": [], "students": []}
@@ -234,4 +295,6 @@ def build(cache_dir: Path) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cache-dir", type=Path, default=ROOT / ".library-cache")
-    build(parser.parse_args().cache_dir)
+    parser.add_argument("--taqrib-entries", type=Path, default=None)
+    args = parser.parse_args()
+    build(args.cache_dir, args.taqrib_entries)

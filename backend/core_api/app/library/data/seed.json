@@ -298,19 +298,23 @@
      "cause": "su_al_hifz",
      "narrator_id": "sulayman-ibn-qarm",
      "scholar": "Ibn Hajar al-'Asqalani",
-     "source_book": "Taqrib al-Tahdhib",
+     "source_book": "Taqrib al-Tahdhib, no. 2600",
      "quote_ar": "سيء الحفظ يتشيع",
      "explanation_en": "Ibn Hajar describes Sulayman ibn Qarm as having poor memory; this weakens the chain on its own.",
-     "review_status": "pending_scholar_review"
+     "review_status": "verified_from_source",
+     "taqrib_no": 2600,
+     "source_text_ar": "٢٦٠٠- سليمان ابن قرم بفتح القاف وسكون الراء ابن معاذ أبو داود البصري النحوي ومنهم من ينسبه إلى جده سيء الحفظ يتشيع من السابعة خت د ت س\r[] سليمان ابن قسيم هو ابن يسير يأتي"
     },
     {
      "cause": "su_al_hifz",
      "narrator_id": "abu-yahya-al-qattat",
      "scholar": "Ibn Hajar al-'Asqalani",
-     "source_book": "Taqrib al-Tahdhib",
+     "source_book": "Taqrib al-Tahdhib, no. 8444",
      "quote_ar": "لين الحديث",
      "explanation_en": "Abu Yahya al-Qattat is graded 'layyin al-hadith' (soft in narration), a mild weakness in precision.",
-     "review_status": "pending_scholar_review"
+     "review_status": "verified_from_source",
+     "taqrib_no": 8444,
+     "source_text_ar": "٨٤٤٤- أبو يحيى القتات بقاف ومثناة مثقلة وآخره مثناة أيضا الكوفي اسمه زاذان وقيل دينار وقيل مسلم وقيل يزيد وقيل زبان وقيل عبد الرحمن لين الحديث من السادسة بخ د ت ق\r[] أبو يحيى القرشي هو زياد تقدم ويقال فيه مولى الأنصار ومولى قيس ابن مخرمة"
     }
    ],
    "source": {
@@ -414,10 +418,12 @@
      "cause": "kadhdhab_matruk",
      "narrator_id": "yaqub-ibn-al-walid",
      "scholar": "Ibn Hajar al-'Asqalani",
-     "source_book": "Taqrib al-Tahdhib",
+     "source_book": "Taqrib al-Tahdhib, no. 7835",
      "quote_ar": "كذبه أحمد وغيره",
      "explanation_en": "Ya'qub ibn al-Walid al-Madani was accused of lying by Ahmad ibn Hanbal and others; a chain through such a narrator is rejected.",
-     "review_status": "pending_scholar_review"
+     "review_status": "verified_from_source",
+     "taqrib_no": 7835,
+     "source_text_ar": "٧٨٣٥- يعقوب ابن الوليد ابن عبد الله ابن أبي هلال الأزدي أبو يوسف أو أبو هلال المدني نزيل بغداد كذبه أحمد وغيره من الثامنة ت ق"
     },
     {
      "cause": "su_al_hifz",
@@ -525,10 +531,12 @@
    "rulings": [
     {
      "scholar": "Ibn Hajar al-'Asqalani",
-     "source_book": "Taqrib al-Tahdhib",
-     "ruling_ar": "ثقة ثبت، أخطأ من زعم أن له صحبة",
+     "source_book": "Taqrib al-Tahdhib, no. 4685",
+     "ruling_ar": "ثقة ثبت ... أخطأ من زعم أن له صحبة",
      "ruling_en": "Trustworthy and firm; whoever claimed he was a Companion erred.",
-     "review_status": "pending_scholar_review"
+     "review_status": "verified_from_source",
+     "taqrib_no": 4685,
+     "source_text_ar": "٤٦٨٥- علقمة ابن وقاص بتشديد القاف الليثي المدني ثقة ثبت من الثانية أخطأ من زعم أن له صحبة وقيل إنه ولد في عهد النبي ﷺ مات في خلافة عبد الملك ع\rذكر من اسمه علي وكل من لم أذكر له كنية فكنيته أبو الحسن"
     }
    ],
    "teachers": [
@@ -550,10 +558,12 @@
    "rulings": [
     {
      "scholar": "Ibn Hajar al-'Asqalani",
-     "source_book": "Taqrib al-Tahdhib",
+     "source_book": "Taqrib al-Tahdhib, no. 5691",
      "ruling_ar": "ثقة له أفراد",
      "ruling_en": "Trustworthy; he has some solitary narrations.",
-     "review_status": "pending_scholar_review"
+     "review_status": "verified_from_source",
+     "taqrib_no": 5691,
+     "source_text_ar": "٥٦٩١- محمد ابن إبراهيم ابن الحارث ابن خالد التيمي أبو عبد الله المدني ثقة له أفراد من الرابعة مات سنة عشرين على الصحيح ع"
     }
    ],
    "teachers": [
@@ -575,10 +585,12 @@
    "rulings": [
     {
      "scholar": "Ibn Hajar al-'Asqalani",
-     "source_book": "Taqrib al-Tahdhib",
+     "source_book": "Taqrib al-Tahdhib, no. 7559",
      "ruling_ar": "ثقة ثبت",
      "ruling_en": "Trustworthy and firm.",
-     "review_status": "pending_scholar_review"
+     "review_status": "verified_from_source",
+     "taqrib_no": 7559,
+     "source_text_ar": "٧٥٥٩- يحيى ابن سعيد ابن قيس الأنصاري المدني أبو سعيد القاضي ثقة ثبت من الخامسة مات سنة أربع وأربعين أو بعدها ع"
     }
    ],
    "teachers": [
@@ -600,10 +612,12 @@
    "rulings": [
     {
      "scholar": "Ibn Hajar al-'Asqalani",
-     "source_book": "Taqrib al-Tahdhib",
-     "ruling_ar": "ثقة حافظ فقيه إمام حجة، إلا أنه تغير حفظه بأخرة، وكان ربما دلس لكن عن الثقات",
+     "source_book": "Taqrib al-Tahdhib, no. 2451",
+     "ruling_ar": "ثقة حافظ فقيه إمام حجة إلا أنه تغير حفظه بأخرة وكان ربما دلس لكن عن الثقات",
      "ruling_en": "Trustworthy, a hafiz, jurist and authoritative imam; his memory changed late in life and he sometimes concealed a link, but only from trustworthy narrators.",
-     "review_status": "pending_scholar_review"
+     "review_status": "verified_from_source",
+     "taqrib_no": 2451,
+     "source_text_ar": "٢٤٥١- سفيان ابن عيينة ابن أبي عمران ميمون الهلالي أبو محمد الكوفي ثم المكي ثقة حافظ فقيه إمام حجة إلا أنه تغير حفظه بأخرة وكان ربما دلس لكن عن الثقات من رؤوس الطبقة الثامنة وكان أثبت الناس في عمرو ابن دينار مات في رجب سنة ثمان وتسعين وله إحدى وتسعون سنة ع"
     }
    ],
    "teachers": [
@@ -625,10 +639,12 @@
    "rulings": [
     {
      "scholar": "Ibn Hajar al-'Asqalani",
-     "source_book": "Taqrib al-Tahdhib",
+     "source_book": "Taqrib al-Tahdhib, no. 2445",
      "ruling_ar": "ثقة حافظ فقيه عابد إمام حجة",
      "ruling_en": "Trustworthy, a hafiz, jurist, devout worshipper and authoritative imam.",
-     "review_status": "pending_scholar_review"
+     "review_status": "verified_from_source",
+     "taqrib_no": 2445,
+     "source_text_ar": "٢٤٤٥- سفيان ابن سعيد ابن مسروق الثوري أبو عبد الله الكوفي ثقة حافظ فقيه عابد إمام حجة من رؤوس الطبقة السابعة وكان ربما دلس مات سنة إحدى وستين وله أربع وستون ع"
     }
    ],
    "teachers": [],
@@ -646,10 +662,12 @@
    "rulings": [
     {
      "scholar": "Ibn Hajar al-'Asqalani",
-     "source_book": "Taqrib al-Tahdhib",
-     "ruling_ar": "ثقة حافظ فقيه، أجل أصحاب ابن عيينة",
+     "source_book": "Taqrib al-Tahdhib, no. 3320",
+     "ruling_ar": "ثقة حافظ فقيه أجل أصحاب ابن عيينة",
      "ruling_en": "Trustworthy, a hafiz and jurist; the most eminent student of Ibn 'Uyaynah.",
-     "review_status": "pending_scholar_review"
+     "review_status": "verified_from_source",
+     "taqrib_no": 3320,
+     "source_text_ar": "٣٣٢٠- عبد الله ابن الزبير ابن عيسى القرشي الأسدي الحميدي المكي أبو بكر ثقة حافظ فقيه أجل أصحاب ابن عيينة من العاشرة مات بمكة سنة تسع عشرة وقيل بعدها قال الحاكم كان البخاري إذا وجد الحديث عند الحميدي لا يعدوه إلى غيره خ م د ت س فق"
     }
    ],
    "teachers": [
@@ -670,10 +688,12 @@
    "rulings": [
     {
      "scholar": "Ibn Hajar al-'Asqalani",
-     "source_book": "Taqrib al-Tahdhib",
+     "source_book": "Taqrib al-Tahdhib, no. 6481",
      "ruling_ar": "ثقة إمام في التفسير وفي العلم",
      "ruling_en": "Trustworthy; an imam in tafsir and knowledge.",
-     "review_status": "pending_scholar_review"
+     "review_status": "verified_from_source",
+     "taqrib_no": 6481,
+     "source_text_ar": "٦٤٨١- مجاهد ابن جبر بفتح الجيم وسكون الموحدة أبو الحجاج المخزومي مولاهم المكي ثقة إمام في التفسير وفي العلم من الثالثة مات سنة إحدى أو اثنتين أو ثلاث أو أربع ومائة وله ثلاث وثمانون ع"
     }
    ],
    "teachers": [
@@ -689,16 +709,18 @@
    "name_en": "Abu Yahya al-Qattat",
    "kunya_ar": "أبو يحيى",
    "generation": "tabii",
-   "tabaqah": null,
+   "tabaqah": 6,
    "death_year_ah": null,
    "reliability": "daif",
    "rulings": [
     {
      "scholar": "Ibn Hajar al-'Asqalani",
-     "source_book": "Taqrib al-Tahdhib",
+     "source_book": "Taqrib al-Tahdhib, no. 8444",
      "ruling_ar": "لين الحديث",
      "ruling_en": "Soft (weak) in narration.",
-     "review_status": "pending_scholar_review"
+     "review_status": "verified_from_source",
+     "taqrib_no": 8444,
+     "source_text_ar": "٨٤٤٤- أبو يحيى القتات بقاف ومثناة مثقلة وآخره مثناة أيضا الكوفي اسمه زاذان وقيل دينار وقيل مسلم وقيل يزيد وقيل زبان وقيل عبد الرحمن لين الحديث من السادسة بخ د ت ق\r[] أبو يحيى القرشي هو زياد تقدم ويقال فيه مولى الأنصار ومولى قيس ابن مخرمة"
     }
    ],
    "teachers": [
@@ -714,16 +736,18 @@
    "name_en": "Sulayman ibn Qarm al-Dabbi",
    "kunya_ar": "أبو داود",
    "generation": "atba_al_tabiin",
-   "tabaqah": null,
+   "tabaqah": 7,
    "death_year_ah": null,
    "reliability": "daif",
    "rulings": [
     {
      "scholar": "Ibn Hajar al-'Asqalani",
-     "source_book": "Taqrib al-Tahdhib",
+     "source_book": "Taqrib al-Tahdhib, no. 2600",
      "ruling_ar": "سيء الحفظ يتشيع",
      "ruling_en": "Poor memory; inclined to Shi'ism.",
-     "review_status": "pending_scholar_review"
+     "review_status": "verified_from_source",
+     "taqrib_no": 2600,
+     "source_text_ar": "٢٦٠٠- سليمان ابن قرم بفتح القاف وسكون الراء ابن معاذ أبو داود البصري النحوي ومنهم من ينسبه إلى جده سيء الحفظ يتشيع من السابعة خت د ت س\r[] سليمان ابن قسيم هو ابن يسير يأتي"
     }
    ],
    "teachers": [
@@ -739,16 +763,18 @@
    "name_en": "Al-Husayn ibn Muhammad al-Marrudhi",
    "kunya_ar": "أبو أحمد",
    "generation": "taba_atba",
-   "tabaqah": null,
+   "tabaqah": 9,
    "death_year_ah": null,
    "reliability": "thiqah",
    "rulings": [
     {
      "scholar": "Ibn Hajar al-'Asqalani",
-     "source_book": "Taqrib al-Tahdhib",
+     "source_book": "Taqrib al-Tahdhib, no. 1345",
      "ruling_ar": "ثقة",
      "ruling_en": "Trustworthy.",
-     "review_status": "pending_scholar_review"
+     "review_status": "verified_from_source",
+     "taqrib_no": 1345,
+     "source_text_ar": "١٣٤٥- الحسين ابن محمد ابن بهرام التميمي أبو أحمد أو أبو علي المروذي بتشديد الراء وبذال معجمة نزيل بغداد ثقة من التاسعة مات سنة ثلاث عشرة أو بعدها بسنة أو سنتين ع"
     }
    ],
    "teachers": [
@@ -768,10 +794,12 @@
    "rulings": [
     {
      "scholar": "Ibn Hajar al-'Asqalani",
-     "source_book": "Taqrib al-Tahdhib",
+     "source_book": "Taqrib al-Tahdhib, no. 7086",
      "ruling_ar": "ثقة ثبت فقيه مشهور",
      "ruling_en": "Trustworthy, firm, a well-known jurist.",
-     "review_status": "pending_scholar_review"
+     "review_status": "verified_from_source",
+     "taqrib_no": 7086,
+     "source_text_ar": "٧٠٨٦- نافع أبو عبد الله المدني مولى ابن عمر ثقة ثبت فقيه مشهور من الثالثة مات سنة سبع عشره ومائة أو بعد ذلك ع"
     }
    ],
    "teachers": [
@@ -793,10 +821,12 @@
    "rulings": [
     {
      "scholar": "Ibn Hajar al-'Asqalani",
-     "source_book": "Taqrib al-Tahdhib",
+     "source_book": "Taqrib al-Tahdhib, no. 3489",
      "ruling_ar": "ضعيف عابد",
      "ruling_en": "Weak (in narration), a devout worshipper.",
-     "review_status": "pending_scholar_review"
+     "review_status": "verified_from_source",
+     "taqrib_no": 3489,
+     "source_text_ar": "٣٤٨٩- عبد الله ابن عمر ابن حفص ابن عاصم ابن عمر ابن الخطاب أبو عبد الرحمن العمري المدني ضعيف عابد من السابعة مات سنة إحدى وسبعين وقيل بعدها م ٤"
     },
     {
      "scholar": "al-Tirmidhi",
@@ -825,10 +855,12 @@
    "rulings": [
     {
      "scholar": "Ibn Hajar al-'Asqalani",
-     "source_book": "Taqrib al-Tahdhib",
+     "source_book": "Taqrib al-Tahdhib, no. 114",
      "ruling_ar": "ثقة حافظ",
      "ruling_en": "Trustworthy, a hafiz.",
-     "review_status": "pending_scholar_review"
+     "review_status": "verified_from_source",
+     "taqrib_no": 114,
+     "source_text_ar": "١١٤- أحمد ابن منيع ابن عبد الرحمن أبو جعفر البغوي [نزيل بغداد] الأصم ثقة حافظ من العاشرة مات سنة أربع وأربعين وله أربع وثمانون ع"
     }
    ],
    "teachers": [
@@ -842,16 +874,18 @@
    "name_en": "Ya'qub ibn al-Walid al-Madani",
    "kunya_ar": null,
    "generation": "atba_al_tabiin",
-   "tabaqah": null,
+   "tabaqah": 8,
    "death_year_ah": null,
    "reliability": "kadhdhab",
    "rulings": [
     {
      "scholar": "Ibn Hajar al-'Asqalani",
-     "source_book": "Taqrib al-Tahdhib",
+     "source_book": "Taqrib al-Tahdhib, no. 7835",
      "ruling_ar": "كذبه أحمد وغيره",
      "ruling_en": "Ahmad (ibn Hanbal) and others called him a liar.",
-     "review_status": "pending_scholar_review"
+     "review_status": "verified_from_source",
+     "taqrib_no": 7835,
+     "source_text_ar": "٧٨٣٥- يعقوب ابن الوليد ابن عبد الله ابن أبي هلال الأزدي أبو يوسف أو أبو هلال المدني نزيل بغداد كذبه أحمد وغيره من الثامنة ت ق"
     }
    ],
    "teachers": [

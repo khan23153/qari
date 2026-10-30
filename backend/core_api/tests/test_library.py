@@ -253,9 +253,12 @@ async def test_fabricated_hadith_shows_cause_breakdown_with_citations(offline):
     assert normalize_arabic(h["compiler_note_ar"]).startswith("قال ابو عيسى هذا حديث غريب")
     liar = next(d for d in h["defects"] if d["cause"] == "kadhdhab_matruk")
     assert liar["narrator_name_ar"] == "يعقوب بن الوليد المدني"
-    assert liar["scholar"] == "Ibn Hajar al-'Asqalani" and liar["source_book"] == "Taqrib al-Tahdhib"
+    assert liar["scholar"] == "Ibn Hajar al-'Asqalani"
+    assert liar["source_book"] == "Taqrib al-Tahdhib, no. 7835"
     assert liar["cause_label_en"] == "Liar or abandoned narrator"
-    assert liar["review_status"] == "pending_scholar_review"
+    # Checked letter-for-letter against the Taqrib entry at build time.
+    assert liar["review_status"] == "verified_from_source"
+    assert liar["quote_ar"] in liar["source_text_ar"]
     umari = next(d for d in h["defects"] if d["narrator_id"] == "abdullah-ibn-umar-al-umari")
     assert umari["quote_verified"] is True
     assert umari["quote_ar"] in h["text_ar"], "verified quote must be verbatim from the source"
@@ -304,7 +307,11 @@ async def test_narrator_profile_with_rulings_and_derived_links(offline):
     assert resp.status_code == 200
     assert n["name_ar"] == "سفيان بن عيينة"
     assert n["death_year_ah"] == 198 and n["tabaqah"] == 8
-    assert n["rulings"][0]["source_book"] == "Taqrib al-Tahdhib"
+    ruling = n["rulings"][0]
+    assert ruling["source_book"] == "Taqrib al-Tahdhib, no. 2451"
+    assert ruling["review_status"] == "verified_from_source"
+    assert ruling["ruling_ar"] in ruling["source_text_ar"]
+    assert normalize_arabic(ruling["source_text_ar"]).startswith("٢٤٥١ سفيان ابن عيينة")
     assert [t["id"] for t in n["teachers"]] == ["yahya-ibn-said-al-ansari"]
     assert [s["id"] for s in n["students"]] == ["al-humaydi"]
     assert n["students"][0]["reliability"] == "thiqah"
@@ -429,6 +436,20 @@ def test_disk_cache_rejects_path_escape(tmp_path):
     cache = DiskJsonCache(tmp_path, max_bytes=1000)
     with pytest.raises(ValueError):
         cache.put("../evil.json", {})
+
+
+def test_every_taqrib_citation_is_verbatim_in_its_entry():
+    data = Path(__file__).resolve().parents[1] / "app" / "library" / "data"
+    seed = json.loads((data / "seed.json").read_text(encoding="utf-8"))
+    cited = 0
+    for n in seed["narrators"]:
+        for r in n["rulings"]:
+            if r.get("taqrib_no"):
+                cited += 1
+                assert r["review_status"] == "verified_from_source", n["id"]
+                for part in r["ruling_ar"].split(" ... "):
+                    assert part in r["source_text_ar"], (n["id"], part)
+    assert cited == 14
 
 
 def test_bundled_data_is_valid_json_with_review_status():
