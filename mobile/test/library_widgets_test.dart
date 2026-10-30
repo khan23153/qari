@@ -1,5 +1,5 @@
 // Islamic Library UI: shelves, reader, scholar grade badges, defect cards,
-// gharib sheet, isnad tree, narrator sheet, search, entry card, and contrast
+// gharib sheet, isnad tree, narrator sheet, search, the Library tab, and contrast
 // on every Mushaf paper preset.
 //
 // Hosts run under AppTheme.darkTheme on purpose: library routes and sheets
@@ -18,7 +18,7 @@ import 'package:qari/features/library/presentation/library_theme.dart';
 import 'package:qari/features/library/presentation/pages/hadith_reader_page.dart';
 import 'package:qari/features/library/presentation/pages/library_home_page.dart';
 import 'package:qari/features/library/presentation/pages/library_search_page.dart';
-import 'package:qari/features/library/presentation/widgets/library_entry_card.dart';
+import 'package:qari/features/library/presentation/pages/library_tab.dart';
 import 'package:qari/features/recitation/presentation/mushaf/mushaf_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -308,18 +308,19 @@ void main() {
     expect(find.byKey(const ValueKey('search-narrator-sufyan-al-thawri')), findsOneWidget);
   });
 
-  testWidgets('home entry card opens the library', (tester) async {
+  testWidgets('library tab shows the library home on the chosen paper', (tester) async {
     await _tall(tester);
     await tester.pumpWidget(MaterialApp(
       theme: AppTheme.lightTheme,
       home: Scaffold(
-        body: LibraryEntryCard(envBuilder: () => _env(MushafTheme.classic)),
+        body: LibraryTab(envBuilder: () => _env(MushafTheme.parchment)),
       ),
     ));
-    expect(find.text('Islamic Library'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('library-entry-card')));
     await tester.pumpAndSettle();
     expect(find.byType(LibraryHomePage), findsOneWidget);
+    expect(find.text('Islamic Library'), findsOneWidget);
     expect(find.text('Sahih al-Bukhari'), findsOneWidget);
+    // A tab, not a pushed route: no back button.
+    expect(find.byType(BackButton), findsNothing);
   });
 }

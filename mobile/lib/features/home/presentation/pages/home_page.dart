@@ -19,11 +19,10 @@ import '../widgets/continue_card.dart';
 import '../widgets/daily_goal_ring.dart';
 import '../widgets/learning_path_map.dart';
 import '../../../flashcards/presentation/pages/flashcard_page.dart';
-import '../../../tasbih/presentation/pages/tasbih_page.dart';
-import '../../../library/presentation/widgets/library_entry_card.dart';
+import '../../../library/presentation/pages/library_tab.dart';
 import '../../../../core/theme/serene_decorations.dart';
 
-/// S3: Home screen with bottom nav (Home, Quran, Tilawat, Tasbih + the
+/// S3: Home screen with bottom nav (Home, Quran, Tilawat, Library + the
 /// centre Practice FAB). Tilawat pushes the full-screen Mushaf.
 /// Home tab shows streak, XP, continue card, flashcards due, daily goal ring,
 /// and a Duolingo-style vertical learning path map.
@@ -37,18 +36,22 @@ class HomePage extends ConsumerStatefulWidget {
 class _HomePageState extends ConsumerState<HomePage> {
   int _currentIndex = 0;
 
-  final List<Widget> _pages = const [
-    HomeTab(),
-    SurahListPage(),
-    TasbihPage(),
-  ];
+  /// The Library tab is built on first visit, so opening Home does not call
+  /// the library API.
+  bool _libraryOpened = false;
+
+  static const _libraryIndex = 2;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
-        children: _pages,
+        children: [
+          const HomeTab(),
+          const SurahListPage(),
+          if (_libraryOpened) const LibraryTab() else const SizedBox.shrink(),
+        ],
       ),
       bottomNavigationBar: _buildBottomNav(context),
       floatingActionButton: _buildPracticeFAB(context),
@@ -84,7 +87,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               // pushes a route instead of switching tabs.
               _navItem(Icons.auto_stories_rounded, 'Tilawat', -1,
                   onTap: _openTilawat),
-              _navItem(Icons.auto_awesome_rounded, 'Tasbih', 2),
+              _navItem(Icons.local_library_rounded, 'Library', _libraryIndex),
             ],
           ),
         ),
@@ -115,7 +118,10 @@ class _HomePageState extends ConsumerState<HomePage> {
             onTap();
             return;
           }
-          setState(() => _currentIndex = index);
+          setState(() {
+            _currentIndex = index;
+            if (index == _libraryIndex) _libraryOpened = true;
+          });
         },
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -511,14 +517,6 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                         ),
                       ],
                     ),
-                  ),
-                ),
-
-                // ─── Islamic Library ─────────────────────────────────────
-                const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(20, 8, 20, 8),
-                    child: LibraryEntryCard(),
                   ),
                 ),
 
