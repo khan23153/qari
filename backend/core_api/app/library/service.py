@@ -326,6 +326,7 @@ class LibraryService:
                 "band": m.band,
                 "score": m.score,
                 "language": m.language,
+                "collection_name": self._collections.get(m.hadith_id.split(":")[0], {}).get("name_en", ""),
                 "hadith": self._summary(record),
             })
         searched = [self._collections[s]["name_en"] for s in index.collections if s in self._collections]

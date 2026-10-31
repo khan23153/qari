@@ -177,6 +177,7 @@ async def test_check_returns_the_hadith_with_scholar_grades(online):
     assert body["query_language"] == "en"
     top = body["matches"][0]
     assert top["hadith"]["id"] == "tirmidhi:4"
+    assert top["collection_name"] == "Jami' al-Tirmidhi"
     assert top["band"] in ("strong", "possible")
     # Tirmidhi 4 is curated, so its reviewed grades are shown: scholars who
     # disagree are all listed, each by name.

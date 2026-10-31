@@ -1,0 +1,7 @@
+{
+  "type": "about:blank",
+  "title": "Service Unavailable",
+  "status": 503,
+  "detail": "Safha is preparing the hadith collections for the first time. Try again in a minute.",
+  "instance": "/v1/library/check"
+}

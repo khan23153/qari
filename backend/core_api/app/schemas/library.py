@@ -205,6 +205,7 @@ class ForwardMatchOut(BaseModel):
     band: Literal["strong", "possible"]
     score: float
     language: Literal["ar", "ur", "en"]
+    collection_name: str
     hadith: HadithSummary
 
 
