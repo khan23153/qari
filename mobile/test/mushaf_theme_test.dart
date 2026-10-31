@@ -23,9 +23,13 @@ void main() {
       expect(MushafTheme.classic.text, const Color(0xFF1A1A1A));
       expect(MushafTheme.classic.accent, const Color(0xFFB8860B));
 
-      expect(MushafTheme.night.background, const Color(0xFF181917));
-      expect(MushafTheme.night.text, const Color(0xFFF5F5F0));
-      expect(MushafTheme.night.accent, const Color(0xFF54DEA2));
+      // Night is Safha's brand: the app's "Contemplative Night" charcoal,
+      // ivory ink and amber, never the mint green it used to share with
+      // other recitation apps.
+      expect(MushafTheme.night.background, const Color(0xFF15110C));
+      expect(MushafTheme.night.text, const Color(0xFFF2ECE4));
+      expect(MushafTheme.night.accent, const Color(0xFFD98C3C));
+      expect(MushafTheme.night.ornament, const Color(0xFFE3AE62));
 
       expect(MushafTheme.parchment.background, const Color(0xFFF4ECD8));
       expect(MushafTheme.parchment.text, const Color(0xFF2C221E));
@@ -210,6 +214,27 @@ void main() {
       );
       expect(find.byIcon(Icons.graphic_eq_rounded), findsOneWidget);
       expect(find.byIcon(Icons.stop_rounded), findsOneWidget);
+    });
+
+    testWidgets('night mic is Safha amber with dark ink, not mint',
+        (tester) async {
+      await tester.pumpWidget(
+        _barHost(theme: MushafTheme.night, listening: false),
+      );
+      final icon = tester.widget<Icon>(find.byIcon(Icons.mic_rounded));
+      expect(icon.color, MushafTheme.night.onAccent);
+      final circle = tester.widget<Container>(
+        find
+            .ancestor(
+              of: find.byIcon(Icons.mic_rounded),
+              matching: find.byType(Container),
+            )
+            .first,
+      );
+      final gradient =
+          (circle.decoration! as BoxDecoration).gradient! as LinearGradient;
+      expect(gradient.colors, isNot(contains(const Color(0xFF51E4C3))));
+      expect(gradient.colors.last, MushafTheme.night.accent);
     });
 
     testWidgets('tapping the mic fires the callback', (tester) async {

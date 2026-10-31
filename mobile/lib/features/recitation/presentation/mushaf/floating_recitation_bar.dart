@@ -177,7 +177,7 @@ class _FloatingRecitationBarState extends State<FloatingRecitationBar>
         margin: const EdgeInsets.fromLTRB(6, 4, 6, 6),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         decoration: BoxDecoration(
-          color: const Color(0xFF222522),
+          color: const Color(0xFF211A12),
           border: Border(top: BorderSide(color: t.border)),
         ),
         child: Row(children: [
@@ -290,10 +290,10 @@ class _MicButton extends StatelessWidget {
                     ? null
                     : (listening ? t.accent : t.accent.withValues(alpha: 0.16)),
                 gradient: t.isDark
-                    ? const LinearGradient(
+                    ? LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
-                        colors: [Color(0xFF51E4C3), Color(0xFF7DD857)],
+                        colors: [t.ornament, t.accent],
                       )
                     : null,
                 border: Border.all(color: t.accent, width: 1.6),
@@ -306,7 +306,9 @@ class _MicButton extends StatelessWidget {
               ),
               child: Icon(
                 listening ? Icons.graphic_eq_rounded : Icons.mic_rounded,
-                color: t.isDark || listening ? Colors.white : t.accent,
+                color: t.isDark
+                    ? t.onAccent
+                    : (listening ? Colors.white : t.accent),
                 size: 24,
               ),
             ),
