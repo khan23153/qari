@@ -51,7 +51,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   int _currentStreak = 0;
   int _lessonsCompleted = 0;
   int _ayahsRead = 0;
-  int _flashcardsReviewed = 0;
   int _recitationSessions = 0;
 
   @override
@@ -104,7 +103,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           _currentStreak = stats.currentStreak;
           _lessonsCompleted = stats.lessonsCompleted;
           _ayahsRead = stats.ayahsRead;
-          _flashcardsReviewed = stats.flashcardsReviewed;
           _recitationSessions = stats.recitationSessions;
           _isLoadingStats = false;
         });
@@ -301,7 +299,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               _StatsGrid(
                 lessonsCompleted: _lessonsCompleted,
                 ayahsRead: _ayahsRead,
-                flashcardsReviewed: _flashcardsReviewed,
                 recitationSessions: _recitationSessions,
                 theme: theme,
               ),
@@ -521,14 +518,12 @@ class _StatChip extends StatelessWidget {
 class _StatsGrid extends StatelessWidget {
   final int lessonsCompleted;
   final int ayahsRead;
-  final int flashcardsReviewed;
   final int recitationSessions;
   final ThemeData theme;
 
   const _StatsGrid({
     required this.lessonsCompleted,
     required this.ayahsRead,
-    required this.flashcardsReviewed,
     required this.recitationSessions,
     required this.theme,
   });
@@ -553,12 +548,6 @@ class _StatsGrid extends StatelessWidget {
           icon: Icons.menu_book_rounded,
           label: 'Ayahs Read',
           value: '$ayahsRead',
-          theme: theme,
-        ),
-        _StatCard(
-          icon: Icons.style_rounded,
-          label: 'Flashcards',
-          value: '$flashcardsReviewed',
           theme: theme,
         ),
         _StatCard(

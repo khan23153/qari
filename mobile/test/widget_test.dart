@@ -36,14 +36,6 @@ void main() {
       expect(states.length, 9, reason: 'Should have 9 recitation states');
     });
 
-    testWidgets('Flashcard page uses SM-2 grades', (tester) async {
-      // SM-2 grades: Bhool gaya = 1, Mushkil = 3, Aasaan = 5
-      expect(AppConstants.sm2GradeBhoolGaya, 1);
-      expect(AppConstants.sm2GradeMushkil, 3);
-      expect(AppConstants.sm2GradeAasaan, 5);
-      expect(AppConstants.flashcardSessionCap, 20);
-    });
-
     testWidgets('Bottom nav has 4 tabs', (tester) async {
       expect(AppConstants.bottomNavTabCount, 4);
     });
@@ -63,7 +55,7 @@ void main() {
     });
 
     testWidgets('All screens are defined', (tester) async {
-      // Verify all 11 screens (S1-S11) are accounted for
+      // Verify the 10 screens are accounted for (flashcards were removed)
       final screens = [
         'language_select_page', // S1
         'path_select_page', // S2
@@ -73,12 +65,11 @@ void main() {
         'root_explorer_page', // S6
         'makhraj_visualizer_page', // S7
         'recitation_page', // S8
-        'flashcard_page', // S9
         'ask_scholar_page', // S10
         'profile_page', // S11
       ];
 
-      expect(screens.length, 11, reason: 'Should have 11 screens');
+      expect(screens.length, 10, reason: 'Should have 10 screens');
     });
 
     testWidgets('Recitation max duration is 2 minutes', (tester) async {

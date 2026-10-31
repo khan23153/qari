@@ -21,7 +21,6 @@ class BadgesGrid extends StatelessWidget {
     _Badge(id: '7_day_streak', icon: 'fire', title: '7-Day Streak', desc: '7 day learning streak'),
     _Badge(id: 'quran_reader', icon: 'book', title: 'Quran Reader', desc: 'Read 50 ayahs'),
     _Badge(id: 'first_recitation', icon: 'mic', title: 'First Recitation', desc: 'Complete a recitation session'),
-    _Badge(id: 'flashcard_pro', icon: 'style', title: 'Flashcard Pro', desc: 'Review 100 flashcards'),
     _Badge(id: 'perfect_score', icon: 'star', title: 'Perfect Score', desc: 'Get 100% on a recitation'),
     _Badge(id: 'root_explorer', icon: 'root', title: 'Root Explorer', desc: 'Explore 10 roots'),
     _Badge(id: 'tajweed_master', icon: 'tajweed', title: 'Tajweed Master', desc: 'Learn all tajweed rules'),
