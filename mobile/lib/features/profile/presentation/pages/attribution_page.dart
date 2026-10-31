@@ -218,7 +218,7 @@ class AttributionPage extends StatelessWidget {
           // ─── Copyright ─────────────────────────────────────────────
           Center(
             child: Text(
-              '© 2026 Qari App. All Quran data belongs to the public domain.',
+              '© 2026 Safha. All Quran data belongs to the public domain.',
               style: theme.textTheme.labelSmall?.copyWith(
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
               ),

@@ -106,7 +106,7 @@ Future<void> main() async {
 /// it can be inspected from the server logs without pulling device logs.
 Future<void> _reportNativeCrashIfAny() async {
   try {
-    const channel = MethodChannel('com.qari.app/crash');
+    const channel = MethodChannel('com.aiquranic.safha/crash');
     final text = await channel.invokeMethod<String>('readCrash');
     if (text != null && text.isNotEmpty) {
       debugPrint('[NativeCrash] captured:\n$text');
@@ -287,7 +287,7 @@ class _QariAppState extends ConsumerState<QariApp> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       navigatorKey: _navigatorKey,
-      title: 'Qari',
+      title: 'Safha',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       highContrastTheme: AppTheme.highContrastTheme,

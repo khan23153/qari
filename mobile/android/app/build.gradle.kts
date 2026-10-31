@@ -19,7 +19,7 @@ val keystoreProperties: Map<String, String> = run {
 }
 
 android {
-    namespace = "com.qari.app"
+    namespace = "com.aiquranic.safha"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -44,14 +44,14 @@ android {
         // Login-free preview (lib/main_ui_preview.dart) installs next to the app.
         val uiPreview = providers.gradleProperty("qariUiPreview").orNull == "true"
         applicationId = when {
-            uiPreview -> "com.qari.app.uipreview"
-            micPilot -> "com.qari.app.micpilot"
-            else -> "com.qari.app"
+            uiPreview -> "com.aiquranic.safha.uipreview"
+            micPilot -> "com.aiquranic.safha.micpilot"
+            else -> "com.aiquranic.safha"
         }
         manifestPlaceholders["appLabel"] = when {
-            uiPreview -> "Qari UI Preview"
-            micPilot -> "Qari Mic Test"
-            else -> "Qari"
+            uiPreview -> "Safha UI Preview"
+            micPilot -> "Safha Mic Test"
+            else -> "Safha"
         }
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.

@@ -1,4 +1,4 @@
-package com.qari.app
+package com.aiquranic.safha
 
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer

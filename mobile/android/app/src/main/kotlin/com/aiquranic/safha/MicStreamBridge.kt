@@ -1,4 +1,4 @@
-package com.qari.app
+package com.aiquranic.safha
 
 import io.flutter.plugin.common.EventChannel
 

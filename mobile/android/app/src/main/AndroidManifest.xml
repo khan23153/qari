@@ -47,7 +47,7 @@
             <meta-data
               android:name="flutterEmbedding"
               android:value="2" />
-        <!-- Microphone foreground service: marks Qari as an active mic-capturing
+        <!-- Microphone foreground service: marks Safha as an active mic-capturing
              app on Android 14+ so the OS grants capture focus (fixes the
              "mic chunks: 0 / focus: NO" silent-capture failure). -->
         <service

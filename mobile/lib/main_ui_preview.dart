@@ -26,7 +26,7 @@ class QariUiPreviewApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Qari UI Preview',
+      title: 'Safha UI Preview',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       home: _PreviewHome(libraryEnvBuilder: libraryEnvBuilder),
@@ -62,7 +62,7 @@ class _PreviewHome extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Qari UI Preview')),
+      appBar: AppBar(title: const Text('Safha UI Preview')),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(

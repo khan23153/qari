@@ -91,8 +91,8 @@ jobs:
           if [ "$MIC_PILOT" = "true" ]; then APK=releases/app-mic-pilot.apk; fi
           "$AAPT" dump badging "$APK" > "$RUNNER_TEMP/qari-apk-badging.txt"
           PACKAGE=$(sed -n '1p' "$RUNNER_TEMP/qari-apk-badging.txt")
-          EXPECTED=com.qari.app
-          if [ "$MIC_PILOT" = "true" ]; then EXPECTED=com.qari.app.micpilot; fi
+          EXPECTED=com.aiquranic.safha
+          if [ "$MIC_PILOT" = "true" ]; then EXPECTED=com.aiquranic.safha.micpilot; fi
           echo "$PACKAGE"
           echo "$PACKAGE" | grep -F "name='$EXPECTED'"
 

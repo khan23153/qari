@@ -114,7 +114,7 @@ class _VerseIdentifierPageState extends State<VerseIdentifierPage> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Recite any verse — even a few words — and Qari will tell '
+                    'Recite any verse — even a few words — and Safha will tell '
                     'you exactly which verse it is.',
                     style: theme.textTheme.bodySmall,
                   ),

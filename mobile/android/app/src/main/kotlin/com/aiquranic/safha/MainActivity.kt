@@ -1,4 +1,4 @@
-package com.qari.app
+package com.aiquranic.safha
 
 import android.os.Bundle
 import android.os.FileUtils
@@ -12,10 +12,10 @@ import java.io.StringWriter
 
 class MainActivity : FlutterActivity() {
     companion object {
-        const val MIC_CHANNEL = "com.qari.app/mic_foreground"
-        const val MIC_STREAM = "com.qari.app/mic_stream"
-        const val MIC_STATUS = "com.qari.app/mic_status"
-        const val CRASH_CHANNEL = "com.qari.app/crash"
+        const val MIC_CHANNEL = "com.aiquranic.safha/mic_foreground"
+        const val MIC_STREAM = "com.aiquranic.safha/mic_stream"
+        const val MIC_STATUS = "com.aiquranic.safha/mic_status"
+        const val CRASH_CHANNEL = "com.aiquranic.safha/crash"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

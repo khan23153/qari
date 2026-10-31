@@ -27,5 +27,5 @@ def test_mic_pilot_does_not_replace_normal_apk_metadata_or_version(tmp_path):
     assert (root/'releases/app-mic-pilot.apk').read_bytes() == b'compiled-pilot'
     pilot = json.loads((root/'releases/app_mic_pilot.json').read_text())
     assert pilot['version_code'] == 76
-    assert pilot['package_id'] == 'com.qari.app.micpilot'
+    assert pilot['package_id'] == 'com.aiquranic.safha.micpilot'
     assert pilot['apk_url'] == 'https://aiquranic.com/v1/app/download?file=app-mic-pilot.apk'

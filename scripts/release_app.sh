@@ -123,7 +123,7 @@ match = re.search(r'^version:\s*(\d+\.\d+\.\d+)\+(\d+)\s*$', open(sys.argv[1]).r
 if not match:
     raise SystemExit("Could not parse pilot version")
 metadata = {"version": match.group(1), "version_code": int(match.group(2)),
-            "package_id": "com.qari.app.micpilot", "pilot": True,
+            "package_id": "com.aiquranic.safha.micpilot", "pilot": True,
             "apk_url": "https://aiquranic.com/v1/app/download?file=app-mic-pilot.apk"}
 with open(sys.argv[2], "w") as output:
     json.dump(metadata, output, indent=2)
