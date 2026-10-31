@@ -24,11 +24,27 @@ class LocalCorpusRepository {
   /// unzipped; screens create their own [LocalCorpusRepository], and each
   /// used to parse it again (two or three times when live recitation opens),
   /// which ran low-memory phones out of RAM and killed the app.
-  static Future<Map<int, List<AyahModel>>>? _shared;
+  static Map<int, List<AyahModel>>? _parsed;
+
+  /// The parse in progress, shared by callers in the zone that started it.
+  /// Keyed by zone because a load left unfinished in one zone (a widget
+  /// test's fake clock) would otherwise never complete for anyone else.
+  static Future<Map<int, List<AyahModel>>>? _inflight;
+  static Zone? _inflightZone;
 
   /// Drops the shared parse (tests only).
   @visibleForTesting
-  static void resetSharedCache() => _shared = null;
+  static void resetSharedCache() {
+    _parsed = null;
+    _inflight = null;
+    _inflightZone = null;
+  }
+
+  /// Whether repositories share one parse. On in release and profile builds
+  /// (what users run). Off in debug builds so widget tests keep their own
+  /// loads, as before; tests of the sharing turn it on.
+  @visibleForTesting
+  static bool shareParse = !kDebugMode;
 
   /// How many times the bundle was actually parsed (tests only).
   @visibleForTesting
@@ -63,12 +79,22 @@ class LocalCorpusRepository {
   }
 
   Future<Map<int, List<AyahModel>>> _loadAll() async {
-    final pending = _shared ??= _loadBundle();
+    if (!shareParse) return _loadBundle();
+    final done = _parsed;
+    if (done != null) return done;
+    if (_inflight == null || !identical(_inflightZone, Zone.current)) {
+      _inflightZone = Zone.current;
+      _inflight = _loadBundle();
+    }
+    final pending = _inflight!;
     try {
-      return await pending;
+      final result = await pending;
+      _parsed = result;
+      if (identical(_inflight, pending)) _inflight = null;
+      return result;
     } catch (_) {
       // A failed load is retried next time instead of being cached.
-      if (identical(_shared, pending)) _shared = null;
+      if (identical(_inflight, pending)) _inflight = null;
       rethrow;
     }
   }

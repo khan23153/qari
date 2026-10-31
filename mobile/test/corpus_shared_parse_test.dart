@@ -11,7 +11,14 @@ import 'package:qari/data/repositories/local_corpus_repository.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(LocalCorpusRepository.resetSharedCache);
+  setUp(() {
+    LocalCorpusRepository.resetSharedCache();
+    LocalCorpusRepository.shareParse = true;
+  });
+  tearDown(() {
+    LocalCorpusRepository.shareParse = false;
+    LocalCorpusRepository.resetSharedCache();
+  });
 
   test('many repositories parse the corpus once', () async {
     final before = LocalCorpusRepository.parseCount;
