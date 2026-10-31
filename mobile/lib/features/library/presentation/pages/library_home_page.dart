@@ -5,6 +5,7 @@ import '../../data/library_models.dart';
 import '../library_theme.dart';
 import '../widgets/library_widgets.dart';
 import 'collection_page.dart';
+import 'forward_check_page.dart';
 import 'hadith_reader_page.dart';
 import 'library_search_page.dart';
 
@@ -76,6 +77,7 @@ class LibraryHomePage extends StatelessWidget {
               body: Column(
                 children: [
                   _OfflineBanner(env: env, palette: p),
+                  _ForwardCheckEntry(env: env, palette: p),
                   Expanded(
                     child: TabBarView(
                       children: [
@@ -129,6 +131,67 @@ class _OfflineBanner extends StatelessWidget {
                 ],
               ),
             ),
+    );
+  }
+}
+
+/// Opens [ForwardCheckPage]: check a hadith someone forwarded.
+class _ForwardCheckEntry extends StatelessWidget {
+  const _ForwardCheckEntry({required this.env, required this.palette});
+
+  final LibraryEnv env;
+  final LibraryPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = palette;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Material(
+        color: p.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: p.border),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          key: const ValueKey('forward-check-entry'),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => ForwardCheckPage(env: env)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+            child: Row(
+              children: [
+                Icon(Icons.fact_check_outlined, color: p.accent),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Check a forwarded hadith',
+                        style: TextStyle(
+                          color: p.ink,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Got one on WhatsApp? See where it is found and what '
+                        'scholars said.',
+                        style: TextStyle(color: p.muted, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, color: p.muted),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

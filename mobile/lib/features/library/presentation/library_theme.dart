@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/utils/arabic_text_utils.dart';
 import '../../recitation/presentation/mushaf/mushaf_theme.dart';
+import '../data/forward_check.dart';
 import '../data/library_models.dart';
 import '../data/library_repository.dart';
 
@@ -14,9 +15,13 @@ class LibraryEnv {
     required this.repository,
     required this.themeController,
     this.usingBundledData,
-  });
+    ForwardChecker? forwardChecker,
+  }) : forwardChecker = forwardChecker ?? ApiForwardChecker();
 
   final LibraryRepository repository;
+
+  /// Checks a forwarded message against the collections (server only).
+  final ForwardChecker forwardChecker;
 
   /// True while the library is served from the snapshot bundled in the APK
   /// (API unreachable or not deployed yet). Null when there is no fallback.

@@ -1,6 +1,7 @@
 """Islamic Library routes: collections, hadith with scholar grades, isnad, rijal, gharib."""
 
 from functools import lru_cache
+from pathlib import Path as FsPath
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Path, Query
@@ -14,6 +15,8 @@ from app.schemas.library import (
     CategoryOut,
     CollectionDetail,
     CollectionPage,
+    ForwardCheckIn,
+    ForwardCheckOut,
     GharibOut,
     HadithDetail,
     HadithPage,
@@ -38,7 +41,10 @@ def get_library_service() -> LibraryService:
                 cache=DiskJsonCache(settings.library_cache_dir, max_bytes=settings.library_cache_max_mb * 1024 * 1024),
                 base_url=base_url,
             )
-    return LibraryService.from_bundled_data(remote=remote)
+    return LibraryService.from_bundled_data(
+        remote=remote,
+        forward_cache=FsPath(settings.library_cache_dir) / "forward-index.pickle",
+    )
 
 
 def _page(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100)) -> tuple[int, int]:
@@ -121,3 +127,14 @@ async def search(
     service: LibraryService = Depends(get_library_service),
 ):
     return service.search(q)
+
+
+@router.post("/check", response_model=ForwardCheckOut)
+async def check_forward(body: ForwardCheckIn, service: LibraryService = Depends(get_library_service)):
+    """Find a forwarded "hadith" in the collections and show who graded it.
+
+    Safha never grades: a match shows the scholars' grades, and no match is
+    reported as not found in these collections, not as fabricated. The first
+    call after a restart may answer 503 while the collections are prepared.
+    """
+    return await service.check_forward(body.text)
