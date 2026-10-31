@@ -13,7 +13,7 @@ A cross-platform (Android + iOS) mobile app for absolute beginners to:
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Mobile (Flutter)                          │
-│   Onboarding · Lessons · Quran Reader · Recitation · Flashcards  │
+│   Onboarding · Lessons · Quran Reader · Recitation · Library     │
 └───────────────┬───────────────────────────┬──────────────────────┘
                 │ HTTPS/JSON (REST)          │ Multipart upload
                 ▼                           ▼

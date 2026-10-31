@@ -18,14 +18,13 @@ import '../widgets/streak_card.dart';
 import '../widgets/continue_card.dart';
 import '../widgets/daily_goal_ring.dart';
 import '../widgets/learning_path_map.dart';
-import '../../../flashcards/presentation/pages/flashcard_page.dart';
 import '../../../library/presentation/pages/library_tab.dart';
 import '../../../../core/theme/serene_decorations.dart';
 
 /// S3: Home screen with bottom nav (Home, Quran, Tilawat, Library + the
 /// centre Practice FAB). Tilawat pushes the full-screen Mushaf.
-/// Home tab shows streak, XP, continue card, flashcards due, daily goal ring,
-/// and a Duolingo-style vertical learning path map.
+/// Home tab shows streak, XP, continue card, daily goal ring and a
+/// Duolingo-style vertical learning path map.
 class HomePage extends ConsumerStatefulWidget {
   /// The tab to open on: 0 Home, 1 Quran, 2 Library. Set once, after the
   /// "Set up Safha" questions, from the learner's focus.
@@ -206,7 +205,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 }
 
-/// The Home tab content — streak, XP, continue, flashcards, goal ring, path map.
+/// The Home tab content — streak, XP, continue, goal ring, path map.
 class HomeTab extends ConsumerStatefulWidget {
   const HomeTab({super.key});
 
@@ -292,7 +291,6 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   int get _xpToday => _home?.xpToday ?? 0;
   int get _xpWeeklyGoal => _home?.xpWeeklyGoal ?? 100;
   LessonProgress? get _continueLesson => _home?.continueLesson;
-  int get _flashcardsDue => _home?.flashcardsDue ?? 0;
   int get _dailyGoalProgress => _home?.dailyGoalProgress ?? 0;
   int get _dailyGoal => _localDailyGoal ?? _home?.dailyGoal ?? 5;
 
@@ -511,33 +509,13 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                   ),
                 ),
 
-                // ─── Flashcards Due + Daily Goal Ring ────────────────────
+                // ─── Daily Goal Ring ─────────────────────────────────────
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: _FlashcardsDueCard(
-                            dueCount: _flashcardsDue,
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const FlashcardPage(),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: DailyGoalRing(
-                            current: _dailyGoalProgress,
-                            goal: _dailyGoal,
-                          ),
-                        ),
-                      ],
+                    child: DailyGoalRing(
+                      current: _dailyGoalProgress,
+                      goal: _dailyGoal,
                     ),
                   ),
                 ),
@@ -695,69 +673,6 @@ class _XpBar extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// Flashcards due card.
-class _FlashcardsDueCard extends StatelessWidget {
-  final int dueCount;
-  final VoidCallback onTap;
-
-  const _FlashcardsDueCard({required this.dueCount, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppConstants.cardBorderRadius),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(AppConstants.cardBorderRadius),
-            border: Border.all(
-              color: theme.colorScheme.outline.withValues(alpha: 0.2),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.style_rounded,
-                      color: theme.colorScheme.secondary, size: 20),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Flashcards',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '$dueCount',
-                style: theme.textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: theme.colorScheme.secondary,
-                ),
-              ),
-              Text(
-                'due today',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

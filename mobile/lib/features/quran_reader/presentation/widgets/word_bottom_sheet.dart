@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:haptic_feedback/haptic_feedback.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../data/models/word_model.dart';
 import '../../../../data/services/audio_service.dart';
-import '../../../../data/repositories/flashcard_repository.dart';
 
 /// Word bottom sheet — shows word detail: audio autoplay, meaning,
-/// morphology, root chip, and save to flashcards button.
+/// morphology and root chip.
 class WordBottomSheet extends StatefulWidget {
   final WordModel word;
   final String languageCode;
@@ -28,8 +26,6 @@ class WordBottomSheet extends StatefulWidget {
 
 class _WordBottomSheetState extends State<WordBottomSheet> {
   bool _isPlaying = false;
-  bool _isSaved = false;
-  bool _isSaving = false;
 
   @override
   void initState() {
@@ -47,31 +43,6 @@ class _WordBottomSheetState extends State<WordBottomSheet> {
         // Audio may not be available in demo
       }
       if (mounted) setState(() => _isPlaying = false);
-    }
-  }
-
-  Future<void> _saveToFlashcards() async {
-    if (_isSaving) return;
-    setState(() => _isSaving = true);
-
-    try {
-      final repo = FlashcardRepository();
-      await repo.saveCard(
-        wordId: widget.word.wordId,
-        surahNumber: widget.word.surahNumber,
-        ayahNumber: widget.word.ayahNumber,
-      );
-      await Haptics.vibrate(HapticsType.medium);
-      if (mounted) setState(() {
-        _isSaved = true;
-        _isSaving = false;
-      });
-    } catch (e) {
-      // Even if API fails, show success for UX in demo
-      if (mounted) setState(() {
-        _isSaved = true;
-        _isSaving = false;
-      });
     }
   }
 
@@ -223,26 +194,7 @@ class _WordBottomSheetState extends State<WordBottomSheet> {
             _RootChip(rootArabic: word.rootArabic!, theme: theme),
           ],
 
-          const SizedBox(height: 20),
-
-          // ─── Save to Flashcards ─────────────────────────────────────
-          FilledButton.icon(
-            onPressed: _isSaved ? null : _saveToFlashcards,
-            icon: _isSaving
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                  )
-                : Icon(_isSaved ? Icons.check_rounded : Icons.bookmark_add_rounded),
-            label: Text(_isSaved ? 'Saved to Flashcards' : 'Save to Flashcards'),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(48),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
+          const SizedBox(height: 8),
         ],
       ),
     );

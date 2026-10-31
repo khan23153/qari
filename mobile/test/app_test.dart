@@ -43,12 +43,6 @@ void main() {
       expect(AppConstants.totalSurahs, 114);
       expect(AppConstants.arabicFontMinSize, 22.0);
       expect(AppConstants.arabicFontMaxSize, 40.0);
-
-      // Verify SRS constants
-      expect(AppConstants.sm2GradeBhoolGaya, 1);
-      expect(AppConstants.sm2GradeMushkil, 3);
-      expect(AppConstants.sm2GradeAasaan, 5);
-      expect(AppConstants.flashcardSessionCap, 20);
     });
 
     testWidgets('Arabic text utils work correctly', (tester) async {

@@ -266,14 +266,6 @@ class AppConstants {
     'afasy',
   ];
 
-  // ─── SRS (Spaced Repetition) ────────────────────────────────────────────
-  static const int sm2GradeBhoolGaya = 1;   // Again
-  static const int sm2GradeMushkil = 3;     // Hard
-  static const int sm2GradeAasaan = 5;      // Easy
-  static const int flashcardSessionCap = 20;
-  static const double sm2InitialEase = 2.5;
-  static const int sm2InitialInterval = 1;
-
   // ─── Recitation ─────────────────────────────────────────────────────────
   static const int maxRecordingDurationSeconds = 120;
   static const int recitationPollIntervalMs = 2000;
