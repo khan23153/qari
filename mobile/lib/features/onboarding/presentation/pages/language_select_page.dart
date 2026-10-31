@@ -75,7 +75,7 @@ class _LanguageSelectPageState extends ConsumerState<LanguageSelectPage> {
                   .slideY(begin: -0.2, end: 0),
               const SizedBox(height: 16),
               Text(
-                'Qari',
+                'Safha',
                 style: theme.textTheme.displayLarge?.copyWith(
                   fontWeight: FontWeight.w800,
                 ),

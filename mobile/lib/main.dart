@@ -287,7 +287,7 @@ class _QariAppState extends ConsumerState<QariApp> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       navigatorKey: _navigatorKey,
-      title: 'Qari',
+      title: 'Safha',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       highContrastTheme: AppTheme.highContrastTheme,

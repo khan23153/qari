@@ -49,9 +49,9 @@ android {
             else -> "com.qari.app"
         }
         manifestPlaceholders["appLabel"] = when {
-            uiPreview -> "Qari UI Preview"
-            micPilot -> "Qari Mic Test"
-            else -> "Qari"
+            uiPreview -> "Safha UI Preview"
+            micPilot -> "Safha Mic Test"
+            else -> "Safha"
         }
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:haptic_feedback/haptic_feedback.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -32,6 +33,9 @@ class ProfilePage extends ConsumerStatefulWidget {
 class _ProfilePageState extends ConsumerState<ProfilePage> {
   String _selectedLanguage = 'en';
   String _selectedQari = 'abdul_basit';
+
+  // The installed version, so the footer never shows a stale hard-coded one.
+  late final Future<PackageInfo> _packageInfo = PackageInfo.fromPlatform();
   double _fontScale = 1.0;
   String _themeMode = 'system';
   bool _audioConsent = false;
@@ -356,10 +360,15 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
               // ─── Version ────────────────────────────────────────────
               Center(
-                child: Text(
-                  'Qari v1.0.0',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                child: FutureBuilder<PackageInfo>(
+                  future: _packageInfo,
+                  builder: (context, snapshot) => Text(
+                    snapshot.hasData
+                        ? 'Safha v${snapshot.data!.version}'
+                        : 'Safha',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                    ),
                   ),
                 ),
               ),
