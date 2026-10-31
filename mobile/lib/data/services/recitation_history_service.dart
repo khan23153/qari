@@ -33,6 +33,7 @@ class RecitationHistoryService {
     required int totalCount,
     required int durationSeconds,
     List<RecitationMistake> mistakes = const [],
+    List<int> pages = const [],
   }) {
     final record = RecitationSessionRecord(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
@@ -46,6 +47,7 @@ class RecitationHistoryService {
       totalCount: totalCount,
       durationSeconds: durationSeconds,
       mistakes: mistakes,
+      pages: pages,
     );
 
     // A no-speech backend response is carried through the current mobile model
