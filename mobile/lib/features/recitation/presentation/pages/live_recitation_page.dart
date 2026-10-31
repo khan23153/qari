@@ -784,9 +784,8 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
         // The ayah and page the word really belongs to (a page or surah
         // session spans many ayahs), so the Hifz map can place it.
         final loc = locateWord(v.wordIndex, _ayahBoundaries);
-        final meta = loc != null && loc.$1 < _ayahMeta.length
-            ? _ayahMeta[loc.$1]
-            : null;
+        final meta =
+            loc != null && loc.$1 < _ayahMeta.length ? _ayahMeta[loc.$1] : null;
         mistakes.add(RecitationMistake(
           word: v.displayWord(_words),
           expectedText: expected,

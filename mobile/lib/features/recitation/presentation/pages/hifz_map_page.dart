@@ -171,7 +171,8 @@ class _HifzMapPageState extends State<HifzMapPage> {
               ),
             ),
             const SizedBox(height: 6),
-            Text(_stateLine(state, data.map), style: theme.textTheme.bodyMedium),
+            Text(_stateLine(state, data.map),
+                style: theme.textTheme.bodyMedium),
             const SizedBox(height: 18),
             FilledButton.icon(
               onPressed: () {

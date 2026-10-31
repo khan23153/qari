@@ -48,8 +48,7 @@ class SimilarVerseIndex {
   /// The skeleton words of an ayah that has a similar partner.
   List<String>? wordsOf(String ref) => _words[ref];
 
-  static final RegExp _marks =
-      RegExp('[ؐ-ًؚ-ٰٟۖ-ۭـ]');
+  static final RegExp _marks = RegExp('[ؐ-ًؚ-ٰٟۖ-ۭـ]');
   static final RegExp _nonLetter = RegExp('[^ء-ي]');
 
   /// Letters only, with the spelling differences between the Uthmani text,

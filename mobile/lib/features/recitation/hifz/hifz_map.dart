@@ -88,8 +88,7 @@ class HifzMap {
   }
 
   PageState stateOf(int page) =>
-      _pages[page] ??
-      PageState(page: page, strength: PageStrength.notRecited);
+      _pages[page] ?? PageState(page: page, strength: PageStrength.notRecited);
 
   int get recitedCount => _pages.length;
 

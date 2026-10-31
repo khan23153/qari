@@ -94,10 +94,7 @@ class RecitationHistoryService {
   /// Consecutive-day streak ending today (or yesterday if today has no session
   /// yet). Recomputed from the real session dates so it is always accurate.
   int getStreak() {
-    final dates = _readAll()
-        .map((r) => _dayKey(r.recordedAt))
-        .toSet()
-        .toList()
+    final dates = _readAll().map((r) => _dayKey(r.recordedAt)).toSet().toList()
       ..sort();
     if (dates.isEmpty) return 0;
 
@@ -135,7 +132,8 @@ class RecitationHistoryService {
     try {
       final list = jsonDecode(raw) as List<dynamic>;
       return list
-          .map((e) => RecitationSessionRecord.fromJson(e as Map<String, dynamic>))
+          .map((e) =>
+              RecitationSessionRecord.fromJson(e as Map<String, dynamic>))
           .toList();
     } catch (_) {
       return [];
@@ -148,6 +146,5 @@ class RecitationHistoryService {
   }
 
   /// Midnight-UTC day bucket for a date (used for streak math).
-  static DateTime _dayKey(DateTime d) =>
-      DateTime.utc(d.year, d.month, d.day);
+  static DateTime _dayKey(DateTime d) => DateTime.utc(d.year, d.month, d.day);
 }

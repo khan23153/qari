@@ -93,8 +93,7 @@ void main() {
     expect(recited, 1);
   });
 
-  testWidgets('lists the similar verses the reciter mixes up',
-      (tester) async {
+  testWidgets('lists the similar verses the reciter mixes up', (tester) async {
     await pump(
       tester,
       data(slips: [
