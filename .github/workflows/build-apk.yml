@@ -60,6 +60,15 @@ jobs:
           channel: stable
           cache: true
 
+      # Same release key on every build, or new APKs cannot update old ones.
+      - name: Set up release signing
+        env:
+          SAFHA_KEYSTORE_BASE64: ${{ secrets.SAFHA_KEYSTORE_BASE64 }}
+          SAFHA_KEYSTORE_PASSWORD: ${{ secrets.SAFHA_KEYSTORE_PASSWORD }}
+          SAFHA_KEY_ALIAS: ${{ secrets.SAFHA_KEY_ALIAS }}
+          SAFHA_KEY_PASSWORD: ${{ secrets.SAFHA_KEY_PASSWORD }}
+        run: ./scripts/ci_android_signing.sh --required
+
       - name: Build release APK (release_app.sh)
         env:
           BUMP: ${{ inputs.bump }}
@@ -95,6 +104,14 @@ jobs:
           if [ "$MIC_PILOT" = "true" ]; then EXPECTED=com.aiquranic.safha.micpilot; fi
           echo "$PACKAGE"
           echo "$PACKAGE" | grep -F "name='$EXPECTED'"
+
+      - name: Verify APK installs on all supported phones
+        env:
+          MIC_PILOT: ${{ inputs.mic_pilot }}
+        run: |
+          APK=releases/app-release.apk
+          if [ "$MIC_PILOT" = "true" ]; then APK=releases/app-mic-pilot.apk; fi
+          ./scripts/ci_verify_apk.sh "$APK" --release-key
 
       - name: Read built version
         id: version

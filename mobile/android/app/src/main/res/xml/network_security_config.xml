@@ -5,6 +5,16 @@
          the default system trust store (no custom CA pin). -->
     <domain-config>
         <domain includeSubdomains="true">aiquranic.com</domain>
+        <!-- Android 7.0 (the oldest version Safha supports) predates the
+             Let's Encrypt root, so connections failed there when Cloudflare
+             served a Let's Encrypt chain. The roots Cloudflare issues from
+             are bundled as extra anchors; the system store still applies. -->
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="@raw/trust_isrg_root_x1" />
+            <certificates src="@raw/trust_gts_root_r1" />
+            <certificates src="@raw/trust_gts_root_r4" />
+        </trust-anchors>
     </domain-config>
 
     <!-- Dev: emulator / local backend over cleartext. -->

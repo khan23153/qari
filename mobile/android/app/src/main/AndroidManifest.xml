@@ -42,6 +42,13 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Render with Flutter's OpenGL renderer instead of Impeller/Vulkan.
+             Impeller crashes or shows a black screen on some budget GPUs
+             (older Mali / PowerVR drivers); OpenGL works on every phone and is
+             what Android 9 and older use anyway. -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
             <meta-data

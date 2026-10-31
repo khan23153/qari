@@ -101,14 +101,29 @@ class _QiblaPageState extends ConsumerState<QiblaPage>
     // several degrees per event, which made the needle tremble and "feel
     // wrong". Blend each reading toward the previous one along the SHORTEST
     // angular path (so 359°→1° doesn't spin the dial the long way round).
-    _compassSubscription = FlutterCompass.events?.listen((event) {
-      final h = event.heading;
-      if (h != null && mounted) {
-        final delta = ((h - _deviceHeading + 540) % 360) - 180;
-        setState(() =>
-            _deviceHeading = (_deviceHeading + delta * 0.25 + 360) % 360);
-      }
-    });
+    // Budget phones often have no magnetometer: events is null or the
+    // stream errors. Say so instead of letting the error escape.
+    const noSensor = 'This phone has no compass sensor, so the dial cannot '
+        'turn with it. The Qibla is at the bearing shown, measured clockwise '
+        'from north.';
+    final events = FlutterCompass.events;
+    if (events == null) {
+      if (mounted) setState(() => _error ??= noSensor);
+    } else {
+      _compassSubscription = events.listen(
+        (event) {
+          final h = event.heading;
+          if (h != null && mounted) {
+            final delta = ((h - _deviceHeading + 540) % 360) - 180;
+            setState(() =>
+                _deviceHeading = (_deviceHeading + delta * 0.25 + 360) % 360);
+          }
+        },
+        onError: (Object _) {
+          if (mounted) setState(() => _error ??= noSensor);
+        },
+      );
+    }
 
     if (mounted) setState(() => _isLoading = false);
   }
