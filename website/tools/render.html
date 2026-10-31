@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mushaf render</title>
+<link rel="stylesheet" href="../public/assets/site.css">
+<style>
+  html, body { margin: 0; background: transparent; }
+  #page { width: 1000px; }
+</style>
+</head>
+<body>
+<div id="page"></div>
+<script src="../public/assets/mushaf.js"></script>
+<script>
+  // ?page=293&theme=night&tajweed=1 — used by render_pages.mjs.
+  var q = new URLSearchParams(location.search);
+  QariMushaf.load('../public/data/pages.json').then(function (pages) {
+    var page = QariMushaf.mount(document.getElementById('page'), pages[q.get('page') || '1']);
+    page.set({ theme: q.get('theme') || 'classic', tajweed: q.get('tajweed') === '1' });
+    return document.fonts.ready.then(function () { page.fit(); document.body.dataset.ready = '1'; });
+  });
+</script>
+</body>
+</html>

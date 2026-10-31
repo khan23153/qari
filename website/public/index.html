@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qari: the Quran app that keeps the printed page</title>
+<meta name="description" content="Qari is a free Android app with no ads. Read all 604 pages of the Madinah Mushaf offline, memorize with Hifz mode, and study hadith with every scholar's grade and the chain of narrators.">
+<meta name="theme-color" content="#1423b8">
+<link rel="canonical" href="https://aiquranic.com/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Qari">
+<meta property="og:description" content="A Quran app that keeps the Madinah Mushaf's printed page, line for line. Free, with no ads.">
+<meta property="og:url" content="https://aiquranic.com/">
+<meta property="og:image" content="https://aiquranic.com/assets/img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="assets/img/icon.svg" type="image/svg+xml">
+<link rel="preload" href="assets/fonts/stix-two-text-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/img/page-293-classic.webp" as="image">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="board" aria-label="Qari">
+  <div class="board-top">
+    <a class="tile tile-mark" href="#top" aria-label="Qari, back to top"><span lang="ar" aria-hidden="true">ق</span></a>
+    <nav class="tile tile-nav" aria-label="Sections">
+      <a href="#pages">Read</a>
+      <a href="#hifz">Recite</a>
+      <a href="#library">Library</a>
+      <a href="#learn">Learn</a>
+    </nav>
+    <a class="tile tile-action" href="/download">Download for Android</a>
+  </div>
+  <div class="board-grid" id="top">
+    <div class="tile tile-name">
+      <h1>Qari</h1>
+    </div>
+    <figure class="tile tile-photo tile-photo-a">
+      <img src="assets/img/page-293-classic.webp" width="1000" height="1560" alt="Page 293 of the Madinah Mushaf in Qari, where Surah Al-Kahf begins under its banner and basmala">
+    </figure>
+    <figure class="tile tile-photo tile-photo-b">
+      <img src="assets/img/page-604-parchment.webp" width="1000" height="1560" alt="Page 604, the last page of the Mushaf, on Qari's parchment paper" loading="eager">
+    </figure>
+    <p class="tile tile-dark">A Quran app that keeps the Madinah Mushaf's printed page, line for line.</p>
+    <p class="tile tile-gold">Free to use, with no ads.</p>
+  </div>
+</header>
+
+<main id="main">
+
+<section class="showcase" id="pages" aria-labelledby="pages-title">
+  <h2 class="axis-head" id="pages-title">All 604 pages</h2>
+  <div class="band">
+    <figure class="panel panel-1">
+      <img src="assets/img/page-1-classic.webp" width="1000" height="1560" alt="Page 1, Al-Fatihah, on the classic Madinah paper" loading="lazy">
+      <figcaption class="panel-title">The Madinah Mushaf, offline</figcaption>
+    </figure>
+    <figure class="panel panel-2">
+      <img src="assets/img/page-2-parchment.webp" width="1000" height="1560" alt="Page 2, the opening of Al-Baqarah, on parchment paper" loading="lazy">
+    </figure>
+    <figure class="panel panel-3">
+      <img src="assets/img/page-293-night.webp" width="1000" height="1560" alt="Page 293 on the night paper" loading="lazy">
+    </figure>
+    <figure class="panel panel-4">
+      <img src="assets/img/page-604-minimal.webp" width="1000" height="1560" alt="Page 604 on the minimal paper" loading="lazy">
+    </figure>
+  </div>
+  <p class="band-caption">Each page keeps its printed lines, so you find every ayah where you memorized it.</p>
+</section>
+
+<section class="live" id="hifz" aria-labelledby="hifz-title">
+  <div class="live-field">
+    <div class="live-page" id="live-page" role="img" aria-label="Page 1 of the Mushaf, Al-Fatihah, drawn live. It changes with the controls beside it."></div>
+  </div>
+  <div class="live-text">
+    <h2 id="hifz-title">Recite from memory</h2>
+
+    <div class="block">
+      <p class="block-line">Read on the paper you like.</p>
+      <p>The app has four papers. Night keeps the tajweed colours bright on a dark page for reading after Isha.</p>
+      <fieldset class="segmented">
+        <legend class="sr">Paper</legend>
+        <label><input type="radio" name="paper" value="classic" checked><span>Classic Madinah</span></label>
+        <label><input type="radio" name="paper" value="night"><span>Night</span></label>
+        <label><input type="radio" name="paper" value="parchment"><span>Parchment</span></label>
+        <label><input type="radio" name="paper" value="minimal"><span>Minimal</span></label>
+      </fieldset>
+    </div>
+
+    <div class="block">
+      <p class="block-line">Hide the words, keep the ayah markers.</p>
+      <p>Hifz mode empties the page but leaves every ayah number where it is printed, so you always know which ayah you are in.</p>
+      <label class="switch"><input type="checkbox" id="hifz-toggle" role="switch"><span class="switch-track" aria-hidden="true"></span><span>Hifz mode</span></label>
+    </div>
+
+    <div class="block">
+      <p class="block-line">Words come back as you say them.</p>
+      <p>In the app, Qari listens and brings back the words it hears, in order. It checks which words you said, not your pronunciation or tajweed. Here, you play the reciter.</p>
+      <div class="buttons">
+        <button type="button" class="btn btn-go" id="reveal">Reveal next word</button>
+        <button type="button" class="btn" id="restart">Start again</button>
+      </div>
+      <p class="status" id="reveal-status" aria-live="polite"></p>
+    </div>
+
+    <div class="block">
+      <p class="block-line">See each tajweed rule in colour.</p>
+      <p>A rule colours exactly the letters it covers: ghunnah, ikhfa, idgham, iqlab, qalqalah and the madd lengths, each in its own shade.</p>
+      <label class="switch"><input type="checkbox" id="tajweed-toggle" role="switch"><span class="switch-track" aria-hidden="true"></span><span>Tajweed colours</span></label>
+    </div>
+  </div>
+</section>
+
+<section class="library" id="library" aria-labelledby="library-title">
+  <h2 class="axis-head" id="library-title">Every grade names its&nbsp;scholar</h2>
+  <p class="axis-body">The Library shows hadith with the grades scholars gave them, never a grade made up by software, and follows each chain narrator by narrator to Ibn Hajar's rulings in Taqrib al-Tahdhib.</p>
+  <div class="library-grid">
+    <figure class="hadith" data-ui>
+      <blockquote lang="ar" dir="rtl">مِفْتَاحُ الْجَنَّةِ الصَّلاَةُ وَمِفْتَاحُ الصَّلاَةِ الْوُضُوءُ</blockquote>
+      <p class="hadith-en">“The key to Paradise is Salat, and the key to Salat is Wudu.”</p>
+      <figcaption>Jami' at-Tirmidhi 4, narrated by Jabir ibn 'Abdillah</figcaption>
+    </figure>
+    <table class="grades">
+      <caption class="sr">Grades and narrator rulings for Jami' at-Tirmidhi 4</caption>
+      <tbody>
+        <tr><th scope="row">Grade</th><td>Ahmad Muhammad Shakir</td><td>Sahih li-ghayrihi</td></tr>
+        <tr><th scope="row"></th><td>Al-Albani</td><td>Sahih</td></tr>
+        <tr><th scope="row"></th><td>Zubair 'Ali Za'i</td><td>Da'if</td></tr>
+      </tbody>
+      <tbody>
+        <tr><th scope="row">Chain</th><td>Al-Husayn ibn Muhammad</td><td lang="ar" dir="rtl">ثقة</td></tr>
+        <tr><th scope="row"></th><td>Sulayman ibn Qarm</td><td lang="ar" dir="rtl">سيء الحفظ يتشيع</td></tr>
+        <tr><th scope="row"></th><td>Abu Yahya al-Qattat</td><td lang="ar" dir="rtl">لين الحديث</td></tr>
+        <tr><th scope="row"></th><td>Mujahid ibn Jabr</td><td lang="ar" dir="rtl">ثقة إمام في التفسير وفي العلم</td></tr>
+        <tr><th scope="row"></th><td>Jabir ibn 'Abdillah</td><td>Companion</td></tr>
+      </tbody>
+    </table>
+    <p class="table-note">Narrator rulings quoted from Taqrib al-Tahdhib, nos. 1345, 2600, 8444 and 6481. The two weak narrators are why one scholar grades the chain da'if.</p>
+  </div>
+</section>
+
+<section class="about" id="learn" aria-labelledby="learn-title">
+  <ul class="facts">
+    <li>Android</li>
+    <li>English, Urdu and Arabic</li>
+    <li>Free, with no ads</li>
+  </ul>
+  <div class="about-text">
+    <h2 id="learn-title">One who recites</h2>
+    <p class="about-lead"><span class="dropcap" lang="ar" aria-hidden="true">ٱقْرَأْ</span><strong>Qari means one who recites.</strong> It shares its root with <em>iqra</em>, the first word revealed, and with the word Quran itself. The app is built around that work: reading the Mushaf every day, holding it in memory, and understanding what you recite.</p>
+    <p class="about-more">Learn has three tracks: reading Arabic from the letters and vowel marks, Quranic grammar, and levels of the Quran's most frequent words that show how much of it you can now recognise. Flashcards return on a spaced schedule, and the root explorer gathers the words that share three letters.</p>
+  </div>
+</section>
+
+<section class="cta" aria-labelledby="cta-title">
+  <div class="strip" aria-hidden="true">
+    <img src="assets/img/page-2-night.webp" width="1000" height="1560" alt="" loading="lazy">
+    <img src="assets/img/page-1-parchment.webp" width="1000" height="1560" alt="" loading="lazy">
+    <img src="assets/img/page-604-classic.webp" width="1000" height="1560" alt="" loading="lazy">
+  </div>
+  <div class="cta-band">
+    <h2 class="sr" id="cta-title">Download Qari</h2>
+    <p class="cta-line">Qari is free and has no ads. <a href="/download">Download Qari for Android</a> and the whole Mushaf is on your phone.</p>
+    <p class="cta-small">Version 1.0.49.<br>Reading works offline; listening to your recitation needs the Qari server.</p>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <div class="footer-top">
+    <div class="footer-notes">
+      <p>Qari, a Quran app for Android.</p>
+      <p>Read, memorize and study, with the whole Mushaf offline.</p>
+    </div>
+    <a class="footer-up" href="#top">Back to top</a>
+  </div>
+  <a class="footer-big" href="/download">aiquranic.com/<wbr>download</a>
+  <div class="footer-meta">
+    <p><a href="/download">Download the APK</a></p>
+    <p>Quran text and tajweed from Quran.com. Mushaf font by the King Fahd Complex. Hadith from the public-domain hadith-api; narrator rulings from Taqrib al-Tahdhib.</p>
+    <p>2026</p>
+  </div>
+</footer>
+
+<script src="assets/vendor/gsap.min.js" defer></script>
+<script src="assets/vendor/ScrollTrigger.min.js" defer></script>
+<script src="assets/vendor/lenis.min.js" defer></script>
+<script src="assets/mushaf.js" defer></script>
+<script src="assets/site.js" defer></script>
+</body>
+</html>

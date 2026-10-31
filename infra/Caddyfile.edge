@@ -43,7 +43,21 @@ http://:8088 {
 		reverse_proxy 127.0.0.1:8010
 	}
 
+	# Short link printed on the landing site.
+	handle /download {
+		redir * /v1/app/download 302
+	}
+
+	# Landing site: static files from website/public in the checkout.
+	# Set QARI_WEBSITE_DIR if the checkout lives elsewhere (or is mounted
+	# into a container at another path).
 	handle {
-		respond "Qari API" 200
+		root * {$QARI_WEBSITE_DIR:/home/innocent/qari/website/public}
+		encode zstd gzip
+		@assets path /assets/* /data/*
+		header @assets Cache-Control "public, max-age=86400"
+		@otf path *.otf
+		header @otf Content-Type font/otf
+		file_server
 	}
 }
