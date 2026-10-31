@@ -9,6 +9,7 @@ import '../../../../data/repositories/user_repository.dart';
 import '../../../../data/models/user_model.dart';
 import '../../../../data/models/lesson_model.dart';
 import '../../../quran_reader/presentation/pages/surah_list_page.dart';
+import '../../../recitation/presentation/pages/hifz_map_page.dart';
 import '../../../recitation/presentation/pages/live_recitation_page.dart';
 import '../../../recitation/presentation/recitation_mode.dart';
 import '../../../profile/presentation/pages/profile_page.dart';
@@ -520,6 +521,18 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                   ),
                 ),
 
+                // ─── Hifz Map ────────────────────────────────────────────
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                    child: _HifzMapCard(
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const HifzMapPage()),
+                      ),
+                    ),
+                  ),
+                ),
+
                 // ─── Learning Path Map ───────────────────────────────────
                 SliverToBoxAdapter(
                   child: Padding(
@@ -673,6 +686,73 @@ class _XpBar extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Opens the Hifz map: every page coloured by how firmly it is held.
+class _HifzMapCard extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _HifzMapCard({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+    return Material(
+      color: theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(AppConstants.cardBorderRadius),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppConstants.cardBorderRadius),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppConstants.cardBorderRadius),
+            border: Border.all(
+              color: theme.colorScheme.outline.withValues(alpha: 0.2),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.grid_view_rounded, color: accent),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Hifz map',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Every page you hold, and what to revise today',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: accent),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

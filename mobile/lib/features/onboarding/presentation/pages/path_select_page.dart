@@ -170,9 +170,8 @@ class _PathSelectPageState extends ConsumerState<PathSelectPage> {
                     children: [
                       if (_step > 0) ...[
                         TextButton(
-                          onPressed: _isSaving
-                              ? null
-                              : () => setState(() => _step--),
+                          onPressed:
+                              _isSaving ? null : () => setState(() => _step--),
                           child: Text(t.back),
                         ),
                         const SizedBox(width: 8),
@@ -631,9 +630,7 @@ class _Copy {
 
   String lessons(int n) => switch (code) {
         'ur' => n == 1 ? '1 سبق' : '$n اسباق',
-        'ar' => n == 1
-            ? 'درس واحد'
-            : (n <= 10 ? '$n دروس' : '$n درسًا'),
+        'ar' => n == 1 ? 'درس واحد' : (n <= 10 ? '$n دروس' : '$n درسًا'),
         _ => n == 1 ? '1 lesson' : '$n lessons',
       };
 

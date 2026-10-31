@@ -17,6 +17,7 @@ class RecitationSessionRecord {
     required this.totalCount,
     required this.durationSeconds,
     this.mistakes = const [],
+    this.pages = const [],
   });
 
   /// Stable UUID for this session record.
@@ -41,8 +42,14 @@ class RecitationSessionRecord {
   /// Words the engine flagged (mispronounced / skipped) for mistake review.
   final List<RecitationMistake> mistakes;
 
+  /// Mushaf pages the session covered (empty in records saved before this
+  /// was kept).
+  final List<int> pages;
+
   String get referenceLabel {
-    if (scope == 'page') return 'Page $surahNumber';
+    if (scope == 'page') {
+      return pages.isNotEmpty ? 'Page ${pages.first}' : 'Page $surahNumber';
+    }
     if (ayahFrom == ayahTo) return '$surahNumber:$ayahFrom';
     return '$surahNumber:$ayahFrom-$ayahTo';
   }
@@ -62,6 +69,9 @@ class RecitationSessionRecord {
       mistakes: (json['mistakes'] as List<dynamic>? ?? [])
           .map((m) => RecitationMistake.fromJson(m as Map<String, dynamic>))
           .toList(),
+      pages: (json['pages'] as List<dynamic>? ?? [])
+          .map((p) => (p as num).toInt())
+          .toList(),
     );
   }
 
@@ -77,6 +87,7 @@ class RecitationSessionRecord {
         'total_count': totalCount,
         'duration_seconds': durationSeconds,
         'mistakes': mistakes.map((m) => m.toJson()).toList(),
+        if (pages.isNotEmpty) 'pages': pages,
       };
 }
 
@@ -88,6 +99,7 @@ class RecitationMistake {
     required this.errorType,
     this.surahNumber,
     this.ayahNumber,
+    this.page,
   });
 
   final String word;
@@ -96,6 +108,9 @@ class RecitationMistake {
   final int? surahNumber;
   final int? ayahNumber;
 
+  /// Mushaf page of the word.
+  final int? page;
+
   factory RecitationMistake.fromJson(Map<String, dynamic> json) {
     return RecitationMistake(
       word: json['word'] as String? ?? '',
@@ -103,6 +118,7 @@ class RecitationMistake {
       errorType: json['error_type'] as String? ?? 'error',
       surahNumber: json['surah_number'] as int?,
       ayahNumber: json['ayah_number'] as int?,
+      page: json['page'] as int?,
     );
   }
 
@@ -112,5 +128,6 @@ class RecitationMistake {
         'error_type': errorType,
         if (surahNumber != null) 'surah_number': surahNumber,
         if (ayahNumber != null) 'ayah_number': ayahNumber,
+        if (page != null) 'page': page,
       };
 }

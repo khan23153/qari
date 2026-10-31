@@ -16,6 +16,8 @@ import '../../../../data/services/audio_service.dart';
 import '../../../../data/services/local_storage_service.dart';
 import '../../../../data/services/recitation_history_service.dart';
 import '../../../../data/services/streaming_recitation_service.dart';
+import '../../hifz/similar_verses.dart';
+import '../../hifz/slip_store.dart';
 import '../mushaf/floating_recitation_bar.dart';
 import '../mushaf/mushaf_appearance_sheet.dart';
 import '../mushaf/mushaf_jump_sheet.dart';
@@ -27,6 +29,7 @@ import '../recitation_review.dart';
 import '../widgets/mushaf_reveal_view.dart';
 import '../widgets/word_comparison_sheet.dart';
 import '../widgets/recitation_review_summary.dart';
+import '../widgets/similar_verse_widgets.dart';
 import 'recitation_history_page.dart';
 import 'verse_identifier_page.dart';
 
@@ -125,6 +128,12 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
   /// "Surah · Page | Juz | Hizb" header as the cursor moves.
   List<_AyahMeta> _ayahMeta = const [];
 
+  /// Similar-verse (mutashabihat) alert: the index, the detector and the
+  /// slip currently shown.
+  SimilarVerseIndex? _similarIndex;
+  SimilarVerseDetector? _slipDetector;
+  SimilarVerseSlip? _slip;
+
   /// Word index → surah number, for every surah that OPENS inside the target
   /// (its ayah 1 is present). The surah plate + Bismillah are drawn inline
   /// right before that word.
@@ -215,6 +224,7 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
     _mode = widget.initialMode ?? RecitationMode.hifz;
     _loadInitialPage();
     _mushafController.load();
+    _loadSimilarIndex();
 
     _eventSub = _service.events.listen(_onEvent);
     _connSub = _service.connectionState.listen(_onConnectionState);
@@ -487,6 +497,7 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
                 ? _wordTajweedSpans[idx]
                 : null;
         _applyVerdict(text, idx, event.liveStatus, spans);
+        _checkSimilarVerse(event);
         break;
       case RecitationStreamEventType.finalResult:
         _finishWith(event.result);
@@ -501,6 +512,36 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
       case RecitationStreamEventType.unknown:
         break;
     }
+  }
+
+  Future<void> _loadSimilarIndex() async {
+    try {
+      final index = await SimilarVerseIndex.load();
+      if (mounted) _similarIndex = index;
+    } catch (e) {
+      debugPrint('LiveRecitation: similar-verse index unavailable: $e');
+    }
+  }
+
+  /// Watches the heard words for a slide into a similar ayah. Uses only what
+  /// the live engine already sends; recognition itself is unchanged.
+  void _checkSimilarVerse(RecitationStreamEvent event) {
+    final index = _similarIndex;
+    final idx = event.wordIndex;
+    if (index == null || idx == null) return;
+    final loc = locateWord(idx, _ayahBoundaries);
+    if (loc == null || loc.$1 >= _ayahRefs.length) return;
+    final ref = _ayahRefs[loc.$1];
+    final slip = (_slipDetector ??= SimilarVerseDetector(index)).onWord(
+      wordIndex: idx,
+      expectedRef: '${ref.$1}:${ref.$2}',
+      position: loc.$2,
+      matched: event.status == LiveWordStatus.matched,
+      heard: event.observedText ?? event.spoken,
+    );
+    if (slip == null) return;
+    SlipStore().record(slip);
+    setState(() => _slip = slip);
   }
 
   void _onConnectionState(LiveConnectionState state) {
@@ -566,7 +607,9 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
       _ui = LiveRecitationUiState.live;
       _clearReveal();
       _errorMessage = null;
+      _slip = null;
     });
+    _slipDetector?.reset();
     _scrollToTop();
 
     try {
@@ -738,14 +781,25 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
       for (final v in result.wordVerdicts) {
         if (v.isCorrect) continue;
         final expected = v.expectedText ?? v.displayWord(_words);
+        // The ayah and page the word really belongs to (a page or surah
+        // session spans many ayahs), so the Hifz map can place it.
+        final loc = locateWord(v.wordIndex, _ayahBoundaries);
+        final meta =
+            loc != null && loc.$1 < _ayahMeta.length ? _ayahMeta[loc.$1] : null;
         mistakes.add(RecitationMistake(
           word: v.displayWord(_words),
           expectedText: expected,
           errorType: v.errorType ?? 'error',
-          surahNumber: _surah,
-          ayahNumber: _ayah,
+          surahNumber: meta?.surah ?? _surah,
+          ayahNumber: meta?.ayah ?? _ayah,
+          page: meta?.page,
         ));
       }
+      final pageSet = <int>{};
+      for (final m in _ayahMeta) {
+        if (m.page != null) pageSet.add(m.page!);
+      }
+      final pages = pageSet.toList()..sort();
       final from = _scope == RecitationScope.surah ? _ayahFrom : _ayah;
       final to = _scope == RecitationScope.surah ? _ayahTo : _ayah;
       // Fire-and-forget: the session is already shown; persistence must never
@@ -761,6 +815,7 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
           totalCount: result.wordVerdicts.length,
           durationSeconds: result.durationSeconds,
           mistakes: mistakes,
+          pages: pages,
         );
       });
     } catch (e) {
@@ -1276,6 +1331,13 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
                     )
                   : const SizedBox.shrink(),
             ),
+
+            if (_slip != null)
+              SimilarVerseBanner(
+                slip: _slip!,
+                theme: mushaf,
+                onDismiss: () => setState(() => _slip = null),
+              ),
 
             if (kDebugMode) _buildDiagnostics(theme),
 

@@ -9,8 +9,7 @@ import 'package:qari/features/onboarding/presentation/pages/path_select_page.dar
 
 void main() {
   group('OnboardingAnswers', () {
-    test('a learner who cannot read the script yet starts with Foundation',
-        () {
+    test('a learner who cannot read the script yet starts with Foundation', () {
       const a = OnboardingAnswers(reading: ArabicReading.notYet);
       expect(a.path, LearningPath.foundation);
       expect(a.backendPath, 'foundation');
@@ -106,8 +105,8 @@ void main() {
 
     testWidgets('asks four questions and saves the answers', (tester) async {
       final answers = await pumpFlow(tester, () async {
-        expect(find.text('Can you read the Arabic of the Quran?'),
-            findsOneWidget);
+        expect(
+            find.text('Can you read the Arabic of the Quran?'), findsOneWidget);
         expect(find.text('Step 1 of 4'), findsOneWidget);
         await choose(tester, 'Not yet');
         await choose(tester, 'Continue');
@@ -152,8 +151,8 @@ void main() {
         await choose(tester, 'Yes, fluently');
         await choose(tester, 'Continue');
         await choose(tester, 'Back');
-        expect(find.text('Can you read the Arabic of the Quran?'),
-            findsOneWidget);
+        expect(
+            find.text('Can you read the Arabic of the Quran?'), findsOneWidget);
         final button = find.widgetWithText(FilledButton, 'Continue');
         expect(tester.widget<FilledButton>(button).onPressed, isNotNull);
       });
