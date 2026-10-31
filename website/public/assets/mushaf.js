@@ -1,5 +1,5 @@
 /*
- * Draws Madinah Mushaf pages from data/pages.json the way the Qari app does:
+ * Draws Madinah Mushaf pages from data/pages.json the way the Safha app does:
  * every word on its printed line, the ayah number as the KFGQPC medallion,
  * surah banners and basmala on the printed empty lines, tajweed colours on
  * the exact letters, and Hifz mode that hides words but keeps every marker.

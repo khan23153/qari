@@ -1,6 +1,6 @@
 # aiquranic.com
 
-The landing site for Qari: static HTML, CSS and JavaScript in `public/`,
+The landing site for Safha (formerly Qari): static HTML, CSS and JavaScript in `public/`,
 with no build step. The edge Caddy (`infra/Caddyfile.edge`) serves
 `public/` at the site root; `/v1/*`, `/ws/*` and `/health` still go to the
 API, and `/download` redirects to `/v1/app/download`.
