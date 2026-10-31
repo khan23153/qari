@@ -92,6 +92,11 @@ services:
       # unprompted witness (honest), "corroborated" = the prompt-conditioned
       # Qari model where the witness agrees (more coverage, some over-reveal).
       QARI_EVIDENCE_POLICY: "tier2"
+      # Live zabar/zer/pesh checking. The RNNT engine emits no tashkeel, so
+      # "whisper" also decodes each live window with the unprompted base
+      # Whisper model above and uses its vowel marks for words both engines
+      # heard. Costs one extra Whisper decode per pass. Set in infra/.env.
+      QARI_LIVE_VOWEL_WITNESS: ${QARI_LIVE_VOWEL_WITNESS:-off}
       # Verbose live per-pass diagnostics (tier-1/tier-2 words, matcher cursor).
       # Set to "1" when debugging a live tracking problem.
       QARI_STREAM_DEBUG: "0"
