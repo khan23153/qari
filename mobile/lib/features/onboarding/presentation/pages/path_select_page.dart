@@ -138,7 +138,7 @@ class _PathSelectPageState extends ConsumerState<PathSelectPage> {
 
               // ─── Welcome Text ────────────────────────────────────────
               Text(
-                isUrdu ? 'خوش آمدید' : 'Welcome to Qari',
+                isUrdu ? 'خوش آمدید' : 'Welcome to Safha',
                 style: theme.textTheme.displaySmall?.copyWith(
                   fontWeight: FontWeight.w800,
                 ),
