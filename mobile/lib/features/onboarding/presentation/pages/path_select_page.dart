@@ -98,6 +98,9 @@ class _PathSelectPageState extends ConsumerState<PathSelectPage> {
     }
 
     if (!mounted) return;
+    // Saved: stop the spinner before leaving, so it never runs forever if
+    // this page stays on screen (a test, or a slow route change).
+    setState(() => _isSaving = false);
     final done = widget.onFinished;
     if (done != null) {
       done(answers);
