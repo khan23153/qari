@@ -1,3 +1,68 @@
+# Safha rename, website and Library checkpoint — 2026-10-31 13:15 UTC
+
+**Who did this:** Claude in a claude.ai cloud session (not on the VPS),
+configured model `claude-opus-5-5` (Claude Opus 5.5); the model actually
+serving a turn can differ. The session works through GitHub only: it cannot
+reach the VPS, so nothing below is deployed until someone pulls and
+restarts there.
+
+**The app is now Safha** (Play Store name planned: "Safha: Quran Hifz &
+Hadith"; previously Qari). "Qari" where it means a reciter (the reciter
+picker) and Surah Al-Qari'ah are unchanged.
+
+## Merged to `main` in this session
+
+| PR | What |
+|---|---|
+| #44 | Mushaf sheets themed per paper (no hard-coded colours), Hifz row rule; ayah markers stay visible in Hifz. |
+| #45 | Islamic Library: `/v1/library` API (core_api) + Flutter reader. Grades only as given by named scholars (never generated), weak/fabricated causes with citations, isnad tree, narrator profiles from Taqrib al-Tahdhib, gharib words. Library replaced Tasbih in the bottom nav. |
+| #46 | Library falls back to the bundled seed (`mobile/assets/library/library_seed.json`) when the API is down or 404, so it works offline. |
+| #47, #48 | Login-free UI preview app opens the Library; preview APK build selects its app id with the Gradle property `qariUiPreview`. |
+| #49 | Landing site in `website/public` (static; Mushaf pages drawn from the app's own corpus/layout by `website/public/assets/mushaf.js`; live Hifz demo; Library example). `infra/Caddyfile.edge` serves it at the site root, keeps `/v1/*`, `/ws/*`, `/health`, and redirects `/download` to `/v1/app/download`. Site root defaults to `/home/innocent/qari/website/public`; override with `QARI_WEBSITE_DIR`. |
+| #50 | Rename to Safha; new "Night" icon (`branding/safha-icon.svg`, rendered by `branding/render_icons.cjs`: Android legacy + adaptive + monochrome, full iOS set, Play Store 512 px). **Package/bundle id is now `com.aiquranic.safha`** (preview `.uipreview`, mic test `.micpilot`); Kotlin sources moved to `com/aiquranic/safha/`; platform channels renamed to `com.aiquranic.safha/{mic_foreground,mic_stream,mic_status,crash}` on both sides (names only, no logic change; the owner approved touching the mic code for this). Mic notification says "Safha is listening". Profile footer now shows the installed version instead of a hard-coded `v1.0.0`. |
+
+**Open:** #51 (draft, CI green) gives the default Night Mushaf theme
+Safha's own palette (warm charcoal `#15110C`, ivory `#F2ECE4`, amber
+`#D98C3C`, amber mic button with dark ink) instead of the mint green it
+shared with Tarteel, and matches the website's Night paper. Tajweed colours
+and the green "correct word" tint are deliberately unchanged.
+
+## Pending work
+
+1. **Merge #51** (Night theme + website Night paper).
+2. **Deploy the website on the VPS:** pull `main` into the checkout Caddy
+   reads, set `QARI_WEBSITE_DIR` if it is not
+   `/home/innocent/qari/website/public` (this file also mentions
+   `/home/ubuntu/qari`; confirm which one the edge uses), then reload the
+   edge Caddy. If Caddy runs in a container, mount `website/public`.
+3. **Backend is not running** (owner's note, 2026-10-31): login, live
+   recitation and `/download` (`/v1/app/download`) need core_api and
+   recitation_api up. The Library and Mushaf reading work offline.
+4. **Release APK for the new package:** `key.properties` is absent, so
+   builds fall back to debug signing. Create and keep a release keystore,
+   build `com.aiquranic.safha`, update `releases/app_release.json`.
+   Existing `com.qari.app` installs cannot update in place: testers
+   uninstall the old app once (data kept only on the phone is lost).
+5. **Play Store launch:** developer account; **privacy policy** (none exists
+   in the repo or on the site, and the owner must write it); Data safety
+   form (recitation audio goes to the server); **turn off the in-app APK
+   self-updater in the Play build** (Play policy forbids self-updates);
+   listing in English, Urdu and Arabic; screenshots.
+6. **Library content:** the seed holds a few hadiths and narrators; several
+   rulings are `pending_scholar_review`, and the English translations from
+   fawazahmed0/hadith-api are marked `license_status: unverified`. Verify
+   before expanding to more books.
+7. **Owner decision:** whether the Night tajweed palette should also lose
+   its greens.
+8. **iOS:** bundle id is `com.aiquranic.safha`, but there is no iOS signing
+   or build yet.
+9. Developer-facing names still say Qari (backend service titles, Docker
+   names, `QariApp` class, repo name). Leave unless there is a reason.
+10. Earlier recognition and repetition work below (sections 7 and 11) is
+    unchanged by this session.
+
+---
+
 # Raw ASR / GitHub checkpoint — 2026-10-25 04:58 UTC
 
 GitHub CLI installed (Ubuntu package 2.46.0) and user-approved device authentication verified as `khan23153`. Feature branch `feat/realtime-red-mistakes-harakat` pushed to origin with deployed code commit `5eb1433` and all backend/Flutter changes. **PR #43 is OPEN:** https://github.com/khan23153/qari/pull/43 (base `main`, not merged). GitHub backend/Flutter checks started; final CI success is not yet established. Release `Build APK` workflow is manual (`workflow_dispatch`): merging alone does not run that release build. Compatible signing still needs verification before distributing the resulting APK.
