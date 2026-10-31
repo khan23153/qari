@@ -35,5 +35,9 @@ python3 -m http.server 8765 --directory website &  # serve website/ locally
 node website/tools/render_pages.mjs                # page renders (Playwright)
 ```
 
-`.taste-skill/direction.json` records the design direction the site was
-built from.
+## Look
+
+The site follows the app's own "Serene Path" theme
+(`mobile/lib/core/theme/serene_decorations.dart` and `app_theme.dart`):
+warm cream, bronze ink and amber, the soft radial glow and mosque
+silhouette, with an eight-point star as the ornament between sections.

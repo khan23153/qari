@@ -17,9 +17,7 @@ const base = process.env.SITE_ORIGIN || 'http://127.0.0.1:8765';
 
 // [page, theme, tajweed]
 const RENDERS = [
-  [293, 'classic', true], [604, 'parchment', true],
-  [1, 'classic', true], [2, 'parchment', true], [293, 'night', true], [604, 'minimal', false],
-  [2, 'night', true], [1, 'parchment', false], [604, 'classic', true],
+  [1, 'classic', true], [2, 'parchment', true], [604, 'parchment', true],
 ];
 
 mkdirSync(out, { recursive: true });

@@ -154,7 +154,7 @@
       var pitch = sheet.clientHeight / page.lineCount;
       var size = widest ? 100 * width / widest : 0;
       // Opening pages centre a narrower block, as the printed pages do.
-      size = page.opening ? Math.min(size * 0.82, pitch * 0.42) : Math.min(size * 0.985, pitch * 0.56);
+      size = page.opening ? Math.min(size * 0.9, pitch * 0.5) : Math.min(size * 0.985, pitch * 0.56);
       sheet.style.setProperty('--fs', size.toFixed(2) + 'px');
     }
 
