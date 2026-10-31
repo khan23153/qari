@@ -27,7 +27,11 @@ import '../../../../core/theme/serene_decorations.dart';
 /// Home tab shows streak, XP, continue card, flashcards due, daily goal ring,
 /// and a Duolingo-style vertical learning path map.
 class HomePage extends ConsumerStatefulWidget {
-  const HomePage({super.key});
+  /// The tab to open on: 0 Home, 1 Quran, 2 Library. Set once, after the
+  /// "Set up Safha" questions, from the learner's focus.
+  final int initialTab;
+
+  const HomePage({super.key, this.initialTab = 0});
 
   @override
   ConsumerState<HomePage> createState() => _HomePageState();
@@ -41,6 +45,14 @@ class _HomePageState extends ConsumerState<HomePage> {
   bool _libraryOpened = false;
 
   static const _libraryIndex = 2;
+
+  @override
+  void initState() {
+    super.initState();
+    final tab = widget.initialTab;
+    _currentIndex = tab < 0 || tab > _libraryIndex ? 0 : tab;
+    _libraryOpened = _currentIndex == _libraryIndex;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -209,13 +221,23 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   List<PathNode>? _curriculumNodes;
   bool _isLoading = true;
 
+  /// The daily goal the learner chose in "Set up Safha" (lessons per day).
+  /// The server does not store one yet, so the local choice wins.
+  int? _localDailyGoal;
+
   @override
   void initState() {
     super.initState();
     _loadLanguage();
     _loadDisplayName();
     _loadCurriculumPath();
+    _loadDailyGoal();
     _loadHome();
+  }
+
+  Future<void> _loadDailyGoal() async {
+    final goal = await LocalStorageService().getDailyGoal();
+    if (mounted) setState(() => _localDailyGoal = goal);
   }
 
   Future<void> _loadLanguage() async {
@@ -272,7 +294,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   LessonProgress? get _continueLesson => _home?.continueLesson;
   int get _flashcardsDue => _home?.flashcardsDue ?? 0;
   int get _dailyGoalProgress => _home?.dailyGoalProgress ?? 0;
-  int get _dailyGoal => _home?.dailyGoal ?? 5;
+  int get _dailyGoal => _localDailyGoal ?? _home?.dailyGoal ?? 5;
 
   /// Server learning path when it has content, else the bundled curriculum
   /// path (offline-first — the old build showed a static 10-node sample).
@@ -498,7 +520,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                       children: [
                         Expanded(
                           child: _FlashcardsDueCard(
-                            dueCount: 12,
+                            dueCount: _flashcardsDue,
                             onTap: () {
                               Navigator.of(context).push(
                                 MaterialPageRoute(
