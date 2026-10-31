@@ -44,6 +44,8 @@ class LocalStorageService {
   static const _kOnboardingComplete = 'onboarding_complete';
   static const _kSelectedLanguage = 'selected_language';
   static const _kSelectedPath = 'selected_path';
+  static const _kArabicReading = 'arabic_reading';
+  static const _kStudyFocus = 'study_focus';
   static const _kIsOnboarded = 'is_onboarded';
   static const _kThemeMode = 'theme_mode';
   static const _kFontScale = 'font_scale';
@@ -106,6 +108,29 @@ class LocalStorageService {
   Future<void> setSelectedPath(String path) async {
     await ensureInitialized();
     await _prefs.setString(_kSelectedPath, path);
+  }
+
+  // ─── Set-up answers ──────────────────────────────────────────────────────
+  /// `ArabicReading.name` from the "Set up Safha" questions.
+  Future<String?> getArabicReading() async {
+    await ensureInitialized();
+    return _prefs.getString(_kArabicReading);
+  }
+
+  Future<void> setArabicReading(String value) async {
+    await ensureInitialized();
+    await _prefs.setString(_kArabicReading, value);
+  }
+
+  /// `StudyFocus.name` from the "Set up Safha" questions.
+  Future<String?> getStudyFocus() async {
+    await ensureInitialized();
+    return _prefs.getString(_kStudyFocus);
+  }
+
+  Future<void> setStudyFocus(String value) async {
+    await ensureInitialized();
+    await _prefs.setString(_kStudyFocus, value);
   }
 
   // ─── Theme ───────────────────────────────────────────────────────────────
