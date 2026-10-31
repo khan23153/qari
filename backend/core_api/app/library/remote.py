@@ -109,6 +109,15 @@ class RemoteHadithSource:
         eng = await self._optional(f"editions/{translation_edition}/{number}.json")
         return ara, eng
 
+    async def edition(self, name: str) -> dict:
+        """A whole edition (several MB), fetched without the disk cache: the
+        forward-check index is built from it once and saved on its own."""
+        rel = f"editions/{name}.min.json"
+        data = await self._fetch(f"{self._base}/{rel}")
+        if not isinstance(data, dict) or "hadiths" not in data:
+            raise RemoteFetchError(rel)
+        return data
+
     async def section(self, arabic_edition: str, translation_edition: str, book: int) -> tuple[dict, Optional[dict]]:
         ara = await self._get(f"editions/{arabic_edition}/sections/{book}.json")
         eng = await self._optional(f"editions/{translation_edition}/sections/{book}.json")

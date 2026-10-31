@@ -2,18 +2,28 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
+import pickle
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
 from app.core.exceptions import NotFoundError, ProblemException
 from app.library.arabic import normalize_arabic, strip_clitics
+from app.library.forward_check import ForwardIndex, detect_language, editions_for
 from app.library.grading import DEFECT_CAUSES, dataset_grade, inclusion_grade
 from app.library.remote import RemoteFetchError, RemoteHadithSource
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 SEARCH_LIMIT = 20
+
+# How long a forward check waits for the first-time index build before
+# answering "preparing" (the build keeps running in the background).
+FORWARD_WAIT_SEC = 8.0
+
+log = logging.getLogger(__name__)
 
 
 class LibraryUnavailableError(ProblemException):
@@ -40,7 +50,14 @@ def _bundled() -> tuple[dict, dict]:
 
 
 class LibraryService:
-    def __init__(self, catalog: dict, seed: dict, remote: Optional[RemoteHadithSource] = None):
+    def __init__(
+        self,
+        catalog: dict,
+        seed: dict,
+        remote: Optional[RemoteHadithSource] = None,
+        forward_cache: Optional[Path] = None,
+        forward_wait_sec: float = FORWARD_WAIT_SEC,
+    ):
         self._categories = catalog["categories"]
         self._collections = {c["slug"]: c for c in catalog["collections"]}
         self._source = catalog["source"]
@@ -51,11 +68,20 @@ class LibraryService:
             normalize_arabic(form): g for g in self._gharib for form in g["forms"]
         }
         self._remote = remote
+        self._forward_cache = forward_cache
+        self._forward_wait = forward_wait_sec
+        self._forward: Optional[ForwardIndex] = None
+        self._forward_task: Optional[asyncio.Task] = None
 
     @classmethod
-    def from_bundled_data(cls, remote: Optional[RemoteHadithSource] = None) -> "LibraryService":
+    def from_bundled_data(
+        cls,
+        remote: Optional[RemoteHadithSource] = None,
+        forward_cache: Optional[Path] = None,
+        forward_wait_sec: float = FORWARD_WAIT_SEC,
+    ) -> "LibraryService":
         catalog, seed = _bundled()
-        return cls(catalog, seed, remote)
+        return cls(catalog, seed, remote, forward_cache, forward_wait_sec)
 
     def remote_base_url(self) -> Optional[str]:
         return self._source.get("base_url")
@@ -209,8 +235,12 @@ class LibraryService:
         }
 
     async def get_hadith(self, hadith_id: str) -> dict:
+        return self._detail(await self._hadith_record(hadith_id))
+
+    async def _hadith_record(self, hadith_id: str) -> dict:
+        """The curated seed record, else the dataset record from the remote."""
         if hadith_id in self._hadiths:
-            return self._detail(self._hadiths[hadith_id])
+            return self._hadiths[hadith_id]
         slug, number = hadith_id.split(":")
         c = self._collections.get(slug)
         cfg = self._remote_config(c) if c else None
@@ -223,7 +253,7 @@ class LibraryService:
         if not ara.get("hadiths"):
             raise NotFoundError("Hadith", hadith_id)
         eng_record = eng["hadiths"][0] if eng and eng.get("hadiths") else None
-        return self._detail(self._from_dataset(c, ara["hadiths"][0], ara["metadata"], eng_record))
+        return self._from_dataset(c, ara["hadiths"][0], ara["metadata"], eng_record)
 
     async def list_book_hadiths(self, slug: str, book: int, page: int, page_size: int) -> dict:
         c = self._collection(slug)
@@ -277,6 +307,94 @@ class LibraryService:
                 if entry is not None:
                     return {**entry, "matched_form": stem}
         raise NotFoundError("Gharib entry", word)
+
+    # --- forward check ----------------------------------------------------
+
+    async def check_forward(self, text: str) -> dict:
+        """Closest hadith to a forwarded text, with the grades scholars gave.
+
+        A miss is "not found in these collections", never a ruling.
+        """
+        index = await self._forward_index()
+        matches = []
+        for m in index.search(text):
+            try:
+                record = await self._hadith_record(m.hadith_id)
+            except (NotFoundError, LibraryUnavailableError):
+                continue
+            matches.append({
+                "band": m.band,
+                "score": m.score,
+                "language": m.language,
+                "hadith": self._summary(record),
+            })
+        searched = [self._collections[s]["name_en"] for s in index.collections if s in self._collections]
+        if matches:
+            note = (
+                "Compare the wording before sharing. Grades are those given by the "
+                "named scholars; Safha does not grade hadith."
+            )
+        else:
+            note = (
+                "Not found in the collections Safha searches. That does not prove "
+                "it is fabricated, but do not share it as a hadith until a scholar "
+                "confirms its source."
+            )
+        return {
+            "query_language": detect_language(text),
+            "matches": matches,
+            "searched_collections": searched,
+            "note": note,
+        }
+
+    async def _forward_index(self) -> ForwardIndex:
+        if self._forward is not None:
+            return self._forward
+        if self._remote is None:
+            raise LibraryUnavailableError("Checking forwards needs the hadith collections, which are not enabled")
+        if self._forward_task is None:
+            self._forward_task = asyncio.create_task(self._build_forward())
+        task = self._forward_task
+        try:
+            self._forward = await asyncio.wait_for(asyncio.shield(task), timeout=self._forward_wait)
+        except asyncio.TimeoutError:
+            raise LibraryUnavailableError(
+                "Safha is preparing the hadith collections for the first time. Try again in a minute."
+            ) from None
+        except Exception:
+            self._forward_task = None  # try again on the next request
+            raise LibraryUnavailableError("The hadith collections could not be fetched for checking") from None
+        return self._forward
+
+    async def _build_forward(self) -> ForwardIndex:
+        path = self._forward_cache
+        if path is not None and path.exists():
+            try:
+                return await asyncio.to_thread(lambda: pickle.loads(path.read_bytes()))
+            except Exception:  # a stale or broken file is rebuilt
+                log.warning("forward index at %s unreadable; rebuilding", path)
+        index = ForwardIndex()
+        for c in self._collections.values():
+            cfg = self._remote_config(c)
+            if cfg is None:
+                continue
+            for lang, edition_name in editions_for(cfg).items():
+                try:
+                    edition = await self._remote.edition(edition_name)
+                except RemoteFetchError:
+                    continue
+                await asyncio.to_thread(index.add_edition, c["slug"], lang, edition)
+                del edition  # editions are large; keep only the index
+        if not index.collections:
+            raise RemoteFetchError("no hadith edition could be fetched")
+        if path is not None:
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                data = await asyncio.to_thread(pickle.dumps, index)
+                path.write_bytes(data)
+            except OSError:
+                log.warning("could not save forward index to %s", path)
+        return index
 
     def search(self, query: str) -> dict:
         q_ar = normalize_arabic(query)

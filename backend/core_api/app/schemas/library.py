@@ -2,7 +2,7 @@
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.schemas.common import PaginatedResponse
 
@@ -192,3 +192,24 @@ class SearchOut(BaseModel):
 CollectionPage = PaginatedResponse[CollectionBrief]
 BookPage = PaginatedResponse[BookOut]
 HadithPage = PaginatedResponse[HadithSummary]
+
+
+# --- Forward check ---
+
+class ForwardCheckIn(BaseModel):
+    """A forwarded message to look up, in Arabic, Urdu or English."""
+    text: str = Field(..., min_length=10, max_length=3000)
+
+
+class ForwardMatchOut(BaseModel):
+    band: Literal["strong", "possible"]
+    score: float
+    language: Literal["ar", "ur", "en"]
+    hadith: HadithSummary
+
+
+class ForwardCheckOut(BaseModel):
+    query_language: Literal["ar", "ur", "en"]
+    matches: list[ForwardMatchOut]
+    searched_collections: list[str]
+    note: str
