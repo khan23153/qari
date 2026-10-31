@@ -20,14 +20,16 @@ import 'local_storage_service.dart';
 /// foreground service). Starting it is what makes the OS grant capture focus on
 /// Android 14+; it is non-fatal if it fails (capture is still attempted).
 const MethodChannel _micForegroundChannel =
-    MethodChannel('com.qari.app/mic_foreground');
+    MethodChannel('com.aiquranic.safha/mic_foreground');
 
 /// PCM16 audio frames captured natively inside the foreground service.
-const EventChannel _micStreamChannel = EventChannel('com.qari.app/mic_stream');
+const EventChannel _micStreamChannel =
+    EventChannel('com.aiquranic.safha/mic_stream');
 
 /// Status / error text from the native capture (e.g. "capture started:
 /// rate=16000", "capture error: ..."), surfaced live in the diag line.
-const EventChannel _micStatusChannel = EventChannel('com.qari.app/mic_status');
+const EventChannel _micStatusChannel =
+    EventChannel('com.aiquranic.safha/mic_status');
 
 /// Connection state of a live recitation streaming session.
 enum LiveConnectionState {

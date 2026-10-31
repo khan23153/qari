@@ -65,7 +65,7 @@ jobs:
           cp mobile/build/app/outputs/flutter-apk/app-release.apk "$PREVIEW_APK"
           BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)
           "$BUILD_TOOLS/aapt" dump badging "$PREVIEW_APK" | tee build-preview/package.txt
-          grep -q "package: name='com.qari.app.uipreview'" build-preview/package.txt
+          grep -q "package: name='com.aiquranic.safha.uipreview'" build-preview/package.txt
           grep -q "native-code: 'arm64-v8a'" build-preview/package.txt
           "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$PREVIEW_APK"
           sha256sum "$PREVIEW_APK" | tee build-preview/SHA256SUMS.txt

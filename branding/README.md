@@ -17,5 +17,7 @@ Playwright Chromium on the dev machine):
 - `play-store-icon-512.png` for the Play Console, `safha-icon-1024.png` as
   the master bitmap.
 
-The Android package ID stays `com.qari.app` so existing installs keep
-updating.
+Package / bundle ID: `com.aiquranic.safha` on Android and iOS (the preview
+and mic-test builds add `.uipreview` and `.micpilot`). It changed from
+`com.qari.app` before the Play Store launch, so the current test installs
+do not update in place: uninstall the old app once.

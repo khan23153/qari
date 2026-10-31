@@ -1,4 +1,4 @@
-package com.qari.app
+package com.aiquranic.safha
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -385,7 +385,7 @@ class MicForegroundService : Service() {
             if (mgr.getNotificationChannel(CHANNEL_ID) == null) {
                 val channel = NotificationChannel(
                     CHANNEL_ID,
-                    "Qari Microphone Capture",
+                    "Safha Microphone Capture",
                     NotificationManager.IMPORTANCE_LOW,
                 )
                 channel.setShowBadge(false)
@@ -414,7 +414,7 @@ class MicForegroundService : Service() {
             Notification.Builder(this)
         }
         builder
-            .setContentTitle("Qari is listening")
+            .setContentTitle("Safha is listening")
             .setContentText("Recording your recitation. Tap to return.")
             .setSmallIcon(R.drawable.ic_mic_notification)
             .setContentIntent(contentIntent)
