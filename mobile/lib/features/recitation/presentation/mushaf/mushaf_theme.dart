@@ -180,19 +180,21 @@ class MushafTheme {
     ornament: Color(0xFFB8860B),
   );
 
-  /// 2. Night / OLED — charcoal paper, white ink and emerald controls.
+  /// 2. Night / OLED — Safha's own night: the app's "Contemplative Night"
+  /// warm charcoal, ivory ink and amber controls, matching the app icon.
+  /// The green stays only where it means "correct".
   static const night = MushafTheme(
     id: 'night',
     label: 'Night / OLED',
     arabicLabel: 'ليلي',
-    background: Color(0xFF181917),
-    text: Color(0xFFF5F5F0),
-    accent: Color(0xFF54DEA2),
-    border: Color(0xFF30332F),
+    background: Color(0xFF15110C),
+    text: Color(0xFFF2ECE4),
+    accent: Color(0xFFD98C3C),
+    border: Color(0xFF3D3225),
     correctTint: Color(0xFF1B3B2B),
-    activeTint: Color(0xFF284A2D),
+    activeTint: Color(0xFF3D2B12),
     mismatchInk: Color(0xFFEF4444),
-    ornament: Color(0xFFBAC9B9),
+    ornament: Color(0xFFE3AE62),
   );
 
   /// 3. Parchment / Sepia — warm sepia, espresso ink, terracotta accent.

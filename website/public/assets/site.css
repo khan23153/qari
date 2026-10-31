@@ -185,7 +185,7 @@ h3 { font-size: 1.25rem; font-weight: 600; line-height: 1.3; }
   padding: 9% 7% 5%;
   transition: background-color 240ms ease, color 240ms ease;
 }
-.mushaf[data-theme="night"] { --m-paper: #181917; --m-ink: #F5F5F0; --m-accent: #54DEA2; --m-marker: #F5F5F0; }
+.mushaf[data-theme="night"] { --m-paper: #15110C; --m-ink: #F2ECE4; --m-accent: #D98C3C; --m-marker: #F2ECE4; }
 .mushaf[data-theme="parchment"] { --m-paper: #F4ECD8; --m-ink: #2C221E; --m-accent: #B05A3C; --m-marker: #B05A3C; }
 .mushaf[data-theme="minimal"] { --m-paper: #FFFFFF; --m-ink: #000000; --m-accent: #5A5A5A; --m-marker: #5A5A5A; }
 .mushaf-sheet {
