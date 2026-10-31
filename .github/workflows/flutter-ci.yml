@@ -8,10 +8,12 @@ on:
     paths:
       - "mobile/**"
       - ".github/workflows/flutter-ci.yml"
+      - "scripts/ci_verify_apk.sh"
   pull_request:
     paths:
       - "mobile/**"
       - ".github/workflows/flutter-ci.yml"
+      - "scripts/ci_verify_apk.sh"
   workflow_dispatch:
 
 permissions:
@@ -37,6 +39,8 @@ jobs:
       - name: Initialize Android build and wrapper
         working-directory: mobile
         run: flutter build apk --debug --no-pub
+      - name: APK installs on Android 7.0+ and 32/64-bit phones
+        run: ./scripts/ci_verify_apk.sh mobile/build/app/outputs/flutter-apk/app-debug.apk
       - name: Native microphone waveform tests
         working-directory: mobile/android
         run: bash ./gradlew :app:testDebugUnitTest --no-daemon

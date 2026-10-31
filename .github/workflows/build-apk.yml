@@ -31,6 +31,10 @@ on:
         description: "Release notes (English) for app_release.json"
         type: string
         default: ""
+      publish_release:
+        description: "Publish the APK as a GitHub Release (public download link)"
+        type: boolean
+        default: true
 
 concurrency:
   group: build-apk-${{ github.ref }}
@@ -59,6 +63,15 @@ jobs:
         with:
           channel: stable
           cache: true
+
+      # Same release key on every build, or new APKs cannot update old ones.
+      - name: Set up release signing
+        env:
+          SAFHA_KEYSTORE_BASE64: ${{ secrets.SAFHA_KEYSTORE_BASE64 }}
+          SAFHA_KEYSTORE_PASSWORD: ${{ secrets.SAFHA_KEYSTORE_PASSWORD }}
+          SAFHA_KEY_ALIAS: ${{ secrets.SAFHA_KEY_ALIAS }}
+          SAFHA_KEY_PASSWORD: ${{ secrets.SAFHA_KEY_PASSWORD }}
+        run: ./scripts/ci_android_signing.sh --required
 
       - name: Build release APK (release_app.sh)
         env:
@@ -96,6 +109,14 @@ jobs:
           echo "$PACKAGE"
           echo "$PACKAGE" | grep -F "name='$EXPECTED'"
 
+      - name: Verify APK installs on all supported phones
+        env:
+          MIC_PILOT: ${{ inputs.mic_pilot }}
+        run: |
+          APK=releases/app-release.apk
+          if [ "$MIC_PILOT" = "true" ]; then APK=releases/app-mic-pilot.apk; fi
+          ./scripts/ci_verify_apk.sh "$APK" --release-key
+
       - name: Read built version
         id: version
         env:
@@ -131,3 +152,25 @@ jobs:
           git commit -m "build(release): v${{ steps.version.outputs.version }} via GitHub Actions"
           git pull --rebase origin "${GITHUB_REF_NAME}"
           git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      # A public link anyone can install from, without a GitHub account:
+      #   https://github.com/<owner>/<repo>/releases/latest/download/Safha.apk
+      - name: Publish GitHub Release
+        if: ${{ inputs.publish_release && !inputs.mic_pilot }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          NOTES_EN: ${{ inputs.notes_en }}
+        run: |
+          TAG="v${VERSION/+/-}"
+          cp releases/app-release.apk "$RUNNER_TEMP/Safha.apk"
+          NOTES="${NOTES_EN:-Safha $VERSION}"
+          NOTES="$NOTES
+
+          Install: download Safha.apk on your phone and open it (Android 7.0 or newer)."
+          gh release create "$TAG" "$RUNNER_TEMP/Safha.apk" \
+            --title "Safha $VERSION" \
+            --notes "$NOTES" \
+            --target "$(git rev-parse HEAD)" \
+            --latest
+          echo "Download: https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/Safha.apk" >> "$GITHUB_STEP_SUMMARY"

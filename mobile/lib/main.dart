@@ -46,7 +46,11 @@ Future<void> main() async {
     );
   };
 
-  // Catch async/Dart errors and show them instead of hard-crashing.
+  // Catch async/Dart errors instead of hard-crashing. Before the app is up,
+  // show the error (there is nothing else to show). Once it is running, a
+  // stray background error (a dropped connection, a sensor stream) is only
+  // logged: replacing the whole app with an error screen looked like a crash.
+  var appStarted = false;
   runZonedGuarded(() async {
 
     FlutterError.onError = (details) {
@@ -70,6 +74,7 @@ Future<void> main() async {
         child: QariApp(),
       ),
     );
+    appStarted = true;
 
     // On startup, if a previous native crash was captured by the
     // UncaughtExceptionHandler in MainActivity, read it and echo it to the VPS
@@ -77,6 +82,7 @@ Future<void> main() async {
     _reportNativeCrashIfAny();
   }, (error, stack) {
     debugPrint('Uncaught error: $error\n$stack');
+    if (appStarted) return;
     runApp(
       MaterialApp(
         debugShowCheckedModeBanner: false,
