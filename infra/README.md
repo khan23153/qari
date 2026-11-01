@@ -59,8 +59,10 @@ session metadata expires, even if a file remains on disk.
 
 A second opinion on words the ASR heard as right. It reads the expected phonemes
 of the ayah (from `ml/assets/quran_phonemes.json.gz`) and the recorded audio, and
-marks a word red only when it is confident (bundled threshold 0.35; on QuranMB.v2
-precision 0.82, false alarms 0.68% per phoneme). It never clears an ASR verdict.
+marks a word red only when it is confident. Measured end to end on QuranMB.v2
+(1,642 human-annotated recordings) at the default threshold 0.5
+(`QARI_PRON_VERIFIER_THRESHOLD`): precision 0.82, recall 0.44, false alarms 0.65%
+per phoneme. It never clears an ASR verdict.
 
 1. Copy `models/safha-mdd-v3/` from the `safha-latest` bundle into `QARI_MODELS_DIR`.
 2. In `infra/.env`: `QARI_PRON_VERIFIER_DIR=/app/models/safha-mdd-v3`.

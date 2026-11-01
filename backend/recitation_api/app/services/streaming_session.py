@@ -208,7 +208,7 @@ EVIDENCE_POLICY = os.environ.get("QARI_EVIDENCE_POLICY", "tier2").lower()
 # Reference-aware pronunciation model (Safha MDD v3). Off unless the model
 # directory is configured. It only ADDS red marks to words the ASR heard as
 # right, and only when its own confidence passes the bundled threshold
-# (QuranMB.v2: precision 0.82, false alarms 0.68% per phoneme).
+# (QuranMB.v2 end to end at 0.5: precision 0.82, false alarms 0.65% per phoneme).
 PRON_VERIFIER_DIR = os.environ.get("QARI_PRON_VERIFIER_DIR", "").strip()
 _pron_verifier_state: dict = {}
 
@@ -220,7 +220,8 @@ def _get_pron_verifier():
     if "model" not in _pron_verifier_state:
         try:
             from ml.inference.pronunciation_verifier import PronunciationVerifier
-            _pron_verifier_state["model"] = PronunciationVerifier(PRON_VERIFIER_DIR).load()
+            threshold = float(os.environ.get("QARI_PRON_VERIFIER_THRESHOLD", "0.5"))
+            _pron_verifier_state["model"] = PronunciationVerifier(PRON_VERIFIER_DIR, threshold=threshold).load()
             logger.info("pron_verifier.loaded", model_dir=PRON_VERIFIER_DIR)
         except Exception as exc:  # pragma: no cover - missing weights / deps
             logger.warning("pron_verifier.unavailable", model_dir=PRON_VERIFIER_DIR, error=str(exc))

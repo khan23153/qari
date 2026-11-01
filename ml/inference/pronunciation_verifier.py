@@ -11,9 +11,14 @@ Model files (from the safha-latest bundle, ``models/safha-mdd-v3``):
   vocab.json                                                  (IqraEval phoneme set; index 0 = CTC blank)
   decision.json                                               ({"threshold": 0.35, "verifier": {...}})
 
-QuranMB.v2 test (human-annotated) at the bundled threshold: precision 0.82,
-recall 0.47, false alarms 0.68% per phoneme. It is meant to ADD red marks only
-when confident, never to clear an ASR verdict.
+QuranMB.v2 test (1,642 human-annotated recordings), end to end with the
+phonemes from ``ml/alignment/quran_g2p.py``:
+
+    threshold 0.35: precision 0.79, recall 0.45, false alarms 0.78% per phoneme
+    threshold 0.50: precision 0.82, recall 0.44, false alarms 0.65%  (app default)
+    (IqraEval's own phonemes at 0.35: precision 0.84, recall 0.48, 0.63%)
+
+It is meant to ADD red marks only when confident, never to clear an ASR verdict.
 
 Heavy imports (torch, transformers) happen in ``load``; importing this module
 is cheap and safe in tests.
@@ -60,11 +65,13 @@ def word_verdicts(word_phonemes: Sequence[Sequence[str]], result: VerifierResult
 class PronunciationVerifier:
     """Loads the v3 model once; ``score`` is thread-safe for inference (no grad, eval mode)."""
 
-    def __init__(self, model_dir: str | Path, *, device: str = "cpu"):
+    def __init__(self, model_dir: str | Path, *, device: str = "cpu", threshold: Optional[float] = None):
         self.model_dir = Path(model_dir)
         self.device = device
         decision = json.loads((self.model_dir / "decision.json").read_text())
-        self.threshold = float(decision.get("threshold", 0.35))
+        # decision.json holds the threshold picked with IqraEval's own phonemes (0.35).
+        # With our phonemizer, 0.5 gives the same precision on QuranMB.v2 (0.82, false alarms 0.65%).
+        self.threshold = float(threshold if threshold is not None else decision.get("threshold", 0.35))
         self._arch = decision.get("verifier", {})
         self.vocab: list[str] = json.loads((self.model_dir / "vocab.json").read_text())
         self.phoneme_id = {p: i for i, p in enumerate(self.vocab)}
