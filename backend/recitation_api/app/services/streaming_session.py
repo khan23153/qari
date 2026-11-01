@@ -205,6 +205,28 @@ FINAL_RECORDING_CHUNK_SEC = 30
 # live reveal.
 EVIDENCE_POLICY = os.environ.get("QARI_EVIDENCE_POLICY", "tier2").lower()
 
+# Reference-aware pronunciation model (Safha MDD v3). Off unless the model
+# directory is configured. It only ADDS red marks to words the ASR heard as
+# right, and only when its own confidence passes the bundled threshold
+# (QuranMB.v2: precision 0.82, false alarms 0.68% per phoneme).
+PRON_VERIFIER_DIR = os.environ.get("QARI_PRON_VERIFIER_DIR", "").strip()
+_pron_verifier_state: dict = {}
+
+
+def _get_pron_verifier():
+    """The loaded verifier, or None when disabled or unavailable (never raises)."""
+    if not PRON_VERIFIER_DIR:
+        return None
+    if "model" not in _pron_verifier_state:
+        try:
+            from ml.inference.pronunciation_verifier import PronunciationVerifier
+            _pron_verifier_state["model"] = PronunciationVerifier(PRON_VERIFIER_DIR).load()
+            logger.info("pron_verifier.loaded", model_dir=PRON_VERIFIER_DIR)
+        except Exception as exc:  # pragma: no cover - missing weights / deps
+            logger.warning("pron_verifier.unavailable", model_dir=PRON_VERIFIER_DIR, error=str(exc))
+            _pron_verifier_state["model"] = None
+    return _pron_verifier_state["model"]
+
 # A transcriber turns a float32 mono 16 kHz signal into (normalized_words,
 # per_word_confidences).
 Transcriber = Callable[["object", int], "tuple[list[str], list[float]]"]
@@ -1033,6 +1055,7 @@ class StreamingRecitationSession:
         self._hypothesis_raw: list[Optional[str]] = []
         self._heard_word_evidence: dict[int, dict] = {}
         self._harakat_errors: dict[int, dict] = {}
+        self._pron_errors: dict[int, dict] = {}
         self._confirmed_live_omissions: set[int] = set()
         self._canonical_reference_raw = False
         self._hypothesis_timings: list[tuple[float, float]] = []
@@ -2413,6 +2436,76 @@ class StreamingRecitationSession:
                     "compared_positions": list(comparison.compared_positions),
                 })
 
+    def _observe_pronunciation(self, states, verifier=None) -> None:
+        """Second opinion from the reference-aware pronunciation model.
+
+        Scores runs of words the ASR heard as correct (with their observed time
+        spans), one ayah at a time, against the phonemes they should have.
+        A word whose worst phoneme passes the model's threshold is marked as a
+        pronunciation mistake. Runs synchronously (call via asyncio.to_thread).
+        """
+        verifier = verifier or _get_pron_verifier()
+        if verifier is None or self._is_stub or not self._pcm:
+            return
+        from ml.alignment.quran_g2p import ayah_word_phonemes, phonemize_words
+        from ml.inference.pronunciation_verifier import MAX_WINDOW_S, word_verdicts
+
+        bounds = sorted(self.ayah_boundaries, key=lambda b: int(b["word_index_end"]))
+        ayah_end = [int(b["word_index_end"]) for b in bounds]
+        def ayah_of(index):
+            return next((k for k, end in enumerate(ayah_end) if index <= end), len(ayah_end))
+
+        def phonemes_for(run):
+            """Lexicon phonemes (whole-ayah context, plain spelling); else read the words directly."""
+            k = ayah_of(run[0])
+            if k < len(bounds):
+                start = ayah_end[k - 1] + 1 if k else 0
+                lex = ayah_word_phonemes(int(bounds[k].get("surah", 0)), int(bounds[k].get("ayah", 0)))
+                if lex and len(lex) == ayah_end[k] - start + 1:
+                    return [lex[i - start] for i in run]
+            return phonemize_words([self.word_entries[i]["text_with_tashkeel"] for i in run])
+
+        good = sorted(
+            st.index for st in states
+            if st.status.value == "matched" and st.index in self._heard_word_evidence
+            and st.index not in self._harakat_errors
+            and 0 <= st.index < len(self.word_entries)
+            and self.word_entries[st.index].get("text_with_tashkeel")
+        )
+        runs: list[list[int]] = []
+        for index in good:
+            span = self._heard_word_evidence[index]["span"]
+            run = runs[-1] if runs else None
+            if (run and index == run[-1] + 1 and ayah_of(index) == ayah_of(run[-1])
+                    and span[1] - self._heard_word_evidence[run[0]]["span"][0] <= MAX_WINDOW_S - .6):
+                run.append(index)
+            else:
+                runs.append([index])
+        if not runs:
+            return
+        audio = self._decode_float()
+        sr = self.sample_rate
+        for run in runs:
+            start = max(0.0, self._heard_word_evidence[run[0]]["span"][0] - .25)
+            end = min(self.duration_seconds, self._heard_word_evidence[run[-1]]["span"][1] + .35)
+            window = audio[int(start * sr):int(end * sr)]
+            if sr != 16000:
+                continue  # the model expects 16 kHz; the live client sends 16 kHz
+            words = [self.word_entries[i]["text_with_tashkeel"] for i in run]
+            try:
+                per_word = phonemes_for(run)
+                result = verifier.score(window, [p for w in per_word for p in w])
+                scores = word_verdicts(per_word, result)
+            except Exception as exc:  # pragma: no cover - never fail a session on the extra opinion
+                logger.warning("pron_verifier.score_failed", session_id=self.session_id, error=str(exc))
+                return
+            for index, word, score in zip(run, words, scores):
+                if score is not None and score >= result.threshold:
+                    self._pron_errors[index] = {
+                        "expected": word, "raw": word, "confidence": float(score),
+                        "conflicts": [], "source": "pronunciation_model",
+                    }
+
     def _observe_final_harakat(self, states, native) -> None:
         """Use the final matcher's native slot, including its invocation offset."""
         if native is None or not hasattr(native, "raw_words") or not hasattr(native, "timings"):
@@ -2838,8 +2931,12 @@ class StreamingRecitationSession:
         evidence_confidences = []
         self._observe_harakat(states, is_stream_end=True)
         self._observe_final_harakat(states, final_native)
+        try:
+            await asyncio.to_thread(self._observe_pronunciation, states)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("pron_verifier.failed", session_id=self.session_id, error=str(exc))
         for st in states:
-            harakat = self._harakat_errors.get(st.index)
+            harakat = self._harakat_errors.get(st.index) or self._pron_errors.get(st.index)
             supported = (
                 st.status in (WordStatus.MATCHED, WordStatus.ERROR)
                 and bool(st.spoken)
@@ -2863,14 +2960,16 @@ class StreamingRecitationSession:
                 "expected_text": harakat["expected"] if harakat else st.expected,
                 "actual_text": harakat["raw"] if harakat else st.spoken,
                 "observed_text": harakat["raw"] if harakat else st.spoken,
-                "evidence_source": "asr_diacritic" if harakat else "lexical_asr",
+                "evidence_source": harakat.get("source", "asr_diacritic") if harakat else "lexical_asr",
                 "harakat_conflicts": harakat["conflicts"] if harakat else [],
                 "display_color": "#EF4444" if supported and not is_correct else None,
                 "error_type": ("harakat_mistake" if harakat else None if is_correct
                                else "missed" if st.omission_confirmed else "substituted"
                                if st.status == WordStatus.ERROR else st.status.value),
                 "error_description": (
-                    "An explicitly observed vowel differs from the reference." if harakat
+                    ("The pronunciation model heard a sound in this word that differs from the reference."
+                     if harakat.get("source") == "pronunciation_model"
+                     else "An explicitly observed vowel differs from the reference.") if harakat
                     else None if is_correct else _describe(st.status.value)
                 ),
                 "reference_audio_url": self.reference_audio_url or None,

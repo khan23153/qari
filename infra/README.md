@@ -54,3 +54,19 @@ metadata. Ownerless records from older deployments cannot be assigned safely
 and return 404; their usual 24-hour Redis expiration remains in place. Clients
 should offer a fresh recording. Audio becomes unavailable after the associated
 session metadata expires, even if a file remains on disk.
+
+## Optional: pronunciation model (Safha MDD v3)
+
+A second opinion on words the ASR heard as right. It reads the expected phonemes
+of the ayah (from `ml/assets/quran_phonemes.json.gz`) and the recorded audio, and
+marks a word red only when it is confident (bundled threshold 0.35; on QuranMB.v2
+precision 0.82, false alarms 0.68% per phoneme). It never clears an ASR verdict.
+
+1. Copy `models/safha-mdd-v3/` from the `safha-latest` bundle into `QARI_MODELS_DIR`.
+2. In `infra/.env`: `QARI_PRON_VERIFIER_DIR=/app/models/safha-mdd-v3`.
+3. `docker compose up -d recitation-api`. The model (1.2 GB) loads on the first
+   finished session; scoring takes about half the audio length on 2 CPU cores.
+
+Words it marks come back as `error_type: "harakat_mistake"` with
+`evidence_source: "pronunciation_model"`. Rebuild the phoneme lexicon after a
+corpus change with `python scripts/build_quran_phonemes.py`.
