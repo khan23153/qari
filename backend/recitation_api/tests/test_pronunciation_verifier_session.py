@@ -1,5 +1,8 @@
-"""The v3 pronunciation model runs in shadow mode unless qualified; when
-qualified it only adds confident red marks to heard words."""
+"""The pronunciation model never runs in the live server unless qualified by a
+trusted evaluation bundle; when qualified it only adds confident red marks to
+heard words. Unqualified research scoring is offline (export only here).
+
+These tests use a fake model: they check the plumbing, not what the model hears."""
 import struct
 import types
 
@@ -42,10 +45,8 @@ class FakeVerifier:
 
 
 @pytest.fixture(autouse=True)
-def qualified(monkeypatch):
-    """Most tests exercise the marking logic of a qualified model."""
+def fresh_state():
     ss._pron_verifier_state.clear()
-    monkeypatch.setattr(ss, "_pron_verifier_qualified", lambda v: True)
 
 
 @pytest.fixture
@@ -108,72 +109,63 @@ def test_lexicon_phonemes_are_used_for_known_ayahs():
     assert v.calls[0][1] == ["ll", "a", "h", "i", "rr", "a", "H", "m", "a", "n", "i"]
 
 
-def test_unqualified_model_is_shadow_only(monkeypatch, one_phoneme_per_word):
-    monkeypatch.setattr(ss, "_pron_verifier_qualified", lambda v: False)
+class CountingVerifier(FakeVerifier):
+    def __init__(self):
+        super().__init__(bad=set())
+        self.loads = 0
+        self.loaded = False
+
+    def load(self):
+        self.loads += 1
+        self.loaded = True
+        return self
+
+
+def test_unqualified_model_is_never_loaded_or_scored(monkeypatch, one_phoneme_per_word):
+    v = CountingVerifier()
+    monkeypatch.setattr(ss, "_pron_verifier_instance", lambda: v)
+    monkeypatch.setattr(ss, "_pron_verifier_qualified", lambda verifier: False)
+    s = session(["رَبِّ"], [(.1, .6)], [{"surah": 1, "ayah": 2, "word_index_end": 0}])
+    s._qualified_pronunciation(matched(0))
+    assert v.loads == 0 and v.calls == [] and not s._pron_errors and not s._pron_assessed
+
+
+def test_qualified_model_marks_and_reports_assessed(monkeypatch, one_phoneme_per_word):
+    v = CountingVerifier()
+    v.bad = {"رَبِّ"}
+    monkeypatch.setattr(ss, "_pron_verifier_instance", lambda: v)
+    monkeypatch.setattr(ss, "_get_pron_verifier", lambda: v.load())
+    monkeypatch.setattr(ss, "_pron_verifier_qualified", lambda verifier: True)
+    s = session(["رَبِّ", "الْعَالَمِينَ"], [(.1, .6), (.7, 1.4)], [{"surah": 1, "ayah": 2, "word_index_end": 1}])
+    s._qualified_pronunciation(matched(0, 1))
+    assert list(s._pron_errors) == [0] and s._pron_assessed == {0, 1}
+    assert not ss._PRON_LOCK.locked()
+
+
+def test_export_writes_worker_inputs_without_a_model(monkeypatch, tmp_path, one_phoneme_per_word):
+    import json
+    monkeypatch.setattr(ss.settings, "audio_storage_path", str(tmp_path))
     words = ["بِسْمِ", "اللَّهِ"]
     s = session(words, [(.1, .5), (.6, 1.0)], [{"surah": 1, "ayah": 1, "word_index_end": 1}])
-    s._observe_pronunciation(matched(0, 1), verifier=FakeVerifier(bad={"اللَّهِ"}))
-    assert not s._pron_errors  # nothing shown to the user
-    shadow = s._pron_shadow
-    assert shadow["qualified"] is False and shadow["model_sha256"] == "f" * 64
-    assert [(w["word_index"], w["flagged"]) for w in shadow["words"]] == [(0, False), (1, True)]
-    assert shadow["words"][1]["audio_span_ms"] == [600, 1000]
+    path = s._export_pronunciation_inputs(matched(0, 1))
+    data = json.loads(open(path).read())
+    run = data["runs"][0]
+    assert run["word_indices"] == [0, 1] and run["phonemes"] == [[w] for w in words]
+    assert run["window"] == [0.0, 1.35] and (run["surah"], run["ayah"]) == (1, 1)
 
 
-def _gate(monkeypatch, tmp_path, report, verdict):
-    path = tmp_path / "report.json"
-    path.write_text(__import__("json").dumps(report))
-    monkeypatch.undo()  # drop the autouse "qualified" override
-    ss._pron_verifier_state.clear()
-    monkeypatch.setattr(ss, "PRON_VERIFIER_REPORT", str(path))
+def test_qualification_uses_trusted_bundle_and_pipeline_fingerprint(monkeypatch):
     seen = []
     import ml.evaluation.pronunciation as pron
-    monkeypatch.setattr(pron, "qualified_for_model", lambda r, sha: seen.append((r, sha)) or verdict)
-    return seen
-
-
-def test_report_must_qualify_this_exact_fingerprint(monkeypatch, tmp_path):
-    seen = _gate(monkeypatch, tmp_path, {"qualified": True}, True)
+    monkeypatch.setattr(ss, "PRON_VERIFIER_REPORT", "/bundle")
+    monkeypatch.setattr(pron, "verify_evaluation_bundle", lambda path, sha: seen.append((path, sha)) or (True, "ok"))
     v = FakeVerifier(bad=set())
     assert ss._pron_verifier_qualified(v) is True
-    assert seen == [({"qualified": True}, "f" * 64)]
-    # the session's own windowing / word-folding code is part of the fingerprint
-    assert "def _observe_pronunciation" in v.extra[0]
+    assert seen == [("/bundle", "f" * 64)]
+    assert any("def _observe_pronunciation" in src for src in v.extra)
+    assert any("def _pronunciation_runs" in src for src in v.extra)
 
 
-def test_failing_report_keeps_shadow(monkeypatch, tmp_path):
-    _gate(monkeypatch, tmp_path, {"qualified": False}, False)
-    assert ss._pron_verifier_qualified(FakeVerifier(bad=set())) is False
-
-
-def test_no_report_means_shadow(monkeypatch):
-    monkeypatch.undo()
-    ss._pron_verifier_state.clear()
+def test_no_bundle_means_off(monkeypatch):
     monkeypatch.setattr(ss, "PRON_VERIFIER_REPORT", "")
     assert ss._pron_verifier_qualified(FakeVerifier(bad=set())) is False
-
-
-def test_real_gate_rejects_v3_numbers():
-    """The shipped policy itself refuses a report with v3's QuranMB.v2 numbers."""
-    from ml.evaluation.pronunciation import qualified_for_model
-    assert not qualified_for_model({"schema_version": 1, "scope": "phonemic_pronunciation",
-                                    "model_sha256": "f" * 64, "qualified": False,
-                                    "precision": .82, "recall": .44}, "f" * 64)
-
-
-def test_shadow_run_drops_work_when_model_busy(monkeypatch, one_phoneme_per_word):
-    monkeypatch.setattr(ss, "_pron_verifier_qualified", lambda v: False)
-    s = session(["رَبِّ"], [(.1, .6)], [{"surah": 1, "ayah": 2, "word_index_end": 0}])
-    v = FakeVerifier(bad={"رَبِّ"})
-    with ss._PRON_LOCK:
-        s._shadow_pronunciation(matched(0), verifier=v)
-    assert v.calls == [] and not s._pron_shadow
-
-
-def test_shadow_run_scores_but_never_marks(monkeypatch, one_phoneme_per_word):
-    monkeypatch.setattr(ss, "_pron_verifier_qualified", lambda v: False)
-    s = session(["رَبِّ"], [(.1, .6)], [{"surah": 1, "ayah": 2, "word_index_end": 0}])
-    s._shadow_pronunciation(matched(0), verifier=FakeVerifier(bad={"رَبِّ"}))
-    assert not s._pron_errors
-    assert s._pron_shadow["words"][0]["flagged"] is True
-    assert not ss._PRON_LOCK.locked()

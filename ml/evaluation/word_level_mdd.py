@@ -8,11 +8,18 @@ dump of per-phoneme probabilities (one JSON line per recording: ``id``,
 ``ours`` into word records, then reports per error kind:
 
 - detected / missed mistakes, false accusations on correct words;
+- per kind: recall over words with that error; precision and false-alarm rate
+  of flags *attributed* to that kind (the kind of the word's highest-scoring
+  phoneme), with the correct-word denominator;
+- "uncertain" words (an error placed on a word through a phoneme our
+  phonemizer does not have, or a word where our phonemes differ from the
+  dataset's reference) reported separately, and metrics on certain words only;
 - precision, recall, false-alarm rate with Wilson 95% intervals;
 - precision at a realistic error rate (QuranMB.v2 is made of deliberate errors,
   so its precision overstates what users would see);
 - spread across speakers (IDs ``SSSSS_xxxxx``; the prefix groups recordings,
-  18 groups like the 18 speakers of the QuranMB paper, unconfirmed).
+  18 groups like the 18 speakers of the QuranMB paper; NOT verified to be
+  speakers, so per-group spread is a proxy, not speaker-level evidence).
 
 Usage: python -m ml.evaluation.word_level_mdd probs.jsonl ref_words.json [--threshold 0.5]
 """
@@ -62,8 +69,13 @@ def error_kind(ref_phone, heard):
     return "consonant"
 
 
+def phone_kind(p):
+    return "vowel" if p in VOWELS else "gemination" if _geminate(p) else "consonant"
+
+
 def word_records(rec, word_lens):
-    """One dict per word of ``ours`` with its score and true error kinds."""
+    """One dict per word of ``ours`` with its score, true error kinds, the kind
+    its flag would be attributed to, and whether its labels are uncertain."""
     ref, ann, ours, probs = rec["ref"], rec["ann"], rec["ours"], rec["probs"]
     a_ann = align(ref, ann)
     errors = {}  # ref position -> kind
@@ -76,22 +88,38 @@ def word_records(rec, word_lens):
     for w, n in enumerate(word_lens):
         word_of += [w] * n
     assert len(word_of) == len(ours) == len(probs), rec["id"]
-    kinds = defaultdict(set)
+    kinds, uncertain = defaultdict(set), set()
     for i, kind in errors.items():
         j = to_ours[i]
-        if j is None:  # our phonemizer has no counterpart: nearest mapped neighbour
+        if j is None:  # our phonemizer has no counterpart: nearest neighbour, marked uncertain
             left = next((to_ours[x] for x in range(i, -1, -1) if to_ours[x] is not None), None)
             right = next((to_ours[x] for x in range(i, len(ref)) if to_ours[x] is not None), None)
             j = left if left is not None else right
+            if j is not None:
+                uncertain.add(word_of[j])
         if j is not None:
             kinds[word_of[j]].add(kind)
+    # words where our phonemes differ from the dataset's reference
+    covered = defaultdict(list)
+    for i, j in enumerate(to_ours):
+        if j is not None:
+            covered[word_of[j]].append(ref[i] == ours[j])
+    matched_ours = {j for j in to_ours if j is not None}
+    for j in range(len(ours)):
+        if j not in matched_ours:
+            uncertain.add(word_of[j])
+    for w, same in covered.items():
+        if not all(same):
+            uncertain.add(w)
     out, start = [], 0
     for w, n in enumerate(word_lens):
         p = probs[start:start + n]
         start += n
+        top = max(range(n), key=lambda x: p[x]) if p else None
         out.append({"id": rec["id"], "speaker": rec["id"].split("_")[0], "word": w,
                     "max": max(p) if p else 0.0, "mean": sum(p) / len(p) if p else 0.0,
-                    "kinds": sorted(kinds.get(w, ()))})
+                    "pred_kind": phone_kind(ours[start - n + top]) if p else None,
+                    "uncertain": w in uncertain, "kinds": sorted(kinds.get(w, ()))})
     return out
 
 
@@ -119,12 +147,22 @@ def metrics(words, threshold, score="max", prevalence=0.03):
            "precision": round(tp / (tp + fp), 4) if tp + fp else None, "precision_ci": wilson(tp, tp + fp),
            "recall": round(recall, 4), "recall_ci": wilson(tp, tp + fn),
            "false_alarm_rate": round(far, 4), "false_alarm_ci": wilson(fp, fp + tn),
-           f"precision_at_{prevalence:.0%}_wrong_words": round(real, 4), "per_kind_recall": {}}
+           f"precision_at_{prevalence:.0%}_wrong_words": round(real, 4), "per_kind": {}}
+    correct_words = tn + fp
     for kind in ("vowel", "gemination", "consonant"):
         sel = [f for f, w in zip(flagged, words) if kind in w["kinds"]]
-        res["per_kind_recall"][kind] = {"wrong_words": len(sel), "detected": sum(sel),
-                                        "recall": round(sum(sel) / len(sel), 4) if sel else None,
-                                        "ci": wilson(sum(sel), len(sel))}
+        attributed = [w for f, w in zip(flagged, words) if f and w["pred_kind"] == kind]
+        right = sum(kind in w["kinds"] for w in attributed)
+        false = sum(not w["kinds"] for w in attributed)
+        res["per_kind"][kind] = {
+            "wrong_words": len(sel), "detected": sum(sel), "missed": len(sel) - sum(sel),
+            "recall": round(sum(sel) / len(sel), 4) if sel else None, "recall_ci": wilson(sum(sel), len(sel)),
+            "flags_attributed": len(attributed), "flags_right_kind": right,
+            "flags_on_correct_words": false, "correct_words": correct_words,
+            "precision": round(right / len(attributed), 4) if attributed else None,
+            "precision_ci": wilson(right, len(attributed)),
+            "false_alarm_rate": round(false / correct_words, 4) if correct_words else None,
+            "false_alarm_ci": wilson(false, correct_words)}
     by_spk = defaultdict(lambda: Counter())
     for f, t, w in zip(flagged, wrong, words):
         by_spk[w["speaker"]][(f, t)] += 1
@@ -152,8 +190,12 @@ def main(argv=None):
     kinds = Counter(k for w in words for k in w["kinds"])
     report = {"recordings": len({w["id"] for w in words}), "words": len(words),
               "wrong_words": sum(bool(w["kinds"]) for w in words), "error_kinds": dict(kinds),
+              "uncertain_words": sum(w["uncertain"] for w in words),
+              "uncertain_wrong_words": sum(w["uncertain"] and bool(w["kinds"]) for w in words),
               "results": [metrics(words, float(t), s) for s in ("max", "mean")
-                          for t in a.thresholds.split(",")]}
+                          for t in a.thresholds.split(",")],
+              "results_certain_words_only": [metrics([w for w in words if not w["uncertain"]], float(t))
+                                             for t in a.thresholds.split(",")]}
     text = json.dumps(report, indent=1)
     if a.out:
         open(a.out, "w").write(text)

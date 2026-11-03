@@ -63,37 +63,45 @@ scores each word. Measured end to end on QuranMB.v2 (1,642 human-annotated
 recordings) at the default threshold 0.5 (`QARI_PRON_VERIFIER_THRESHOLD`):
 precision 0.82, recall 0.44, false alarms 0.65% per phoneme.
 
-**It runs in shadow mode.** Those numbers are per phoneme on QuranMB.v2 and do
-not meet the release gate in `ml/evaluation/pronunciation.py` (word level, human
-labels, precision >= 0.98 and recall >= 0.90 per error kind, at least 5
-held-out speakers and 3 surahs). In shadow mode the final review is sent first;
-the model scores the session afterwards in the background, one session at a
-time (dropped when busy), and writes a `pron_verifier.shadow` log line
-(session id, fingerprint, threshold, per-word score and audio span). Users see
-nothing: no red marks, `pronunciation_available` stays false.
+**It does not run in the live server.** Those numbers are per phoneme on
+QuranMB.v2 and do not meet the release gate in `ml/evaluation/pronunciation.py`
+(word level, human labels, precision >= 0.98 and recall >= 0.90 per error kind,
+at least 5 held-out speakers and 3 surahs). Setting `QARI_PRON_VERIFIER_DIR`
+alone does nothing: the server only checks for a qualification bundle (in a
+worker thread, never on the event loop) and, without one, never loads the model.
 
-Cost measured on 2 x86 CPU cores (`scripts/bench_pronunciation_verifier.py`, re-measure on
-the ARM server before enabling): load 29 s, **4.2 GB RSS** after load; scoring
-1.9 s / 4.5 s / 7.7 s for 5 / 10 / 15 s of audio; two 10 s windows at once take
-7.5 s each, so scoring is serialised with a lock. Do not enable it on a server
-with less than ~5 GB free RAM next to the live ASR.
+Why not run it hidden next to the live ASR: measured on 2 x86 cores
+(`scripts/bench_pronunciation_verifier.py`, synthetic audio) it takes 29 s to
+load, **4.2 GB RSS** after load, and 1.9 / 4.5 / 7.7 s to score 5 / 10 / 15 s
+of audio; two windows at once take 7.5 s each. That does not fit beside the
+recognizer in a 6 GB container. Re-measure on the ARM server before any
+qualified rollout.
+
+Research ("shadow") scoring happens on an isolated worker instead:
+
+1. On the server, `QARI_PRON_SHADOW_EXPORT=1` writes `pron_inputs.json` (word
+   windows and expected phonemes; no model, no extra RAM) next to each
+   session's `audio.wav`.
+2. Copy those session folders to a separate machine or Kaggle and run
+   `python scripts/pron_shadow_worker.py SESSIONS_DIR MODEL_DIR`. It writes
+   `pron_shadow.json` per session (per-word and per-phoneme scores,
+   fingerprint, threshold) for human review. Users see nothing.
 
 Licence: the IqraEval datasets v3 was trained on (Iqra_train, Iqra_TTS,
 Iqra_Extra_IS26) are CC BY-NC 4.0. Get the organisers' permission before
 shipping this model in a product.
 
-1. Copy `models/safha-mdd-v3/` from the `safha-latest` bundle into `QARI_MODELS_DIR`.
-2. In `infra/.env`: `QARI_PRON_VERIFIER_DIR=/app/models/safha-mdd-v3`.
-3. `docker compose up -d recitation-api`.
-
-User-visible marks switch on only when `QARI_PRON_VERIFIER_REPORT` points to a
-report from `evaluate_pronunciation` that `qualified_for_model` accepts for the
-pipeline's fingerprint (`PronunciationVerifier.fingerprint()`: every model
-file, the threshold, the phoneme lexicon, the phonemizer and scorer source,
-torch/transformers/numpy versions, and the session's windowing code). Words it then marks come back as
+User-visible marks need `QARI_PRON_VERIFIER_DIR` plus
+`QARI_PRON_VERIFIER_REPORT` pointing to an evaluation bundle written by
+`write_evaluation_bundle` (human labels, model predictions, provenance with
+training speakers/audio and file hashes, report). The server recomputes the
+report from the raw rows with `verify_evaluation_bundle` and checks it against
+the pipeline fingerprint (`PronunciationVerifier.fingerprint()`: model files,
+threshold, phoneme lexicon, phonemizer and scorer source,
+torch/transformers/numpy versions, the session's windowing code). A lone
+report JSON is rejected. Marked words come back as
 `error_type: "harakat_mistake"` with `evidence_source: "pronunciation_model"`;
-it never clears an ASR verdict. Changing any of those changes the fingerprint
-and needs a new report.
+it never clears an ASR verdict.
 
 Rebuild the phoneme lexicon after a
 corpus change with `python scripts/build_quran_phonemes.py`.

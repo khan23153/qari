@@ -78,11 +78,12 @@ services:
       # Optional qualified independent decoder. The existing Whisper witness
       # remains the default and its model assets stay mounted for rollback.
       QARI_LIVE_ASR_ENGINE: ${QARI_LIVE_ASR_ENGINE:-faster_whisper}
-      # Optional pronunciation model (Safha MDD v3, bundle models/safha-mdd-v3).
-      # Shadow mode (scores stored, nothing shown) unless REPORT names a passing
-      # qualification report for this exact bundle. Empty DIR = off.
+      # Optional pronunciation model (Safha MDD v3). Not loaded unless REPORT
+      # names an evaluation bundle that qualifies this exact pipeline.
+      # SHADOW_EXPORT=1 only writes inputs for the offline worker (no model).
       QARI_PRON_VERIFIER_DIR: ${QARI_PRON_VERIFIER_DIR:-}
       QARI_PRON_VERIFIER_REPORT: ${QARI_PRON_VERIFIER_REPORT:-}
+      QARI_PRON_SHADOW_EXPORT: ${QARI_PRON_SHADOW_EXPORT:-}
       QARI_FASTCONFORMER_MODEL_DIR: ${QARI_FASTCONFORMER_MODEL_DIR:-/app/models/qari-fastconformer-pcd-rnnt-int8}
       # Trained Qari V50 model (LoRA merged + CT2 INT8, built from local files).
       QARI_FASTERWHISPER_MODEL_DIR: /app/models/qari-v50-ct2
