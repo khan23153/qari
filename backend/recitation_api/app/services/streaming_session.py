@@ -206,11 +206,33 @@ FINAL_RECORDING_CHUNK_SEC = 30
 EVIDENCE_POLICY = os.environ.get("QARI_EVIDENCE_POLICY", "tier2").lower()
 
 # Reference-aware pronunciation model (Safha MDD v3). Off unless the model
-# directory is configured. It only ADDS red marks to words the ASR heard as
-# right, and only when its own confidence passes the bundled threshold
-# (QuranMB.v2 end to end at 0.5: precision 0.82, false alarms 0.65% per phoneme).
+# directory is configured. By default it runs in SHADOW mode: its verdicts are
+# recorded in the stored result and logs for evaluation, but nothing is shown
+# to the user. Red marks are added only when QARI_PRON_VERIFIER_REPORT names a
+# report that passes ml.evaluation.pronunciation.qualified_for_model for this
+# exact bundle fingerprint. v3 does not pass that gate today (QuranMB.v2 end to
+# end at 0.5: precision 0.82, recall 0.44; the gate needs 0.98 / 0.90).
 PRON_VERIFIER_DIR = os.environ.get("QARI_PRON_VERIFIER_DIR", "").strip()
+PRON_VERIFIER_REPORT = os.environ.get("QARI_PRON_VERIFIER_REPORT", "").strip()
 _pron_verifier_state: dict = {}
+
+
+def _pron_verifier_qualified(verifier) -> bool:
+    """True only for a passing qualification report about this exact bundle."""
+    key = ("qualified", id(verifier))
+    if key not in _pron_verifier_state:
+        ok = False
+        if PRON_VERIFIER_REPORT:
+            try:
+                import json
+                from ml.evaluation.pronunciation import qualified_for_model
+                with open(PRON_VERIFIER_REPORT) as f:
+                    ok = qualified_for_model(json.load(f), verifier.fingerprint())
+            except Exception as exc:  # pragma: no cover - unreadable report = not qualified
+                logger.warning("pron_verifier.report_unreadable", path=PRON_VERIFIER_REPORT, error=str(exc))
+        logger.info("pron_verifier.mode", mode="qualified" if ok else "shadow")
+        _pron_verifier_state[key] = ok
+    return _pron_verifier_state[key]
 
 
 def _get_pron_verifier():
@@ -1057,6 +1079,7 @@ class StreamingRecitationSession:
         self._heard_word_evidence: dict[int, dict] = {}
         self._harakat_errors: dict[int, dict] = {}
         self._pron_errors: dict[int, dict] = {}
+        self._pron_shadow: dict = {}
         self._confirmed_live_omissions: set[int] = set()
         self._canonical_reference_raw = False
         self._hypothesis_timings: list[tuple[float, float]] = []
@@ -2442,12 +2465,21 @@ class StreamingRecitationSession:
 
         Scores runs of words the ASR heard as correct (with their observed time
         spans), one ayah at a time, against the phonemes they should have.
-        A word whose worst phoneme passes the model's threshold is marked as a
-        pronunciation mistake. Runs synchronously (call via asyncio.to_thread).
+        Every score is kept in ``self._pron_shadow`` (stored with the result,
+        never shown). Only a model qualified for its exact fingerprint turns a
+        score above threshold into a user-visible pronunciation mistake.
+        Runs synchronously (call via asyncio.to_thread).
         """
         verifier = verifier or _get_pron_verifier()
         if verifier is None or self._is_stub or not self._pcm:
             return
+        qualified = _pron_verifier_qualified(verifier)
+        try:
+            fingerprint = verifier.fingerprint()
+        except Exception:  # pragma: no cover - fakes in tests / missing files
+            fingerprint = None
+        self._pron_shadow = {"model_sha256": fingerprint, "qualified": qualified,
+                             "threshold": getattr(verifier, "threshold", None), "words": []}
         from ml.alignment.quran_g2p import ayah_word_phonemes, phonemize_words
         from ml.inference.pronunciation_verifier import MAX_WINDOW_S, word_verdicts
 
@@ -2501,7 +2533,15 @@ class StreamingRecitationSession:
                 logger.warning("pron_verifier.score_failed", session_id=self.session_id, error=str(exc))
                 return
             for index, word, score in zip(run, words, scores):
-                if score is not None and score >= result.threshold:
+                if score is None:
+                    continue
+                span = self._heard_word_evidence[index]["span"]
+                self._pron_shadow["words"].append({
+                    "word_index": index, "score": round(float(score), 4),
+                    "flagged": score >= result.threshold,
+                    "audio_span_ms": [int(span[0] * 1000), int(span[1] * 1000)],
+                })
+                if qualified and score >= result.threshold:
                     self._pron_errors[index] = {
                         "expected": word, "raw": word, "confidence": float(score),
                         "conflicts": [], "source": "pronunciation_model",
@@ -3019,7 +3059,8 @@ class StreamingRecitationSession:
             "ayah_number": self.ayah_from,
             "overall_score": round(accuracy, 4),
             "pronunciation_score": 0.0 if use_recording_evidence else round(accuracy, 4),
-            "pronunciation_available": False,
+            # True only when a qualified pronunciation model actually assessed words.
+            "pronunciation_available": bool(self._pron_shadow.get("qualified") and self._pron_shadow.get("words")),
             "tajweed_score": round(tajweed_score, 4),
             "tajweed_available": False,
             "tajweed_issues": tajweed_issues,
@@ -3027,6 +3068,8 @@ class StreamingRecitationSession:
             "fluency_available": False,
             "accuracy_score": round(accuracy, 4),
             "word_verdicts": word_verdicts,
+            # Internal: pronunciation-model scores for evaluation (not part of the API schema).
+            "pronunciation_shadow": self._pron_shadow or None,
             "reference_audio_url": self.reference_audio_url or None,
             "user_audio_url": user_audio_url,
             "feedback": (

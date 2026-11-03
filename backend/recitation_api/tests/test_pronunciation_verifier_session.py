@@ -1,4 +1,5 @@
-"""The v3 pronunciation model only adds confident red marks to heard words."""
+"""The v3 pronunciation model runs in shadow mode unless qualified; when
+qualified it only adds confident red marks to heard words."""
 import struct
 import types
 
@@ -31,9 +32,19 @@ class FakeVerifier:
     def __init__(self, bad, threshold=.35):
         self.bad, self.threshold, self.calls = bad, threshold, []
 
+    def fingerprint(self):
+        return "f" * 64
+
     def score(self, window, phonemes):
         self.calls.append((len(window), list(phonemes)))
         return VerifierResult([.9 if p in self.bad else .1 for p in phonemes], self.threshold)
+
+
+@pytest.fixture(autouse=True)
+def qualified(monkeypatch):
+    """Most tests exercise the marking logic of a qualified model."""
+    ss._pron_verifier_state.clear()
+    monkeypatch.setattr(ss, "_pron_verifier_qualified", lambda v: True)
 
 
 @pytest.fixture
@@ -94,3 +105,53 @@ def test_lexicon_phonemes_are_used_for_known_ayahs():
     v = FakeVerifier(bad=set())
     s._observe_pronunciation(matched(1, 2), verifier=v)
     assert v.calls[0][1] == ["ll", "a", "h", "i", "rr", "a", "H", "m", "a", "n", "i"]
+
+
+def test_unqualified_model_is_shadow_only(monkeypatch, one_phoneme_per_word):
+    monkeypatch.setattr(ss, "_pron_verifier_qualified", lambda v: False)
+    words = ["بِسْمِ", "اللَّهِ"]
+    s = session(words, [(.1, .5), (.6, 1.0)], [{"surah": 1, "ayah": 1, "word_index_end": 1}])
+    s._observe_pronunciation(matched(0, 1), verifier=FakeVerifier(bad={"اللَّهِ"}))
+    assert not s._pron_errors  # nothing shown to the user
+    shadow = s._pron_shadow
+    assert shadow["qualified"] is False and shadow["model_sha256"] == "f" * 64
+    assert [(w["word_index"], w["flagged"]) for w in shadow["words"]] == [(0, False), (1, True)]
+    assert shadow["words"][1]["audio_span_ms"] == [600, 1000]
+
+
+def _gate(monkeypatch, tmp_path, report, verdict):
+    path = tmp_path / "report.json"
+    path.write_text(__import__("json").dumps(report))
+    monkeypatch.undo()  # drop the autouse "qualified" override
+    ss._pron_verifier_state.clear()
+    monkeypatch.setattr(ss, "PRON_VERIFIER_REPORT", str(path))
+    seen = []
+    import ml.evaluation.pronunciation as pron
+    monkeypatch.setattr(pron, "qualified_for_model", lambda r, sha: seen.append((r, sha)) or verdict)
+    return seen
+
+
+def test_report_must_qualify_this_exact_fingerprint(monkeypatch, tmp_path):
+    seen = _gate(monkeypatch, tmp_path, {"qualified": True}, True)
+    assert ss._pron_verifier_qualified(FakeVerifier(bad=set())) is True
+    assert seen == [({"qualified": True}, "f" * 64)]
+
+
+def test_failing_report_keeps_shadow(monkeypatch, tmp_path):
+    _gate(monkeypatch, tmp_path, {"qualified": False}, False)
+    assert ss._pron_verifier_qualified(FakeVerifier(bad=set())) is False
+
+
+def test_no_report_means_shadow(monkeypatch):
+    monkeypatch.undo()
+    ss._pron_verifier_state.clear()
+    monkeypatch.setattr(ss, "PRON_VERIFIER_REPORT", "")
+    assert ss._pron_verifier_qualified(FakeVerifier(bad=set())) is False
+
+
+def test_real_gate_rejects_v3_numbers():
+    """The shipped policy itself refuses a report with v3's QuranMB.v2 numbers."""
+    from ml.evaluation.pronunciation import qualified_for_model
+    assert not qualified_for_model({"schema_version": 1, "scope": "phonemic_pronunciation",
+                                    "model_sha256": "f" * 64, "qualified": False,
+                                    "precision": .82, "recall": .44}, "f" * 64)

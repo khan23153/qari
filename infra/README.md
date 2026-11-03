@@ -59,16 +59,30 @@ session metadata expires, even if a file remains on disk.
 
 A second opinion on words the ASR heard as right. It reads the expected phonemes
 of the ayah (from `ml/assets/quran_phonemes.json.gz`) and the recorded audio, and
-marks a word red only when it is confident. Measured end to end on QuranMB.v2
-(1,642 human-annotated recordings) at the default threshold 0.5
-(`QARI_PRON_VERIFIER_THRESHOLD`): precision 0.82, recall 0.44, false alarms 0.65%
-per phoneme. It never clears an ASR verdict.
+scores each word. Measured end to end on QuranMB.v2 (1,642 human-annotated
+recordings) at the default threshold 0.5 (`QARI_PRON_VERIFIER_THRESHOLD`):
+precision 0.82, recall 0.44, false alarms 0.65% per phoneme.
+
+**It runs in shadow mode.** Those numbers do not meet the release gate in
+`ml/evaluation/pronunciation.py` (precision >= 0.98 and recall >= 0.90 per error
+kind, at least 5 held-out speakers and 3 surahs, word-level human labels). In
+shadow mode the scores are stored with the session result as
+`pronunciation_shadow` (model fingerprint, threshold, per-word score and audio
+span) and never reach the user: no red marks, `pronunciation_available` stays
+false. Use them to collect and review real cases.
 
 1. Copy `models/safha-mdd-v3/` from the `safha-latest` bundle into `QARI_MODELS_DIR`.
 2. In `infra/.env`: `QARI_PRON_VERIFIER_DIR=/app/models/safha-mdd-v3`.
 3. `docker compose up -d recitation-api`. The model (1.2 GB) loads on the first
    finished session; scoring takes about half the audio length on 2 CPU cores.
 
-Words it marks come back as `error_type: "harakat_mistake"` with
-`evidence_source: "pronunciation_model"`. Rebuild the phoneme lexicon after a
+User-visible marks switch on only when `QARI_PRON_VERIFIER_REPORT` points to a
+report from `evaluate_pronunciation` that `qualified_for_model` accepts for the
+bundle's fingerprint (`PronunciationVerifier.fingerprint()`: every model file,
+the phoneme lexicon and the threshold). Words it then marks come back as
+`error_type: "harakat_mistake"` with `evidence_source: "pronunciation_model"`;
+it never clears an ASR verdict. Changing any model file, the lexicon or the
+threshold changes the fingerprint and needs a new report.
+
+Rebuild the phoneme lexicon after a
 corpus change with `python scripts/build_quran_phonemes.py`.

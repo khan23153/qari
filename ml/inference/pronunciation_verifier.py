@@ -19,6 +19,10 @@ phonemes from ``ml/alignment/quran_g2p.py``:
     (IqraEval's own phonemes at 0.35: precision 0.84, recall 0.48, 0.63%)
 
 It is meant to ADD red marks only when confident, never to clear an ASR verdict.
+These numbers do NOT meet Safha's release gate (``ml/evaluation/pronunciation.py``:
+precision >= 0.98, recall >= 0.90 per kind, held-out speakers and surahs), so the
+live session runs it in shadow mode unless a passing report for ``fingerprint()``
+is configured.
 
 Heavy imports (torch, transformers) happen in ``load``; importing this module
 is cheap and safe in tests.
@@ -113,6 +117,29 @@ class PronunciationVerifier:
         ver.load_state_dict({k: t.float() for k, t in state.items()})
         self._verifier = ver.eval().to(self.device)
         return self
+
+    BUNDLE_FILES = ("config.json", "preprocessor_config.json", "vocab.json", "decision.json",
+                    "model.safetensors", "verifier.pt")
+
+    def fingerprint(self) -> str:
+        """SHA-256 of the complete scoring bundle: every model file, the phoneme
+        lexicon that writes its references, and the decision threshold. This is
+        the ``model_sha256`` a qualification report must name
+        (``ml.evaluation.pronunciation.qualified_for_model``)."""
+        if getattr(self, "_fingerprint", None):
+            return self._fingerprint
+        import hashlib
+        h = hashlib.sha256()
+        lexicon = Path(__file__).resolve().parents[1] / "assets" / "quran_phonemes.json.gz"
+        for path in [self.model_dir / n for n in self.BUNDLE_FILES] + [lexicon]:
+            digest = hashlib.sha256()
+            with open(path, "rb") as f:
+                for chunk in iter(lambda: f.read(1 << 20), b""):
+                    digest.update(chunk)
+            h.update(f"{path.name}:{digest.hexdigest()}\n".encode())
+        h.update(f"threshold:{self.threshold:.4f}\n".encode())
+        self._fingerprint = h.hexdigest()
+        return self._fingerprint
 
     @property
     def loaded(self) -> bool:
