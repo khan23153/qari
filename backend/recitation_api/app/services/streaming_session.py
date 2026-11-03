@@ -28,6 +28,7 @@ time passes.
 from __future__ import annotations
 
 import asyncio
+import threading
 import os
 import struct
 import uuid
@@ -217,8 +218,16 @@ PRON_VERIFIER_REPORT = os.environ.get("QARI_PRON_VERIFIER_REPORT", "").strip()
 _pron_verifier_state: dict = {}
 
 
+def _pron_fingerprint(verifier) -> str:
+    """Fingerprint of the bundle plus this module's windowing/word logic."""
+    import inspect
+    return verifier.fingerprint(extra=(
+        inspect.getsource(StreamingRecitationSession._observe_pronunciation),
+    ))
+
+
 def _pron_verifier_qualified(verifier) -> bool:
-    """True only for a passing qualification report about this exact bundle."""
+    """True only for a passing qualification report about this exact pipeline."""
     key = ("qualified", id(verifier))
     if key not in _pron_verifier_state:
         ok = False
@@ -227,7 +236,7 @@ def _pron_verifier_qualified(verifier) -> bool:
                 import json
                 from ml.evaluation.pronunciation import qualified_for_model
                 with open(PRON_VERIFIER_REPORT) as f:
-                    ok = qualified_for_model(json.load(f), verifier.fingerprint())
+                    ok = qualified_for_model(json.load(f), _pron_fingerprint(verifier))
             except Exception as exc:  # pragma: no cover - unreadable report = not qualified
                 logger.warning("pron_verifier.report_unreadable", path=PRON_VERIFIER_REPORT, error=str(exc))
         logger.info("pron_verifier.mode", mode="qualified" if ok else "shadow")
@@ -235,20 +244,37 @@ def _pron_verifier_qualified(verifier) -> bool:
     return _pron_verifier_state[key]
 
 
-def _get_pron_verifier():
-    """The loaded verifier, or None when disabled or unavailable (never raises)."""
+# One scoring at a time: the model needs ~4.2 GB RSS and is CPU bound (two
+# concurrent 10 s windows take 7.5 s each on 2 cores instead of 4.5 s).
+_PRON_LOCK = threading.Lock()
+
+
+def _pron_verifier_instance():
+    """The verifier object (weights not loaded yet), or None when disabled."""
     if not PRON_VERIFIER_DIR:
         return None
-    if "model" not in _pron_verifier_state:
+    if "instance" not in _pron_verifier_state:
         try:
             from ml.inference.pronunciation_verifier import PronunciationVerifier
             threshold = float(os.environ.get("QARI_PRON_VERIFIER_THRESHOLD", "0.5"))
-            _pron_verifier_state["model"] = PronunciationVerifier(PRON_VERIFIER_DIR, threshold=threshold).load()
+            _pron_verifier_state["instance"] = PronunciationVerifier(PRON_VERIFIER_DIR, threshold=threshold)
+        except Exception as exc:  # pragma: no cover - missing files
+            logger.warning("pron_verifier.unavailable", model_dir=PRON_VERIFIER_DIR, error=str(exc))
+            _pron_verifier_state["instance"] = None
+    return _pron_verifier_state["instance"]
+
+
+def _get_pron_verifier():
+    """The loaded verifier, or None when disabled or unavailable (never raises)."""
+    verifier = _pron_verifier_instance()
+    if verifier is not None and not verifier.loaded:
+        try:
+            verifier.load()
             logger.info("pron_verifier.loaded", model_dir=PRON_VERIFIER_DIR)
         except Exception as exc:  # pragma: no cover - missing weights / deps
             logger.warning("pron_verifier.unavailable", model_dir=PRON_VERIFIER_DIR, error=str(exc))
-            _pron_verifier_state["model"] = None
-    return _pron_verifier_state["model"]
+            _pron_verifier_state["instance"] = verifier = None
+    return verifier
 
 # A transcriber turns a float32 mono 16 kHz signal into (normalized_words,
 # per_word_confidences).
@@ -2460,12 +2486,30 @@ class StreamingRecitationSession:
                     "compared_positions": list(comparison.compared_positions),
                 })
 
+    def _qualified_pronunciation(self, states) -> None:
+        with _PRON_LOCK:
+            self._observe_pronunciation(states)
+
+    def _shadow_pronunciation(self, states, verifier=None) -> None:
+        """Score after the result was sent; log, never show. Drops work when busy."""
+        if not _PRON_LOCK.acquire(blocking=False):
+            logger.info("pron_verifier.shadow_skipped_busy", session_id=self.session_id)
+            return
+        try:
+            self._observe_pronunciation(states, verifier=verifier)
+            if self._pron_shadow:
+                logger.info("pron_verifier.shadow", session_id=self.session_id, **self._pron_shadow)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("pron_verifier.shadow_failed", session_id=self.session_id, error=str(exc))
+        finally:
+            _PRON_LOCK.release()
+
     def _observe_pronunciation(self, states, verifier=None) -> None:
         """Second opinion from the reference-aware pronunciation model.
 
         Scores runs of words the ASR heard as correct (with their observed time
         spans), one ayah at a time, against the phonemes they should have.
-        Every score is kept in ``self._pron_shadow`` (stored with the result,
+        Every score is kept in ``self._pron_shadow`` (logged in shadow mode,
         never shown). Only a model qualified for its exact fingerprint turns a
         score above threshold into a user-visible pronunciation mistake.
         Runs synchronously (call via asyncio.to_thread).
@@ -2475,7 +2519,7 @@ class StreamingRecitationSession:
             return
         qualified = _pron_verifier_qualified(verifier)
         try:
-            fingerprint = verifier.fingerprint()
+            fingerprint = _pron_fingerprint(verifier)
         except Exception:  # pragma: no cover - fakes in tests / missing files
             fingerprint = None
         self._pron_shadow = {"model_sha256": fingerprint, "qualified": qualified,
@@ -2972,10 +3016,19 @@ class StreamingRecitationSession:
         evidence_confidences = []
         self._observe_harakat(states, is_stream_end=True)
         self._observe_final_harakat(states, final_native)
-        try:
-            await asyncio.to_thread(self._observe_pronunciation, states)
-        except Exception as exc:  # pragma: no cover
-            logger.warning("pron_verifier.failed", session_id=self.session_id, error=str(exc))
+        pron = _pron_verifier_instance()
+        if pron is not None and _pron_verifier_qualified(pron):
+            # Qualified: its marks are part of the result, so the review waits.
+            try:
+                await asyncio.to_thread(self._qualified_pronunciation, states)
+            except Exception as exc:  # pragma: no cover
+                logger.warning("pron_verifier.failed", session_id=self.session_id, error=str(exc))
+        elif pron is not None:
+            # Shadow: never delays the user's result. Scored afterwards in the
+            # background, logged for evaluation, skipped when the model is busy.
+            task = asyncio.get_running_loop().create_task(asyncio.to_thread(self._shadow_pronunciation, states))
+            _pron_verifier_state.setdefault("tasks", set()).add(task)
+            task.add_done_callback(_pron_verifier_state["tasks"].discard)
         for st in states:
             harakat = self._harakat_errors.get(st.index) or self._pron_errors.get(st.index)
             supported = (
@@ -3068,8 +3121,6 @@ class StreamingRecitationSession:
             "fluency_available": False,
             "accuracy_score": round(accuracy, 4),
             "word_verdicts": word_verdicts,
-            # Internal: pronunciation-model scores for evaluation (not part of the API schema).
-            "pronunciation_shadow": self._pron_shadow or None,
             "reference_audio_url": self.reference_audio_url or None,
             "user_audio_url": user_audio_url,
             "feedback": (

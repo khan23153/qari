@@ -32,7 +32,8 @@ class FakeVerifier:
     def __init__(self, bad, threshold=.35):
         self.bad, self.threshold, self.calls = bad, threshold, []
 
-    def fingerprint(self):
+    def fingerprint(self, extra=()):
+        self.extra = extra
         return "f" * 64
 
     def score(self, window, phonemes):
@@ -133,8 +134,11 @@ def _gate(monkeypatch, tmp_path, report, verdict):
 
 def test_report_must_qualify_this_exact_fingerprint(monkeypatch, tmp_path):
     seen = _gate(monkeypatch, tmp_path, {"qualified": True}, True)
-    assert ss._pron_verifier_qualified(FakeVerifier(bad=set())) is True
+    v = FakeVerifier(bad=set())
+    assert ss._pron_verifier_qualified(v) is True
     assert seen == [({"qualified": True}, "f" * 64)]
+    # the session's own windowing / word-folding code is part of the fingerprint
+    assert "def _observe_pronunciation" in v.extra[0]
 
 
 def test_failing_report_keeps_shadow(monkeypatch, tmp_path):
@@ -155,3 +159,21 @@ def test_real_gate_rejects_v3_numbers():
     assert not qualified_for_model({"schema_version": 1, "scope": "phonemic_pronunciation",
                                     "model_sha256": "f" * 64, "qualified": False,
                                     "precision": .82, "recall": .44}, "f" * 64)
+
+
+def test_shadow_run_drops_work_when_model_busy(monkeypatch, one_phoneme_per_word):
+    monkeypatch.setattr(ss, "_pron_verifier_qualified", lambda v: False)
+    s = session(["رَبِّ"], [(.1, .6)], [{"surah": 1, "ayah": 2, "word_index_end": 0}])
+    v = FakeVerifier(bad={"رَبِّ"})
+    with ss._PRON_LOCK:
+        s._shadow_pronunciation(matched(0), verifier=v)
+    assert v.calls == [] and not s._pron_shadow
+
+
+def test_shadow_run_scores_but_never_marks(monkeypatch, one_phoneme_per_word):
+    monkeypatch.setattr(ss, "_pron_verifier_qualified", lambda v: False)
+    s = session(["رَبِّ"], [(.1, .6)], [{"surah": 1, "ayah": 2, "word_index_end": 0}])
+    s._shadow_pronunciation(matched(0), verifier=FakeVerifier(bad={"رَبِّ"}))
+    assert not s._pron_errors
+    assert s._pron_shadow["words"][0]["flagged"] is True
+    assert not ss._PRON_LOCK.locked()

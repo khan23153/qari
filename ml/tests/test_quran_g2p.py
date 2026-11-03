@@ -41,3 +41,19 @@ def test_word_verdicts_take_the_worst_phoneme():
     result = VerifierResult([.1, .2, .9, .05, .3], threshold=.35)
     assert word_verdicts([["a", "b"], ["c", "d", "e"], []], result) == [.2, .9, None]
     assert result.flags() == [False, False, True, False, False]
+
+
+def test_fingerprint_covers_code_and_model(tmp_path, monkeypatch):
+    """Changing a model file, the threshold or caller logic changes the fingerprint."""
+    import json
+    from ml.inference.pronunciation_verifier import PronunciationVerifier
+    for name in PronunciationVerifier.BUNDLE_FILES:
+        (tmp_path / name).write_bytes(name.encode())
+    (tmp_path / "decision.json").write_text(json.dumps({"threshold": 0.5}))
+    (tmp_path / "vocab.json").write_text(json.dumps(["<blank>", "a"]))
+    base = PronunciationVerifier(tmp_path).fingerprint()
+    assert base == PronunciationVerifier(tmp_path).fingerprint()
+    assert PronunciationVerifier(tmp_path, threshold=0.6).fingerprint() != base
+    assert PronunciationVerifier(tmp_path).fingerprint(extra=("def f(): pass",)) != base
+    (tmp_path / "verifier.pt").write_bytes(b"changed")
+    assert PronunciationVerifier(tmp_path).fingerprint() != base

@@ -121,25 +121,51 @@ class PronunciationVerifier:
     BUNDLE_FILES = ("config.json", "preprocessor_config.json", "vocab.json", "decision.json",
                     "model.safetensors", "verifier.pt")
 
-    def fingerprint(self) -> str:
-        """SHA-256 of the complete scoring bundle: every model file, the phoneme
-        lexicon that writes its references, and the decision threshold. This is
-        the ``model_sha256`` a qualification report must name
-        (``ml.evaluation.pronunciation.qualified_for_model``)."""
-        if getattr(self, "_fingerprint", None):
-            return self._fingerprint
+    def fingerprint(self, extra: Sequence[str] = ()) -> str:
+        """SHA-256 of everything that decides a verdict, so a qualification
+        report (``ml.evaluation.pronunciation.qualified_for_model``) covers the
+        whole pipeline, not just the weights:
+
+        - every model file and the decision threshold;
+        - the phoneme lexicon and the source of the phonemizer that writes
+          references (``ml/alignment/quran_g2p.py``);
+        - the source of this module (feature extraction, scoring);
+        - torch / transformers / numpy versions;
+        - ``extra``: source text of caller-side logic, e.g. how the live
+          session cuts windows and folds phonemes onto words.
+        """
+        cache = getattr(self, "_fingerprints", None)
+        if cache is None:
+            cache = self._fingerprints = {}
+        key = tuple(extra)
+        if key in cache:
+            return cache[key]
         import hashlib
-        h = hashlib.sha256()
-        lexicon = Path(__file__).resolve().parents[1] / "assets" / "quran_phonemes.json.gz"
-        for path in [self.model_dir / n for n in self.BUNDLE_FILES] + [lexicon]:
+        import importlib.metadata as md
+
+        def file_digest(path: Path) -> str:
             digest = hashlib.sha256()
             with open(path, "rb") as f:
                 for chunk in iter(lambda: f.read(1 << 20), b""):
                     digest.update(chunk)
-            h.update(f"{path.name}:{digest.hexdigest()}\n".encode())
-        h.update(f"threshold:{self.threshold:.4f}\n".encode())
-        self._fingerprint = h.hexdigest()
-        return self._fingerprint
+            return digest.hexdigest()
+
+        ml_root = Path(__file__).resolve().parents[1]
+        parts = [f"model/{n}:{file_digest(self.model_dir / n)}" for n in self.BUNDLE_FILES]
+        parts += [
+            f"lexicon:{file_digest(ml_root / 'assets' / 'quran_phonemes.json.gz')}",
+            f"g2p:{file_digest(ml_root / 'alignment' / 'quran_g2p.py')}",
+            f"scorer:{file_digest(Path(__file__).resolve())}",
+            f"threshold:{self.threshold:.4f}",
+        ]
+        for pkg in ("torch", "transformers", "numpy"):
+            try:
+                parts.append(f"{pkg}:{md.version(pkg)}")
+            except md.PackageNotFoundError:
+                parts.append(f"{pkg}:missing")
+        parts += [f"extra:{hashlib.sha256(src.encode()).hexdigest()}" for src in extra]
+        cache[key] = hashlib.sha256("\n".join(parts).encode()).hexdigest()
+        return cache[key]
 
     @property
     def loaded(self) -> bool:
