@@ -1594,7 +1594,8 @@ class _LiveRecitationPageState extends State<LiveRecitationPage> {
           'tap Stop.\n\n'
           '• The page starts blank. As the engine confirms each word you say, it '
           'appears on the page — right-to-left, like a real Mushaf.\n\n'
-          '• Mispronounced words show in red, skipped words in amber.\n\n'
+          '• Every mistake shows in red: a skipped word, a wrong word, or a '
+          'wrong zabar / zer / pesh. Words you have not reached stay plain.\n\n'
           '• Circular markers between words show where each ayah ends.',
         ),
         actions: [

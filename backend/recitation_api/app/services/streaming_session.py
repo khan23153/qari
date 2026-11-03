@@ -205,6 +205,16 @@ FINAL_RECORDING_CHUNK_SEC = 30
 # live reveal.
 EVIDENCE_POLICY = os.environ.get("QARI_EVIDENCE_POLICY", "tier2").lower()
 
+# Live vowel witness. The RNNT live recognizer emits undiacritized Arabic, so
+# the harakat check never sees a mark and a wrong zabar/zer/pesh is accepted.
+# "whisper": decode each live window ALSO with the independent, unprompted
+# Whisper model (no target text, condition_on_previous_text=False), which
+# does emit tashkeel, and lend its marked spelling to the words BOTH engines
+# heard (ml.alignment.vowel_witness). RNNT stays the only lexical witness;
+# Whisper's own words never reveal, skip or move anything. "off" (default):
+# unchanged behaviour. Costs one extra Whisper decode per live pass.
+VOWEL_WITNESS = os.environ.get("QARI_LIVE_VOWEL_WITNESS", "off").lower()
+
 # A transcriber turns a float32 mono 16 kHz signal into (normalized_words,
 # per_word_confidences).
 Transcriber = Callable[["object", int], "tuple[list[str], list[float]]"]
@@ -692,6 +702,25 @@ def _independent_transcriber(audio, sr: int) -> tuple[list[str], list[float]]:
         from ml.inference.transcript import TimedTranscript
         return _join_split_vocatives(ObservedTimedTranscript(norm, out_confs, out_timings, out_raw))
     return norm, out_confs
+
+
+def _vowel_witness_enabled() -> bool:
+    return VOWEL_WITNESS == "whisper" and _live_asr_engine() == "fastconformer_rnnt"
+
+
+def _vowel_witness_transcriber(audio, sr: int) -> tuple[list[str], list[float]]:
+    """Raw (marked) tokens from the independent, unprompted Whisper decode.
+
+    Never given the expected text. Any failure yields no tokens, so the live
+    pass simply has no vowel marks, exactly as without the witness.
+    """
+    try:
+        from ml.inference.faster_whisper_transcriber import get_transcriber
+        tokens, confidences = get_transcriber().transcribe_independent(audio, sr)
+        return list(tokens), [float(c) for c in confidences]
+    except Exception as exc:  # pragma: no cover - model/load failures
+        logger.error("stream.vowel_witness_failed", error=str(exc))
+        return [], []
 
 
 def _join_split_vocatives(transcript):
@@ -1496,12 +1525,31 @@ class StreamingRecitationSession:
                         # at all: one decode instead of two halves CPU use and
                         # drops the pass wall time (~1.1s vs ~1.9s measured on
                         # this VPS), which is the live reveal latency.
-                        decoded = await asyncio.to_thread(
-                            _independent_transcriber, audio, self.sample_rate
-                        )
+                        witness = None
+                        if _vowel_witness_enabled():
+                            decoded, witness = await asyncio.gather(
+                                asyncio.to_thread(
+                                    _independent_transcriber, audio, self.sample_rate
+                                ),
+                                asyncio.to_thread(
+                                    _vowel_witness_transcriber, audio, self.sample_rate
+                                ),
+                            )
+                        else:
+                            decoded = await asyncio.to_thread(
+                                _independent_transcriber, audio, self.sample_rate
+                            )
                         win_words, win_confs = decoded
                         window_timings = getattr(decoded, "timings", None)
                         window_raw = getattr(decoded, "raw_words", None)
+                        if witness and window_raw is not None and len(window_raw) == len(win_words):
+                            from ml.alignment.vowel_witness import lend_vowels
+                            window_raw = lend_vowels(
+                                win_words, window_raw, witness[0], witness[1], _normalize,
+                                confidence_floor=max(
+                                    .55, getattr(self._matcher, "live_confidence_threshold", .55)
+                                ),
+                            )
                         raw_words, raw_confs = list(win_words), list(win_confs)
                         self._verified_words = [
                             (w, c) for w, c in zip(raw_words, raw_confs) if w
