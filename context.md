@@ -1526,7 +1526,8 @@ Branch `feat/pronunciation-verifier-v3` (PR #60, open). Full numbers with interv
     the Mushaf. The owner adjudicates and exports JSON.
   - Reviewers need Contributor access.
   - The blinding key (strata, scores, labels) is NOT in the repo; it is on the
-    owner's Drive as `review_key_PRIVATE.json`.
+    review artifact's database at `private/review_key` (owner and editors only;
+    reviewers cannot read it).
   - Next step: after the first reviews, report human judgements against v3,
     GOP and the fusion, and the share of label errors vs model misses per kind.
     Train nothing until then.

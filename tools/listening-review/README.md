@@ -47,7 +47,7 @@ Error kinds among the dataset-wrong words: vowel 44, consonant 44,
 gemination 14.
 
 The key that maps clip ids to strata, scores and labels is kept private
-(owner's Drive, `review_key_PRIVATE.json`). It is never published with the
+(in the review artifact's database at `private/review_key`, readable by the owner and editors only). It is never published with the
 page or committed here, because that would break the blinding.
 
 ## Files
