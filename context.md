@@ -1475,3 +1475,62 @@ examples, qualifiedword-local acoustic evidence and independent speakers/surahs.
 DoNOTlowerguards, labellexicalASRcorrectaspronunciationcorrect, retuneonheldscores
 orclaimfullyfixed. BroadIqragateddatastill403. ExistingresearchdraftPR38contains
 boundedtrainingloaderfixb7c230a; full1029passed1skip2knownwarnings andallCIpass.
+
+## 2026-11-05 — pronunciation detector: measured baseline, copying test, GOP fusion, E3, listening review
+
+Branch `feat/pronunciation-verifier-v3` (PR #60, open). Full numbers with intervals are in
+`docs/mdd-v3-baseline-and-copying-test-20261104.md`.
+
+- **Server safety (PR #60):** the live server never loads the v3 model unless
+  `QARI_PRON_VERIFIER_REPORT` names an evaluation bundle that
+  `verify_evaluation_bundle` accepts for the exact pipeline fingerprint.
+  - The bundle holds labels, predictions, provenance and report, and the report
+    is recomputed from the raw rows.
+  - The fingerprint covers the model files, threshold, lexicon, phonemizer and
+    scorer source, library versions and the session code.
+  - There is no in-server shadow inference. With `QARI_PRON_SHADOW_EXPORT=1`
+    the server only writes `pron_inputs.json`; `scripts/pron_shadow_worker.py`
+    scores those offline.
+  - Measured cost: 29 s load, 4.2 GB RSS, RTF 0.4–0.5 on 2 cores. It does not
+    fit beside the live ASR in a 6 GB container.
+- **E0, word-level baseline (v3 at 0.5, QuranMB.v2, 8,454 words):**
+  - Precision 0.862, recall 0.613, 3.2% false accusations on correct words.
+  - Per kind: vowel R 0.545 / P 0.762; consonant R 0.605 / P 0.894;
+    gemination R 0.578 (n = 64).
+  - At a realistic 3% error rate, precision would be about 0.37.
+- **E1, copying test (planted change in the expected text, correct audio):**
+  - Verifier AUC 0.54–0.59 for vowel/sukun/shadda-dropped, 0.74 for consonants.
+  - GOP from the same encoder's CTC head: 0.90–0.98, and 0.99+ on professional
+    reciters.
+  - So the sound information is in the encoder and the verifier ignores it.
+  - On natural errors the gap is smaller (phoneme AUC: vowel 0.80 vs 0.73).
+  - 30–38% of error slots are missed by both signals, with the CTC head
+    confident it heard the expected text. This is label noise or canonical
+    bias; it is not yet known which.
+- **E5, v3 + GOP fusion, fit on groups 0–8, tested on 9–17:**
+  - Recall 0.471 → 0.535 at precision about 0.95. The gain is +0.064, group
+    bootstrap 95% CI [+0.039, +0.094].
+  - On unseen verses as well as unseen groups, the recall gain holds, but
+    precision falls 0.945 → 0.916 (CI of the change [−0.063, −0.001]).
+  - The two signals overlap heavily: combined they catch at most ~58% of error
+    phonemes. Modest gain, not a breakthrough.
+- **E3 (rejected):** retrained only the verifier, encoder frozen, 3 h with
+  vowel/shadda-targeted planted changes. No checkpoint beat v3 on dev
+  (0.403–0.485 vs 0.504 recall at P ≥ 0.90). Do not repeat this direction.
+- **Listening review (built, waiting for reviewers):**
+  - Private artifact "Safha Listening Review" (claude.ai artifact
+    BcsjTG8XhfW4f4K9vasQp3). Source is in `tools/listening-review/`.
+  - 172 clips: 140 QuranMB words in 8 strata (including confident accepts),
+    20 TLOG words, and 12 hidden repeats.
+  - Two stages: write what you hear with the text hidden, then compare with
+    the Mushaf. The owner adjudicates and exports JSON.
+  - Reviewers need Contributor access.
+  - The blinding key (strata, scores, labels) is NOT in the repo; it is on the
+    owner's Drive as `review_key_PRIVATE.json`.
+  - Next step: after the first reviews, report human judgements against v3,
+    GOP and the fusion, and the share of label errors vs model misses per kind.
+    Train nothing until then.
+- **Licences:** IqraEval datasets (Iqra_train, Iqra_TTS, Iqra_Extra_IS26,
+  QuranMB.v2) are CC BY-NC 4.0, checked on HF on 2026-11-04. v1–v3 are
+  research-only unless the organisers grant permission. Quran-Lab Zipformer is
+  NPL-1.2 (no monetised use). TLOG is CC BY 4.0.
