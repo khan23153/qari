@@ -88,9 +88,29 @@ v3 reaches 0.359 and the fusion reaches 0.417.
 The gate needs 0.90 recall per kind at 0.98 precision, on held-out human word
 labels, so this is not close.
 
-## Next
+## E3: retrain only the verifier with vowel/shadda-targeted planted changes (negative)
 
-E3 retrains only the verifier, with the encoder frozen, using vowel- and
-shadda-targeted planted changes. It is judged on the E1 planted test (fresh
-clips) and on recall at precision 0.90 for groups 00009–00017, against
-v3 + GOP.
+Kernel `safha-e3-full`. The encoder and CTC head were frozen at v3. The
+verifier was initialised from v3 and trained for 3 h (4,800 steps) on v3's
+data mix. Planted changes on correct audio were mostly vowel, sukun and shadda
+changes. A checkpoint was selected every 30 min on QuranMB groups 00000–00008,
+using word recall at precision ≥ 0.90.
+
+| Checkpoint | Step 0 (v3) | 829 | 1629 | 2414 | 3203 | 4000 | 4800 |
+|---|---|---|---|---|---|---|---|
+| Dev recall @ P≥0.90 | **0.504** | 0.482 | 0.452 | 0.485 | 0.409 | 0.478 | 0.403 |
+
+No checkpoint beat v3 on real (elicited) errors, so the selected model is v3
+itself and the test groups were not used for a different model. Training on
+planted reference changes, which v3 already did in a broader form, does not
+transfer to natural mistakes. The planted-change AUC of the intermediate
+checkpoints was not saved. Not repeating this direction.
+
+## Status and next
+
+- The only measured gain so far is v3 + GOP fusion (recall 0.471 → 0.535 at
+  precision ≈ 0.95 on test groups, no retraining).
+- 30–38% of natural vowel and consonant error slots are missed by both
+  signals while the CTC head confidently hears the expected phoneme. Before
+  more modelling, a blind human relisten of a sample of these (and of false
+  alarms) will separate label noise from a canonical bias in the encoder.
