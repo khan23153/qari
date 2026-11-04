@@ -117,6 +117,8 @@ def test_stream_reveals_words_live(stub_stream):
         assert result["accuracy_score"] == 1.0
         assert len(result["word_verdicts"]) == 4
         assert all(v["is_correct"] for v in result["word_verdicts"])
+        assert "pronunciation_shadow" not in result  # evaluation data stays server-side
+        assert result["pronunciation_available"] is False
 
 
 def test_stream_final_marks_unrecited_skipped(stub_stream):

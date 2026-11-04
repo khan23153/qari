@@ -290,7 +290,8 @@ async def recitation_stream(websocket: WebSocket):
                         "type": "final",
                         "session_id": session.session_id,
                         "status": "completed",
-                        "result": result,
+                        # Shadow pronunciation scores are stored for evaluation only.
+                        "result": {k: v for k, v in result.items() if k != "pronunciation_shadow"},
                     })
                     finalized = True
                     break

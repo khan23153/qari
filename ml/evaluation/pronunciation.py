@@ -216,3 +216,87 @@ def evaluate_pronunciation(labels, predictions, *, policy=PronunciationPolicy(),
     assert set(checks) == set(QUALIFICATION_CHECKS)
     report.update(checks={name: bool(value) for name, value in checks.items()}, qualified=all(checks.values()))
     return report
+
+
+BUNDLE_FILES = ('labels.jsonl', 'predictions.jsonl', 'provenance.json', 'report.json')
+
+
+def _sha256_file(path):
+    import hashlib
+    digest = hashlib.sha256()
+    with open(path, 'rb') as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def write_evaluation_bundle(directory, labels, predictions, *, model_sha256, dataset,
+                            training_speakers, training_pcm_hashes):
+    """Write the only kind of evidence the live server accepts.
+
+    ``labels`` / ``predictions`` are the rows ``evaluate_pronunciation`` takes;
+    ``dataset`` names the labelled set and its immutable split (free text, e.g.
+    ``{"name": ..., "split": "held", "version": ...}``). The report is computed
+    here and again, from the raw rows, by ``verify_evaluation_bundle``.
+    """
+    import json
+    import os
+    os.makedirs(directory, exist_ok=True)
+    labels, predictions = list(labels), list(predictions)
+    for name, rows in (('labels.jsonl', labels), ('predictions.jsonl', predictions)):
+        with open(os.path.join(directory, name), 'w') as handle:
+            for row in rows:
+                handle.write(json.dumps(row, sort_keys=True, ensure_ascii=False) + '\n')
+    report = evaluate_pronunciation(labels, predictions, training_speakers=list(training_speakers),
+                                    training_pcm_hashes=list(training_pcm_hashes), model_sha256=model_sha256)
+    provenance = {
+        'schema_version': 1, 'model_sha256': model_sha256, 'dataset': dataset,
+        'training_speakers': sorted(training_speakers), 'training_pcm_hashes': sorted(training_pcm_hashes),
+        'labels_sha256': _sha256_file(os.path.join(directory, 'labels.jsonl')),
+        'predictions_sha256': _sha256_file(os.path.join(directory, 'predictions.jsonl')),
+    }
+    with open(os.path.join(directory, 'provenance.json'), 'w') as handle:
+        json.dump(provenance, handle, indent=1, sort_keys=True)
+    with open(os.path.join(directory, 'report.json'), 'w') as handle:
+        json.dump(report, handle, indent=1, sort_keys=True)
+    return report
+
+
+def verify_evaluation_bundle(directory, model_sha256):
+    """(ok, reason). Recomputes the report from raw labels and predictions.
+
+    A stand-alone report JSON is never enough: the labels and predictions must
+    be present, unchanged since the bundle was written (hashes), produced by
+    this exact model (every assessed prediction carries ``model_sha256``),
+    labelled by humans with known speakers and held-out split (enforced by
+    ``evaluate_pronunciation``), with training speakers and audio declared and
+    disjoint, and the recomputed report must pass ``qualified_for_model`` and
+    match the stored one.
+    """
+    import json
+    import os
+    try:
+        paths = {name: os.path.join(directory, name) for name in BUNDLE_FILES}
+        missing = [name for name, path in paths.items() if not os.path.isfile(path)]
+        if missing:
+            return False, f'missing {missing}'
+        provenance = json.load(open(paths['provenance.json']))
+        if provenance.get('schema_version') != 1 or provenance.get('model_sha256') != model_sha256:
+            return False, 'provenance is for another model'
+        for name, key in (('labels.jsonl', 'labels_sha256'), ('predictions.jsonl', 'predictions_sha256')):
+            if _sha256_file(paths[name]) != provenance.get(key):
+                return False, f'{name} changed since the bundle was written'
+        def rows(path):
+            return [json.loads(line) for line in open(path) if line.strip()]
+        report = evaluate_pronunciation(
+            rows(paths['labels.jsonl']), rows(paths['predictions.jsonl']),
+            training_speakers=provenance.get('training_speakers'),
+            training_pcm_hashes=provenance.get('training_pcm_hashes'), model_sha256=model_sha256)
+    except (ValueError, OSError, TypeError, KeyError) as exc:
+        return False, f'invalid bundle: {exc}'
+    if not qualified_for_model(report, model_sha256):
+        failed = sorted(name for name, ok in report.get('checks', {}).items() if not ok)
+        return False, f'not qualified: {failed}'
+    if json.load(open(paths['report.json'])) != json.loads(json.dumps(report, sort_keys=True)):
+        return False, 'stored report differs from the recomputed one'
+    return True, 'qualified'
