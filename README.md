@@ -25,8 +25,14 @@ Hifz map, and Find a verse (recite a few words, get the surah and ayah).
 | Tajweed rules (ghunna, ikhfa, madd length…) | Not assessed |
 
 The app never issues religious rulings and does not replace a teacher.
+<div align="center">
+  <img src="branding/safha-icon.svg" alt="Safha app icon" width="108" />
 
-## Architecture
+  # Safha
+
+  **Quran Hifz, Mushaf Reading & Hadith**
+
+  A free, ad-free Quran learning app built with Flutter, FastAPI, and an evidence-first recitation engine.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -49,111 +55,164 @@ The app never issues religious rulings and does not replace a teacher.
      │
   ETL Job ──► Quran.com API v4 + Quranic Arabic Corpus
 ```
+  [Website](https://aiquranic.com) · [Features](#features) · [Getting started](#getting-started) · [Development status](#development-status) · [License](#license)
+</div>
 
-## Repository Structure
+> **Formerly Qari.** The app and branding are now **Safha**; the repository, some internal identifiers, and `QARI_*` configuration variables retain their original names. The Android application ID and iOS bundle ID are `com.aiquranic.safha`.
 
+## About Safha
+
+Safha brings the printed Madinah Mushaf, memorization practice, Quranic Arabic learning, and a source-attributed Islamic Library into one app. Its recitation experience is designed around **evidence-backed progress**: a word is not confirmed simply because a model predicts what the Quranic text should say.
+
+The Quran reader and bundled Library content are available offline. Sign-in, live server-assisted recitation, and some Library updates depend on a running backend.
+
+**Safha is intended to remain free, without ads.** It is under active development; research models and incomplete features are not presented as production-quality pronunciation assessment.
+
+## Features
+
+### Quran reader and Mushaf
+
+- Complete Quran corpus covering **114 surahs**, **6,236 ayahs**, and the **604-page Madinah Mushaf** layout.
+- Offline-first Quran reading from `mobile/assets/quran_corpus.json.gz`.
+- Paper presets including **Classic Madinah**, **Night**, **Parchment**, and **Minimal**. The Night theme uses Safha's warm charcoal, ivory, and amber palette.
+- Word-level interaction, meanings, transliteration, grammar information, and Quranic roots where the underlying data is available.
+- Color-coded **tajweed reference annotations** for rules such as ghunnah, ikhfa, idgham, iqlab, qalqalah, and madd. These describe the written reference; they do **not** prove that a user's spoken tajweed was correct.
+
+### Hifz and recitation practice
+
+- A Hifz reading mode that hides words and reveals them as the recitation engine confirms progress in order.
+- Ayah markers remain visible even while the words are hidden.
+- Live WebSocket recitation and an upload/review path, backed by speech recognition and word alignment.
+- Conservative word matching: silence, wrong-surah audio, uncertainty, or a predicted canonical word alone must not count as confirmed recitation.
+- Review feedback for **supported lexical mistakes** and **explicitly observed** diacritic conflicts, rather than inventing missing vowel evidence.
+
+**Important accuracy limit:** Safha does **not** currently claim reliable acoustic detection of all incorrect **harakat**, **shadda**, **makhraj**, or **tajweed**. Live recognition uses an independent Arabic FastConformer RNNT; the legacy upload/research path also uses Whisper-based components. Correctly recognizing a word is not equivalent to verifying its pronunciation. Unqualified pronunciation and tajweed scores remain unavailable (`pronunciation_available: false`, `tajweed_available: false`).
+
+### Islamic Library
+
+- Hadith reading with grades **attributed to named scholars**, never generated as new religious rulings by an AI model.
+- Source-referenced explanations for weak or fabricated narrations where reviewed source material exists.
+- Isnād chains, narrator information based on *Taqrib al-Tahdhib*, and explanations of unfamiliar (*gharīb*) terms.
+- Library API under `/v1/library` with a bundled offline fallback at `mobile/assets/library/library_seed.json`.
+
+The bundled Library is a **starter collection**, not a complete hadith database. Entries marked `pending_scholar_review` require scholarly verification; some imported English translation rights are still being checked.
+
+### Learning and supporting tools
+
+- Quranic Arabic learning content, foundational lessons, and word/grammar exploration.
+- Android-first app experience with Flutter code for iOS; iOS signing and distribution are not yet complete.
+- A static landing website featuring Mushaf previews, a Hifz demonstration, and a Library preview.
+
+## How it works
+
+```text
+                           Safha (Flutter)
+                 Quran • Mushaf • Hifz • Library
+                             │
+                 HTTPS REST / WebSocket
+                             │
+             ┌───────────────┴────────────────┐
+             │                                │
+      Core API (FastAPI)              Recitation API (FastAPI)
+      Auth • Quran content            Live recitation • Review
+      Progress • Library                      │
+             │                      ML / inference worker
+       PostgreSQL + Redis           Independent ASR • Word matching
+                                            │
+                                   Evidence-backed feedback
+
+                 Bundled Quran + Library assets
+                   Offline reader / fallback
 ```
+
+The deployment also includes Docker Compose infrastructure, a Caddy edge configuration, and optional external routing. See [`infra/README.md`](infra/README.md) for environment variables, authentication, deployment, and upgrade guidance.
+
+### Recitation model policy
+
+Safha separates **word recognition** from **pronunciation evaluation**:
+
+1. **Live lexical recognition:** Independent FastConformer RNNT transcription provides candidate words, timing, and acoustic confidence. The expected Quranic text is used for constrained alignment and progress checks, not to fabricate recognized words.
+2. **Word confirmation:** Strict matching and evidence guards determine which words may be marked as heard. Unsupported or unread words remain unconfirmed.
+3. **Pronunciation research:** Additional acoustic models are evaluated separately against human-labelled speech. A research detector must not mark user-visible harakat mistakes until it passes the qualification policy in [`ml/evaluation/pronunciation.py`](ml/evaluation/pronunciation.py).
+4. **No invented assessments:** Missing acoustic evidence is not a passing pronunciation result. Tajweed reference coloring and spoken tajweed scoring are different capabilities.
+
+The current release policy checks **held-out human labels**, **speaker/surah coverage**, **separate vowel/gemination/consonant results**, **model identity**, and thresholds of at least **98% precision**, **90% error recall**, and no more than **2% false alarms**, alongside coverage requirements. **These are release targets, not achieved accuracy claims.**
+
+The v3 pronunciation-verifier work in [PR #60](https://github.com/khan23153/qari/pull/60) is an **experimental shadow-mode proposal**, not an approved production pronunciation feature. Research metrics must not be confused with word-level release qualification.
+
+## Project structure
+
+```text
 qari/
 ├── backend/
-│   ├── core_api/          # FastAPI — content, users, progress, flashcards, SRS
-│   ├── recitation_api/    # FastAPI — audio upload, WebSocket, inference queue
-│   └── shared/            # Shared Pydantic models, constants
-├── etl/                   # Quran.com + Quranic Arabic Corpus ETL pipeline
-├── ml/                    # ML inference, alignment, tajweed checks, evaluation
-├── mobile/                # Flutter app (Android + iOS)
-├── infra/                 # Docker Compose, Dockerfiles, nginx, deploy configs
-├── docs/                  # Architecture, API spec, ML roadmap
-└── scripts/               # Dev utilities (incl. build_local_corpus.py)
+│   ├── core_api/           # Authentication, content, progress, Library
+│   ├── recitation_api/     # Audio, WebSocket sessions, feedback
+│   └── shared/             # Shared models and utilities
+├── branding/               # Safha icon and generated platform assets
+├── docs/                   # Architecture, evaluations, research notes
+├── etl/                    # Quran content and morphology ingestion
+├── infra/                  # Docker Compose, deployment, Caddy edge
+├── ml/                     # ASR, alignment, tajweed, evaluation
+├── mobile/                 # Flutter Android / iOS app
+├── releases/               # Release metadata
+├── scripts/                # Corpus, reference, and development utilities
+├── website/public/         # Static landing website
+├── context.md              # Historical engineering checkpoints and handoffs
+└── LICENSE                 # MIT license for project source code
 ```
 
-### Local Quran corpus (offline reader)
+> `context.md` is an **engineering history**, not a live deployment-status dashboard. Older training results and server-health snapshots should not be assumed current.
 
-The mobile reader loads the full Quran from a bundled asset
-(`mobile/assets/quran_corpus.json.gz`) so it works offline and is never blank,
-even when `core-api`'s corpus DB is empty. Regenerate it with:
+## Getting started
 
-```bash
-python3 scripts/build_local_corpus.py
-```
+### Requirements
 
-This pulls all 114 surahs from the Quran.com API v4 (Uthmani text, EN/UR
-translations, word-by-word transliteration + meaning) and, importantly,
-fetches `text_uthmani_tajweed` to compute **per-word tajweed spans** (each
-letter range tagged with its rule: ghunnah, ikhfa, qalqalah, idgham, iqlab,
-madd, etc.). In the reader, toggle **Tajweed** in the settings bar to colour
-each letter by its rule (mutually exclusive with Grammar); tap a word to see
-its tajweed rule(s) in the detail sheet. The bundle is gzipped into the APK
-asset, so **rebuild the APK** after regenerating the corpus.
+- Flutter SDK compatible with `mobile/pubspec.yaml` (Flutter **3.27+**).
+- Docker and Docker Compose for the backend.
+- Python 3 for corpus/build utilities.
+- Authorized access to any separately obtained, licensed ML model artifacts.
 
-## Tech Stack
+### Run the backend
 
-| Layer | Technology |
-|---|---|
-| Mobile | Flutter 3.x (Dart) |
-| Backend API | Python 3.12 + FastAPI |
-| ML Serving | FastAPI worker pods + ONNX Runtime / TorchServe |
-| Database | PostgreSQL 16 |
-| Cache | Redis 7 |
-| Object Storage | S3-compatible + CDN |
-| Auth | Firebase Auth → backend JWT exchange |
-
-## Quick Start
-
-### Backend (core-api + recitation-api)
-
-Configure `infra/.env` from `infra/.env.example` first. Both APIs require the
-same explicit JWT signing key. See [deployment setup and upgrade notes](infra/README.md)
-for production configuration and existing-token compatibility.
+From the repository root:
 
 ```bash
+cp infra/.env.example infra/.env
+# Fill in the required secrets and service configuration in infra/.env.
 cd infra
 docker compose config --quiet
 docker compose up -d --build
 docker compose exec core-api alembic upgrade head
 ```
 
-### ETL Pipeline
+**Do not commit** `.env` files, authentication credentials, signing keys, user audio, or proprietary model weights. Production deployments must use unique secure JWT and database credentials. A successful container startup does not guarantee models, external services, or the public website are configured.
 
-Seeds the corpus mirror in `core-api`'s Postgres from two verified sources:
-
-1. **Quran.com API v4** (`api.quran.com/api/v4`) — surahs, Uthmani + Imlaei
-   text, translations, word-by-word transliteration/translation, per-word
-   audio, and ayah audio URLs with segment timestamps per qari. Tajweed
-   annotations are derived by parsing the `text_uthmani_tajweed` variant.
-2. **Quranic Arabic Corpus** (`corpus.quran.com`, Kais Dukes, GNU license) —
-   the downloadable, versioned morphology TSV, parsed offline for POS tags,
-   segments, features, lemmas, and roots.
-
-```bash
-cd etl
-pip install -r requirements.txt
-# Download the morphology file first (corpus.quran.com) and point to it:
-export QURANIC_CORPUS_FILE=/path/to/quranic-corpus-morphology.txt
-python -m etl.run_full_pipeline
-```
-
-The pipeline validates canonical row counts (114 surahs / 6,236 ayahs /
-77,430 words) and **fails loudly** if the Uthmani text differs from the
-previous load.
-
-| Env var | Default | Purpose |
-|---|---|---|
-| `QURANIC_CORPUS_FILE` | `quranic-corpus-morphology.txt` | Path to the morphology TSV (required for roots/POS) |
-| `DATABASE_URL` | `postgresql+asyncpg://qari:qari@localhost:5432/qari` | Target Postgres for `core-api` |
-| `QURAN_COM_BASE_URL` | `https://api.quran.com/api/v4` | Quran.com API root |
-| `ETL_LOAD_CORPUS` | `true` | Parse morphology + extract roots |
-| `ETL_LOAD_TAJWEED` | `true` | Parse tajweed annotations |
-| `ETL_LOAD_AUDIO` | `true` | Fetch reciter audio + segments |
-| `ETL_DB_SCHEMA` | `quran` | Postgres schema for ETL tables |
-| `ETL_MAX_CONCURRENT_SURAHS` | `5` | Fetch concurrency |
-| `ETL_RATE_LIMIT_DELAY` | `0.2` | Min seconds between API requests |
-
-### Mobile (Flutter)
+### Run the Flutter app
 
 ```bash
 cd mobile
 flutter pub get
 flutter run
+```
+
+Offline Quran and bundled Library views can work without the server; account and live recitation features require their corresponding APIs.
+
+### Build the Quran assets
+
+The offline corpus is generated by:
+
+```bash
+python3 scripts/build_local_corpus.py
+```
+
+This tool obtains source content from Quran.com. Review upstream attribution and permissions before redistributing regenerated text, translations, reciter audio, or other assets. After changing bundled assets, rebuild the mobile application.
+
+To build a local full-surah recitation reference bundle from the mobile corpus:
+
+```bash
+python3 scripts/build_reference_from_local_corpus.py \
+  --corpus mobile/assets/quran_corpus.json.gz \
+  --out backend/recitation_api/reference_data
 ```
 
 ### Recitation engine (recitation-api)
@@ -286,9 +345,48 @@ research-only until the organisers grant permission. Tarteel TLOG is CC BY
 - [IqraEval](https://huggingface.co/IqraEval) datasets (CC BY-NC 4.0) — research and evaluation only
 - [Tarteel AI TLOG / EveryAyah](https://huggingface.co/tarteel-ai) — evaluation clips (TLOG: CC BY 4.0)
 - Qari audio licenses per reciter
+### Website
+
+The landing page lives in [`website/public`](website/public). [`infra/Caddyfile.edge`](infra/Caddyfile.edge) can serve it at the site root while forwarding `/v1/*`, `/ws/*`, and `/health`. Its filesystem root can be configured with `QARI_WEBSITE_DIR`; `/download` redirects to `/v1/app/download` when the backend is available.
+
+## Development status
+
+| Area | Status / important limitation |
+|---|---|
+| Mushaf and offline Quran reader | Implemented in the app; bundled content works offline |
+| Hifz word-following | Implemented with conservative word-confirmation rules; live speech requires the backend |
+| Islamic Library | Reader, API, and offline seed implemented; content and translation rights still require review |
+| Lexical recitation feedback | Implemented; recognition has known limitations and must not be equated with perfect pronunciation verification |
+| Accurate spoken harakat / shadda detection | **Research / not qualified for user-visible grading** |
+| Acoustic tajweed grading | **Not qualified**; visual tajweed reference annotations are available |
+| Android release | Requires verified signing and distribution workflow for `com.aiquranic.safha` |
+| iOS release | Flutter platform source exists; signed distribution has not been completed |
+| Play Store launch | Requires release signing, privacy documentation, Data safety review, and store preparation |
+
+The rename changed the Android package from `com.qari.app` to `com.aiquranic.safha`. These are **different application IDs**: an existing installation of the old package cannot upgrade in place to the new one, and uninstalling it can remove locally stored data.
+
+## Responsible development
+
+- **No invented Quran recitation verdicts.** Treat low-confidence audio, incomplete speech, and unsupported pronunciation phenomena as unassessed.
+- **Source-attributed scholarship.** The app should not generate its own hadith grades or religious rulings. Material pending scholar review is not approved content.
+- **User privacy.** Server-assisted recitation transmits voice audio; deployment requires clear privacy information, appropriate access controls, and careful retention handling.
+- **Reproducible evaluation.** Acoustic pronunciation claims require independent, human-labelled validation across speakers and surahs; software unit tests alone are not accuracy evidence.
+- **No ads.** The product's stated direction is free access without advertising.
+
+## Data sources and attribution
+
+Safha integrates and/or references sources whose **content licenses are separate from the MIT-licensed project code**:
+
+- [Quran.com](https://quran.com/) — Quran text, translations, word-level data, and selected audio references; individual data and media permissions must be checked.
+- [Quranic Arabic Corpus](https://corpus.quran.com/) by Kais Dukes — morphological and linguistic resources; subject to its own licensing terms.
+- [Tanzil](https://tanzil.net/) — Quranic text, subject to its applicable terms.
+- Hadith and narrator reference datasets — source- and translation-specific rights, attribution, and scholarly review still apply.
+- Third-party recitation recordings, pretrained models, and pronunciation datasets — subject to their respective permissions and license restrictions.
+
+**Licensing caution:** Research using IqraEval datasets has non-commercial licensing restrictions (CC BY-NC 4.0, according to the project research notes). An MIT license for Safha's own code does **not** grant commercial rights to such datasets, derived weights, or other third-party content. Commercial model use must be independently cleared with rights holders before distribution. The source of some Library English translations is still marked as unverified.
 
 ## License
 
-MIT — See [LICENSE](LICENSE)
+This project's source code is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
 
-*Legal review of each data source license before launch is a release blocker.*
+*Note: Any third-party audio streams, recitation datasets, or phonetic corpora used with Qari remain subject to their respective upstream open-data licenses and terms of use.*
