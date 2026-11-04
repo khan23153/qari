@@ -1,0 +1,404 @@
+<title>Safha Listening Review</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@400;500&display=swap">
+<style>
+/* Layout: one listening column; the reference word (Stage B) is the only large element. */
+:root {
+  --bg: #f4f6f4; --surface: #ffffff; --ink: #1a2422; --muted: #5f6b67; --line: #d5ddd9;
+  --accent: #17695a; --accent-ink: #ffffff; --accent-soft: #e0efea;
+  --differs: #8a5a12; --differs-soft: #f6ead6; --danger: #9b2f2f;
+  --font-ui: "IBM Plex Sans", "IBM Plex Sans Arabic", system-ui, sans-serif;
+  --font-ar: "IBM Plex Sans Arabic", "Noto Naskh Arabic", "Geeza Pro", sans-serif;
+  --font-quran: "Amiri Quran", "Amiri", "Scheherazade New", "Noto Naskh Arabic", serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121816; --surface: #1a2220; --ink: #e5ece9; --muted: #9aa7a2; --line: #2e3a37;
+  --accent: #4fb39c; --accent-ink: #0d1513; --accent-soft: #1d332e;
+  --differs: #e0a94f; --differs-soft: #3a2e19; --danger: #e07a7a; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #121816; --surface: #1a2220; --ink: #e5ece9; --muted: #9aa7a2; --line: #2e3a37;
+  --accent: #4fb39c; --accent-ink: #0d1513; --accent-soft: #1d332e;
+  --differs: #e0a94f; --differs-soft: #3a2e19; --danger: #e07a7a; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font-ui); }
+.wrap { max-width: 760px; margin: 0 auto; padding-block: 20px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; padding-bottom: 14px; border-bottom: 1px solid var(--line) }
+h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em }
+.meta { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums }
+nav.tabs { display: flex; gap: 6px; margin: 14px 0 4px; flex-wrap: wrap }
+nav.tabs button { background: none; border: 1px solid var(--line); color: var(--ink); border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 14px; cursor: pointer }
+nav.tabs button[aria-selected="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink) }
+.bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; margin-top: 10px }
+.bar > i { display: block; height: 100%; background: var(--accent); width: 0 }
+section.panel { margin-top: 22px; display: grid; gap: 18px }
+.stage-label { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600 }
+.clip-id { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px }
+.players { display: flex; flex-wrap: wrap; gap: 10px }
+.play { display: inline-flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--line); color: var(--ink); border-radius: 10px; padding: 12px 16px; font: inherit; cursor: pointer; min-width: 0 }
+.play:hover { border-color: var(--accent) }
+.play .tri { width: 0; height: 0; border-left: 11px solid var(--accent); border-top: 7px solid transparent; border-bottom: 7px solid transparent }
+.play.playing .tri { width: 11px; height: 14px; border: 0; border-left: 4px solid var(--accent); border-right: 4px solid var(--accent) }
+.play small { color: var(--muted); font-variant-numeric: tabular-nums }
+label { font-weight: 500 }
+.hint { color: var(--muted); font-size: 13px; margin: 2px 0 0 }
+textarea, input[type=text], select { width: 100%; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px }
+textarea.ar, input.ar { font-family: var(--font-ar); font-size: 26px; line-height: 1.8; direction: rtl; text-align: right }
+input.ar { font-size: 20px; line-height: 1.6 }
+.ar::placeholder { font-family: var(--font-ui); font-size: 14px; direction: ltr }
+textarea { min-height: 76px; resize: vertical }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.pad { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 6px; direction: rtl }
+.pad button { font-family: var(--font-ar); font-size: 22px; height: 44px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; color: var(--ink); cursor: pointer }
+.pad button.mark { font-size: 24px; color: var(--accent) }
+.pad button.wide { grid-column: span 2; font-family: var(--font-ui); font-size: 13px }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+.choice { display: flex; flex-wrap: wrap; gap: 8px }
+.choice button { font: inherit; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 9px 14px; cursor: pointer }
+.choice button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); font-weight: 600 }
+.choice.differs button[data-v="differs"][aria-pressed="true"] { border-color: var(--differs); background: var(--differs-soft) }
+.primary { font: inherit; font-weight: 600; background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 10px; padding: 12px 20px; cursor: pointer }
+.primary:disabled { opacity: .45; cursor: not-allowed }
+.ghost { font: inherit; background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 10px; padding: 10px 16px; cursor: pointer }
+.ghost.danger { color: var(--danger) }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center }
+.locked { background: var(--surface); border: 1px dashed var(--line); border-radius: 10px; padding: 10px 14px }
+.locked .ar { font-family: var(--font-ar); font-size: 24px; direction: rtl; text-align: right }
+.ref { text-align: center; padding: 18px 8px 8px }
+.ref .word { font-family: var(--font-quran); font-size: clamp(54px, 15vw, 88px); line-height: 1.7; direction: rtl; unicode-bidi: isolate }
+/* letters stay inline spans so Arabic joining is preserved across them */
+.ref .word .g { cursor: pointer; text-decoration: underline 3px transparent; text-underline-offset: 0.35em }
+.ref .word .g:hover, .ref .word .g:focus-visible { text-decoration-color: var(--accent); outline: none }
+.ref .word .g.has-diff { color: var(--differs); text-decoration-color: var(--differs) }
+.ref .where { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums }
+.diff { border: 1px solid var(--line); border-left: 4px solid var(--differs); border-radius: 8px; padding: 12px; display: grid; gap: 10px; background: var(--surface) }
+.diff .head { display: flex; justify-content: space-between; align-items: center; gap: 8px }
+.diff .letter { font-family: var(--font-quran); font-size: 34px; line-height: 1.3 }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px }
+.grid2 > div { min-width: 0 }
+.note { padding: 12px 14px; border-radius: 10px; background: var(--accent-soft); color: var(--ink) }
+.warn { padding: 12px 14px; border-radius: 10px; background: var(--differs-soft) }
+details.help summary { cursor: pointer; color: var(--accent); font-weight: 500 }
+details.help p, details.help li { max-width: 65ch }
+.urdu { font-family: var(--font-ar); direction: rtl; text-align: right; font-size: 17px; line-height: 2 }
+table { border-collapse: collapse; width: 100%; font-size: 14px }
+th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top }
+th { color: var(--muted); font-weight: 500; font-size: 12px; letter-spacing: .04em; text-transform: uppercase }
+.tablewrap { overflow-x: auto }
+.pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line) }
+.pill.agree { border-color: var(--accent); color: var(--accent) }
+.pill.disagree { border-color: var(--differs); color: var(--differs) }
+.pill.done { background: var(--accent-soft); border-color: transparent }
+.revcard { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 6px; background: var(--surface) }
+.revcard .ar { font-family: var(--font-ar); font-size: 22px; direction: rtl; text-align: right }
+.small { font-size: 13px; color: var(--muted) }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Safha Listening Review</h1>
+    <div class="meta" id="who">Loading…</div>
+  </header>
+  <nav class="tabs" id="tabs" hidden>
+    <button id="tab-review" aria-selected="true">Review</button>
+    <button id="tab-adjudicate" aria-selected="false">Adjudicate</button>
+    <button id="tab-export" aria-selected="false">Export</button>
+  </nav>
+  <div class="bar"><i id="progress"></i></div>
+
+  <details class="help" id="help">
+    <summary>How this review works</summary>
+    <p>Each clip is one word from a recitation. You judge it in two steps.</p>
+    <ol>
+      <li><b>Stage A: write what you hear.</b> Listen to the word (and the whole recording if you need context) and write it with full harakat, exactly as pronounced, including any mistake. The Quranic text is hidden on purpose. Once you save Stage A it cannot be changed.</li>
+      <li><b>Stage B: compare with the Mushaf.</b> The reference word appears. Say whether the recitation matches it. If not, tap the letter where it differs and record what was expected, what was heard, and whether it is an acceptable way of reciting.</li>
+    </ol>
+    <p>If you can't tell, say so. "Can't tell" and "audio not usable" are useful answers; please don't guess. Other reviewers' answers and any computer predictions are never shown here.</p>
+    <p class="urdu">ہر کلپ ایک لفظ ہے۔ پہلے مرحلے میں قرآنی متن چھپا ہوتا ہے: جو لفظ آپ نے سنا، بالکل ویسا ہی حرکات کے ساتھ لکھیں، غلطی سمیت۔ دوسرے مرحلے میں مصحف کا لفظ دکھایا جائے گا: بتائیں کہ تلاوت درست ہے یا نہیں، اور فرق کہاں ہے۔ یقین نہ ہو تو "معلوم نہیں" منتخب کریں، اندازہ نہ لگائیں۔</p>
+  </details>
+
+  <main id="main"><section class="panel"><p class="hint" id="boot">Loading clips…</p></section></main>
+</div>
+
+<script>
+const PAGE_VERSION = "review-v1";
+const MARKS = { "َ": "fatha", "ِ": "kasra", "ُ": "damma", "ْ": "sukun", "ۡ": "sukun", "ّ": "shadda",
+  "ً": "tanween (fath)", "ٍ": "tanween (kasr)", "ٌ": "tanween (damm)", "ࣰ": "tanween (fath)", "ࣲ": "tanween (kasr)", "ࣱ": "tanween (damm)",
+  "ٰ": "dagger alif (madd)", "ٓ": "madd" };
+const CATEGORIES = [
+  ["fatha", "Fatha"], ["kasra", "Kasra"], ["damma", "Damma"], ["sukun", "Sukun"], ["shadda", "Shadda"],
+  ["tanween", "Tanween"], ["madd", "Madd / vowel length"], ["consonant", "Letter (consonant)"],
+  ["letter_missing", "Letter missing"], ["extra_sound", "Extra sound"], ["other", "Other"] ];
+const HEARD = {
+  fatha: ["kasra", "damma", "sukun (no vowel)", "lengthened", "other"],
+  kasra: ["fatha", "damma", "sukun (no vowel)", "lengthened", "other"],
+  damma: ["fatha", "kasra", "sukun (no vowel)", "lengthened", "other"],
+  sukun: ["fatha", "kasra", "damma", "other"],
+  shadda: ["no shadda (single letter)", "other"],
+  tanween: ["no tanween", "different tanween", "other"],
+  madd: ["too short", "too long", "other"],
+  consonant: ["other letter (write it below)"],
+  letter_missing: ["letter not pronounced"], extra_sound: ["extra sound (describe below)"], other: ["describe below"] };
+const LETTERS = "ء ا أ إ آ ٱ ب ت ة ث ج ح خ د ذ ر ز س ش ص ض ط ظ ع غ ف ق ك ل م ن ه و ؤ ي ى ئ".split(" ");
+const PADMARKS = [["َ", "fatha"], ["ِ", "kasra"], ["ُ", "damma"], ["ْ", "sukun"], ["ّ", "shadda"],
+  ["ً", "fathatan"], ["ٍ", "kasratan"], ["ٌ", "dammatan"], ["ٰ", "dagger alif"], ["ٓ", "maddah"]];
+
+const $ = (s, el = document) => el.querySelector(s);
+const h = (tag, attrs = {}, ...kids) => { const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) { if (k === "class") e.className = v; else if (k === "text") e.textContent = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else if (v !== undefined && v !== null && v !== false) e.setAttribute(k, v === true ? "" : v); }
+  for (const k of kids.flat()) if (k != null) e.append(k.nodeType ? k : document.createTextNode(k)); return e; };
+const now = () => new Date().toISOString();
+const graphemes = (s) => { try { return [...new Intl.Segmenter("ar", { granularity: "grapheme" }).segment(s)].map(x => x.segment); } catch (e) { return [...s]; } };
+const marksOf = (g) => [...g].filter(c => MARKS[c]).map(c => MARKS[c]);
+function seededShuffle(arr, seedStr) {
+  let h1 = 2166136261; for (const c of seedStr) h1 = Math.imul(h1 ^ c.charCodeAt(0), 16777619) >>> 0;
+  const rnd = () => { h1 = (Math.imul(h1 ^ (h1 >>> 15), 2246822507) + 0x9e3779b9) >>> 0; return (h1 >>> 0) / 4294967296; };
+  const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+const S = { clips: [], byId: {}, order: [], mine: {}, db: null, user: null, uid: null, canEdit: false, tab: "review", current: null, audio: null };
+
+async function boot() {
+  try { S.clips = (await (await fetch("clips.json")).json()).clips; } catch (e) { $("#boot").textContent = "The clip list could not be loaded. Reload the page."; return; }
+  for (const c of S.clips) S.byId[c.c] = c;
+  const cl = window.claude;
+  S.user = cl ? await cl.use("user") : null;
+  S.db = cl ? await cl.use("db") : null;
+  S.uid = S.user ? await S.user.id() : null;
+  S.canEdit = S.user ? await S.user.canEdit() : false;
+  if (!S.db || !S.uid) { renderBlocked(); return; }
+  let name = ""; try { name = (await S.user.me()).name; } catch (e) {}
+  $("#who").textContent = `${name || "You"} · ${S.clips.length} clips`;
+  S.order = seededShuffle(S.clips.map(c => c.c), S.uid);
+  try {
+    const snap = await S.db.collection(`reviews/${S.uid}/items`).get();
+    snap.docs.forEach(d => { S.mine[d.id] = d.data(); });
+    const me = S.db.doc(`reviews/${S.uid}`); const ms = await me.get();
+    if (!ms.exists) await me.set({ reviewer_id: S.uid, first_seen_at: now(), page_version: PAGE_VERSION });
+  } catch (e) { renderBlocked(e); return; }
+  if (S.canEdit) { $("#tabs").hidden = false;
+    for (const t of ["review", "adjudicate", "export"]) $("#tab-" + t).addEventListener("click", () => switchTab(t)); }
+  updateProgress(); renderReview();
+}
+function renderBlocked(err) {
+  $("#main").replaceChildren(h("section", { class: "panel" },
+    h("div", { class: "warn" }, err ? `Your answers can't be saved right now (${err.code || "error"}). Ask the owner to give you Contributor access, then reload.`
+      : "Sign in to claude.ai and ask the owner for Contributor access to this page. Your answers are saved to your own account and only the owner sees them.")));
+  $("#who").textContent = "Not signed in";
+}
+function switchTab(t) { S.tab = t; for (const x of ["review", "adjudicate", "export"]) $("#tab-" + x).setAttribute("aria-selected", x === t);
+  if (S.audio) S.audio.pause(); ({ review: renderReview, adjudicate: renderAdjudicate, export: renderExport })[t](); }
+function doneCount() { return S.order.filter(id => S.mine[id] && (S.mine[id].status === "done" || S.mine[id].status === "skipped")).length; }
+function updateProgress() { const n = doneCount(); $("#progress").style.width = (100 * n / Math.max(1, S.order.length)) + "%";
+  if (S.uid) $("#who").textContent = $("#who").textContent.replace(/ · .*$/, "") + ` · ${n} of ${S.order.length} done`; }
+
+function player(label, src, counterKey) {
+  const btn = h("button", { class: "play", type: "button" }, h("span", { class: "tri" }), h("span", {}, label), h("small", { text: "" }));
+  btn.addEventListener("click", () => {
+    if (S.audio && S.audio._btn === btn && !S.audio.paused) { S.audio.pause(); return; }
+    if (S.audio) S.audio.pause();
+    const a = new Audio(src); a._btn = btn; S.audio = a;
+    a.addEventListener("play", () => btn.classList.add("playing"));
+    const stop = () => btn.classList.remove("playing"); a.addEventListener("pause", stop); a.addEventListener("ended", stop);
+    a.play().catch(() => { btn.querySelector("small").textContent = "can't play"; });
+    if (counterKey) { S.plays[counterKey] = (S.plays[counterKey] || 0) + 1; btn.querySelector("small").textContent = `×${S.plays[counterKey]}`; }
+  });
+  return btn;
+}
+
+// ---------------- Review ----------------
+function nextClip() { return S.order.find(id => !S.mine[id] || (S.mine[id].status !== "done" && S.mine[id].status !== "skipped")); }
+function renderReview() {
+  const id = nextClip(); S.current = id; S.plays = { word: 0, context: 0 };
+  if (!id) { $("#main").replaceChildren(h("section", { class: "panel" },
+    h("div", { class: "note" }, `You have reviewed all ${S.order.length} clips. Thank you. The owner will compare everyone's answers.`))); return; }
+  const doc = S.mine[id]; if (doc && doc.stage_a && !doc.stage_b) renderStageB(id); else renderStageA(id);
+}
+function clipHeader(id, stage) {
+  const pos = S.order.indexOf(id) + 1;
+  return h("div", { class: "actions" }, h("div", {}, h("div", { class: "stage-label", text: stage }), h("div", { class: "clip-id", text: `Clip ${pos} of ${S.order.length} · ${id}` })));
+}
+function renderStageA(id) {
+  const c = S.byId[id];
+  const ta = h("textarea", { class: "ar", id: "heard", lang: "ar", dir: "rtl", placeholder: "اكتب ما سمعته بالحركات", "aria-label": "What you heard, with harakat" });
+  const insert = (ch) => { const s = ta.selectionStart ?? ta.value.length, e = ta.selectionEnd ?? s; ta.value = ta.value.slice(0, s) + ch + ta.value.slice(e); ta.focus(); ta.selectionStart = ta.selectionEnd = s + ch.length; check(); };
+  const pad = h("div", { class: "pad", role: "group", "aria-label": "Arabic letters and harakat" },
+    PADMARKS.map(([m, n]) => h("button", { type: "button", class: "mark", title: n, "aria-label": n, onclick: () => insert(m) }, "◌" + m)),
+    LETTERS.map(l => h("button", { type: "button", "aria-label": l, onclick: () => insert(l) }, l)),
+    h("button", { type: "button", class: "wide", onclick: () => { const s = ta.selectionStart; if (s > 0) { ta.value = ta.value.slice(0, s - 1) + ta.value.slice(ta.selectionEnd); ta.selectionStart = ta.selectionEnd = s - 1; } ta.focus(); check(); } }, "Delete"));
+  const unclear = h("input", { type: "checkbox", id: "unclear" });
+  const save = h("button", { class: "primary", type: "button", disabled: true }, "Save Stage A");
+  const check = () => { save.disabled = !ta.value.trim(); };
+  ta.addEventListener("input", check);
+  const commit = async (kind) => {
+    save.disabled = true;
+    const doc = { clip_id: id, reviewer_id: S.uid, page_version: PAGE_VERSION, word_clip_sha256: c.wh, context_clip_sha256: c.xh,
+      order_position: S.order.indexOf(id) + 1, opened_at: S.openedAt || now(), status: kind === "heard" ? "stage_a" : "done",
+      stage_a: { heard: kind === "heard" ? ta.value.trim() : null, some_sounds_unclear: unclear.checked,
+        cannot_tell: kind === "cannot_tell", audio_not_usable: kind === "not_usable", plays: { ...S.plays }, saved_at: now() } };
+    if (kind !== "heard") doc.completed_at = now();
+    try { await S.db.doc(`reviews/${S.uid}/items/${id}`).set(doc); S.mine[id] = doc; updateProgress(); renderReview(); }
+    catch (e) { save.disabled = false; errBox.hidden = false; errBox.textContent = `Not saved (${e.code || "error"}). Check your connection and try again.`; }
+  };
+  save.addEventListener("click", () => commit("heard"));
+  const errBox = h("div", { class: "warn", hidden: true });
+  S.openedAt = now();
+  $("#main").replaceChildren(h("section", { class: "panel" },
+    clipHeader(id, "Stage A · write what you hear"),
+    h("div", { class: "players" }, player("Play the word", "clips/" + c.w, "word"), player("Play the whole recording", "clips/" + c.x, "context")),
+    h("div", {}, h("label", { for: "heard" }, "The word as it was pronounced"),
+      h("p", { class: "hint" }, "Write every haraka you hear, including mistakes. Use your keyboard or the buttons below.")),
+    ta, pad,
+    h("div", { class: "row" }, unclear, h("label", { for: "unclear" }, "Some sounds were unclear")),
+    errBox,
+    h("div", { class: "actions" }, save, h("div", { class: "row" },
+      h("button", { class: "ghost", type: "button", onclick: () => commit("cannot_tell") }, "Can't tell what was said"),
+      h("button", { class: "ghost", type: "button", onclick: () => commit("not_usable") }, "Audio not usable")))));
+}
+
+function renderStageB(id) {
+  const c = S.byId[id], doc = S.mine[id]; const g = graphemes(c.ref);
+  const st = { verdict: null, diffs: [], assessable: null, confidence: null };
+  const wordEl = h("div", { class: "word", role: "group", "aria-label": "Reference word; tap a letter to record a difference" });
+  const diffsEl = h("div", { style: "display:grid;gap:10px" });
+  const save = h("button", { class: "primary", type: "button", disabled: true }, "Save and next");
+  const errBox = h("div", { class: "warn", hidden: true });
+  const pick = (i) => { if (st.verdict !== "differs") setVerdict("differs"); addDiff(i); };
+  const drawWord = () => wordEl.replaceChildren(...g.map((ch, i) => h("span", { class: "g" + (st.diffs.some(d => d.letter_index === i) ? " has-diff" : ""),
+    role: "button", tabindex: "0", "aria-label": `Letter ${i + 1}`, onclick: () => pick(i), onkeydown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(i); } } }, ch)));
+  const valid = () => st.verdict && st.assessable && st.confidence && (st.verdict !== "differs" || (st.diffs.length && st.diffs.every(d => d.category && d.heard)));
+  const refresh = () => { save.disabled = !valid(); drawWord(); };
+  const choice = (key, opts, cls = "") => { const box = h("div", { class: "choice " + cls, role: "group" });
+    const draw = () => box.replaceChildren(...opts.map(([v, l]) => h("button", { type: "button", "data-v": v, "aria-pressed": st[key] === v, onclick: () => { key === "verdict" ? setVerdict(v) : (st[key] = v); draw(); refresh(); } }, l)));
+    draw(); box._draw = draw; return box; };
+  const verdictBox = choice("verdict", [["matches", "Matches the Mushaf"], ["differs", "Differs"], ["cannot_decide", "Can't decide"]], "differs");
+  function setVerdict(v) { st.verdict = v; if (v !== "differs") st.diffs = []; diffsHelp.hidden = v !== "differs"; verdictBox._draw(); drawDiffs(); refresh(); }
+  const diffsHelp = h("p", { class: "hint", hidden: true }, "Tap the letter in the word above where the difference is. Add one entry per difference.");
+  function addDiff(i) { st.diffs.push({ letter_index: i, letter: g[i], expected_marks: marksOf(g[i]), category: "", heard: "", heard_text: "", acceptable_variant: "unsure" }); drawDiffs(); refresh(); }
+  function drawDiffs() {
+    diffsEl.replaceChildren(...st.diffs.map((d, k) => {
+      const cat = h("select", { "aria-label": "Category" }, h("option", { value: "" }, "Choose…"), CATEGORIES.map(([v, l]) => h("option", { value: v, selected: d.category === v }, l)));
+      const heard = h("select", { "aria-label": "What was heard" }, h("option", { value: "" }, "Choose…"), (HEARD[d.category] || []).map(v => h("option", { value: v, selected: d.heard === v }, v)));
+      const txt = h("input", { type: "text", class: "ar", lang: "ar", dir: "rtl", value: d.heard_text, placeholder: "optional: what you heard", "aria-label": "Heard, as text" });
+      const variant = h("select", { "aria-label": "Acceptable recitation variant" }, [["unsure", "Not sure"], ["no", "No, a mistake"], ["yes", "Yes, an acceptable variant"]].map(([v, l]) => h("option", { value: v, selected: d.acceptable_variant === v }, l)));
+      cat.addEventListener("change", () => { d.category = cat.value; d.heard = ""; drawDiffs(); refresh(); });
+      heard.addEventListener("change", () => { d.heard = heard.value; refresh(); });
+      txt.addEventListener("input", () => { d.heard_text = txt.value; });
+      variant.addEventListener("change", () => { d.acceptable_variant = variant.value; });
+      return h("div", { class: "diff" },
+        h("div", { class: "head" }, h("div", {}, h("span", { class: "letter", text: d.letter }), h("span", { class: "small", text: `  letter ${d.letter_index + 1}` + (d.expected_marks.length ? ` · written: ${d.expected_marks.join(", ")}` : "") })),
+          h("button", { class: "ghost danger", type: "button", onclick: () => { st.diffs.splice(k, 1); drawDiffs(); refresh(); } }, "Remove")),
+        h("div", { class: "grid2" }, h("div", {}, h("label", {}, "What differs"), cat), h("div", {}, h("label", {}, "What you heard instead"), heard)),
+        h("div", { class: "grid2" }, h("div", {}, h("label", {}, "Heard (text)"), txt), h("div", {}, h("label", {}, "Acceptable way of reciting?"), variant)));
+    }));
+  }
+  const notes = h("textarea", { id: "notes", placeholder: "Optional notes", "aria-label": "Notes" });
+  save.addEventListener("click", async () => {
+    save.disabled = true;
+    const stage_b = { verdict: st.verdict, differences: st.diffs, assessable: st.assessable, confidence: st.confidence, notes: notes.value.trim(),
+      reference_shown_at: S.refShownAt, saved_at: now(), plays: { ...S.plays } };
+    try { await S.db.doc(`reviews/${S.uid}/items/${id}`).update({ stage_b, status: "done", completed_at: now() });
+      S.mine[id] = { ...doc, stage_b, status: "done" }; updateProgress(); renderReview(); }
+    catch (e) { save.disabled = false; errBox.hidden = false; errBox.textContent = `Not saved (${e.code || "error"}). Try again.`; }
+  });
+  S.refShownAt = now(); drawWord();
+  const a = doc.stage_a;
+  $("#main").replaceChildren(h("section", { class: "panel" },
+    clipHeader(id, "Stage B · compare with the Mushaf"),
+    h("div", { class: "locked" }, h("div", { class: "small", text: "Your Stage A answer (locked)" }),
+      a.heard ? h("div", { class: "ar", lang: "ar", text: a.heard }) : h("div", { text: a.cannot_tell ? "Can't tell" : "Audio not usable" })),
+    h("div", { class: "players" }, player("Play the word", "clips/" + c.w, "word"), player("Play the whole recording", "clips/" + c.x, "context")),
+    h("div", { class: "ref" }, wordEl, h("div", { class: "where", text: `Surah ${c.s}, ayah ${c.a}, word ${c.n}` })),
+    h("div", {}, h("label", {}, "Was the word recited as written?"), verdictBox), diffsHelp, diffsEl,
+    h("div", {}, h("label", {}, "Could the word be judged from this audio?"), choice("assessable", [["yes", "Yes"], ["partly", "Partly"], ["no", "No"]])),
+    h("div", {}, h("label", {}, "How sure are you?"), choice("confidence", [["high", "Sure"], ["medium", "Fairly sure"], ["low", "Unsure"]])),
+    notes, errBox,
+    h("div", { class: "actions" }, save, h("button", { class: "ghost", type: "button", onclick: async () => {
+      try { await S.db.doc(`reviews/${S.uid}/items/${id}`).update({ status: "skipped", skipped_at: now() }); S.mine[id] = { ...doc, status: "skipped" }; updateProgress(); renderReview(); }
+      catch (e) { errBox.hidden = false; errBox.textContent = `Not saved (${e.code || "error"}).`; } } }, "Skip this clip"))));
+}
+
+// ---------------- Adjudicate (owner and editors) ----------------
+async function loadAll() {
+  const revs = await S.db.collection("reviews").get(); const all = {};
+  for (const r of revs.docs) { const items = await S.db.collection(`reviews/${r.id}/items`).get(); items.docs.forEach(d => { (all[d.id] ||= []).push({ reviewer: r.id, ...d.data() }); }); }
+  const adj = {}; (await S.db.collection("adjudications").get()).docs.forEach(d => adj[d.id] = d.data());
+  return { all, adj, reviewers: revs.docs.map(d => d.id) };
+}
+const sig = (r) => r.stage_b ? r.stage_b.verdict + "|" + (r.stage_b.differences || []).map(d => d.letter_index + ":" + d.category).sort().join(",")
+  : r.stage_a && r.stage_a.cannot_tell ? "cannot_tell" : r.stage_a && r.stage_a.audio_not_usable ? "not_usable" : r.status;
+async function renderAdjudicate() {
+  const main = $("#main"); main.replaceChildren(h("section", { class: "panel" }, h("p", { class: "hint" }, "Loading all reviews…")));
+  let data; try { data = await loadAll(); } catch (e) { main.replaceChildren(h("div", { class: "warn" }, `Could not load reviews (${e.code || "error"}).`)); return; }
+  const names = {}; try { const ps = await S.user.profiles(data.reviewers); for (const id of data.reviewers) names[id] = (ps[id] && ps[id].name) || "Reviewer " + id.slice(0, 4); } catch (e) {}
+  const rows = S.clips.map(c => { const rs = (data.all[c.c] || []).filter(r => r.status === "done");
+    const sigs = new Set(rs.map(sig)); return { c, rs, agree: rs.length >= 2 && sigs.size === 1, disagree: sigs.size > 1, adj: data.adj[c.c] }; });
+  const filterSel = h("select", { "aria-label": "Show" }, [["disagree", "Disagreements"], ["multi", "Reviewed by 2+"], ["any", "Any review"], ["all", "All clips"]].map(([v, l]) => h("option", { value: v }, l)));
+  const tbody = h("tbody");
+  const draw = () => { const f = filterSel.value;
+    tbody.replaceChildren(...rows.filter(r => f === "all" || (f === "any" && r.rs.length) || (f === "multi" && r.rs.length >= 2) || (f === "disagree" && r.disagree)).map(r =>
+      h("tr", {}, h("td", { class: "clip-id", text: r.c.c }), h("td", { style: "font-family:var(--font-quran);font-size:24px;direction:rtl", text: r.c.ref }),
+        h("td", { text: String(r.rs.length) }),
+        h("td", {}, h("span", { class: "pill " + (r.disagree ? "disagree" : r.agree ? "agree" : ""), text: r.disagree ? "disagree" : r.agree ? "agree" : r.rs.length ? "single" : "none" })),
+        h("td", {}, r.adj ? h("span", { class: "pill done", text: "decided" }) : ""),
+        h("td", {}, r.rs.length ? h("button", { class: "ghost", type: "button", onclick: () => openClip(r, names) }, "Open") : "")))); };
+  filterSel.addEventListener("change", draw); draw();
+  const n = rows.filter(r => r.rs.length).length, d = rows.filter(r => r.disagree).length;
+  main.replaceChildren(h("section", { class: "panel" },
+    h("div", { class: "note" }, `${data.reviewers.length} reviewer(s). ${n} clips have at least one finished review; ${d} have disagreements. Adjudicate only after finishing your own reviews, since this view shows everyone's answers.`),
+    h("div", { class: "row" }, h("label", {}, "Show"), h("div", { style: "max-width:220px" }, filterSel)),
+    h("div", { class: "tablewrap" }, h("table", {}, h("thead", {}, h("tr", {}, ["Clip", "Word", "Reviews", "Agreement", "Decision", ""].map(t => h("th", { text: t })))), tbody))));
+}
+function openClip(r, names) {
+  const c = r.c; S.plays = {};
+  const st = { verdict: r.adj?.verdict || null, notes: r.adj?.notes || "" };
+  const verdict = h("div", { class: "choice" }); const drawV = () => verdict.replaceChildren(...[["matches", "Matches"], ["differs", "Differs"], ["undecidable", "Undecidable"]].map(([v, l]) =>
+    h("button", { type: "button", "aria-pressed": st.verdict === v, onclick: () => { st.verdict = v; drawV(); save.disabled = false; } }, l))); drawV();
+  const accepted = h("div", { style: "display:grid;gap:6px" });
+  const diffs = []; r.rs.forEach(x => (x.stage_b?.differences || []).forEach(d => diffs.push({ ...d, from: x.reviewer })));
+  const chosen = new Set((r.adj?.differences || []).map(d => d.letter_index + ":" + d.category));
+  accepted.replaceChildren(...diffs.map((d, i) => { const key = d.letter_index + ":" + d.category; const cb = h("input", { type: "checkbox", id: "d" + i, checked: chosen.has(key) });
+    cb.addEventListener("change", () => { cb.checked ? chosen.add(key) : chosen.delete(key); save.disabled = !st.verdict; });
+    return h("div", { class: "row" }, cb, h("label", { for: "d" + i }, `${d.letter} (letter ${d.letter_index + 1}): ${d.category}, heard ${d.heard}${d.heard_text ? " «" + d.heard_text + "»" : ""} · ${names[d.from] || "reviewer"}`)); }));
+  const notes = h("textarea", { placeholder: "Reasoning for the decision" }); notes.value = st.notes;
+  const save = h("button", { class: "primary", type: "button", disabled: !st.verdict }, "Save decision");
+  const msg = h("span", { class: "small" });
+  save.addEventListener("click", async () => { save.disabled = true;
+    const decided = diffs.filter(d => chosen.has(d.letter_index + ":" + d.category)).map(({ from, ...d }) => d);
+    const uniq = [...new Map(decided.map(d => [d.letter_index + ":" + d.category, d])).values()];
+    try { await S.db.doc(`adjudications/${c.c}`).set({ clip_id: c.c, verdict: st.verdict, differences: uniq, notes: notes.value.trim(), decided_by: S.uid, decided_at: now(),
+        based_on: r.rs.map(x => ({ reviewer_id: x.reviewer, completed_at: x.completed_at || null })), page_version: PAGE_VERSION });
+      msg.textContent = "Saved."; } catch (e) { msg.textContent = `Not saved (${e.code || "error"}).`; save.disabled = false; } });
+  $("#main").replaceChildren(h("section", { class: "panel" },
+    h("button", { class: "ghost", type: "button", onclick: renderAdjudicate }, "Back to list"),
+    h("div", { class: "ref" }, h("div", { class: "word", text: c.ref }), h("div", { class: "where", text: `Surah ${c.s}, ayah ${c.a}, word ${c.n} · clip ${c.c}` })),
+    h("div", { class: "players" }, player("Play the word", "clips/" + c.w), player("Play the whole recording", "clips/" + c.x)),
+    h("div", { style: "display:grid;gap:10px" }, r.rs.map(x => h("div", { class: "revcard" },
+      h("div", { class: "small", text: `${names[x.reviewer] || "Reviewer"} · finished ${x.completed_at ? new Date(x.completed_at).toLocaleString() : "?"}` }),
+      h("div", { class: "ar", lang: "ar", text: x.stage_a?.heard || (x.stage_a?.cannot_tell ? "Can't tell" : x.stage_a?.audio_not_usable ? "Audio not usable" : "") }),
+      h("div", { text: `Verdict: ${x.stage_b?.verdict || "-"} · assessable: ${x.stage_b?.assessable || "-"} · sure: ${x.stage_b?.confidence || "-"}` }),
+      ...(x.stage_b?.differences || []).map(d => h("div", { class: "small", text: `${d.letter} (letter ${d.letter_index + 1}): ${d.category} → heard ${d.heard}${d.heard_text ? " «" + d.heard_text + "»" : ""}; acceptable variant: ${d.acceptable_variant}` })),
+      x.stage_b?.notes ? h("div", { class: "small", text: "Notes: " + x.stage_b.notes }) : null))),
+    h("div", {}, h("label", {}, "Final decision"), verdict),
+    diffs.length ? h("div", {}, h("label", {}, "Differences that stand"), accepted) : null,
+    notes, h("div", { class: "row" }, save, msg)));
+}
+
+// ---------------- Export ----------------
+function renderExport() {
+  const btn = h("button", { class: "primary", type: "button" }, "Download all reviews (JSON)"); const msg = h("p", { class: "hint" });
+  btn.addEventListener("click", async () => { btn.disabled = true; msg.textContent = "Collecting…";
+    try { const data = await loadAll(); const dl = await window.claude.use("downloads");
+      if (!dl) { msg.textContent = "Downloads are not available in this view."; btn.disabled = false; return; }
+      const out = { exported_at: now(), page_version: PAGE_VERSION, clips: S.clips, reviewers: data.reviewers, reviews: data.all, adjudications: data.adj };
+      await dl.save({ filename: `safha-listening-review-${now().slice(0, 10)}.json`, data: JSON.stringify(out, null, 1) });
+      msg.textContent = "Saved."; } catch (e) { msg.textContent = `Not exported (${e.code || e.message || "error"}).`; }
+    btn.disabled = false; });
+  $("#main").replaceChildren(h("section", { class: "panel" },
+    h("p", {}, "The export holds every clip (with its audio hashes), every reviewer's Stage A and Stage B answers with timestamps, and your adjudications. Existing dataset labels are not part of this page and are never changed."),
+    h("div", {}, btn), msg));
+}
+boot();
+</script>

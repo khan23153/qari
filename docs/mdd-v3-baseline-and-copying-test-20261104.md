@@ -88,6 +88,57 @@ v3 reaches 0.359 and the fusion reaches 0.417.
 The gate needs 0.90 recall per kind at 0.98 precision, on held-out human word
 labels, so this is not close.
 
+## E5 under scrutiny (2026-11-05)
+
+Script: `ml/evaluation/experiments_gop_fusion_rigor.py`. Each score has its
+own scale, so each gets its own threshold. Both thresholds are chosen on the
+fit half, at precision ≥ 0.90. The fusion is a logistic regression over v3's
+logit, GOP and phoneme kind, so GOP is calibrated inside it. The confidence
+intervals for the change are a paired bootstrap over recording groups (2,000
+resamples).
+
+**Split 1:** fit on groups 00000–00008, test on 00009–00017 (same 97
+verses). Test set: 4,151 words, 1,124 of them wrong.
+
+| | Precision | Recall | Vowel | Consonant | Gemination | False accusations |
+|---|---|---|---|---|---|---|
+| v3 | 0.948 | 0.471 | 236/648 = 0.364 | 406/855 = 0.475 | 16/37 = 0.432 | 29 of 3,027 correct words |
+| v3 + GOP | 0.945 | 0.535 | 288/648 = 0.444 | 454/855 = 0.531 | 17/37 = 0.459 | 35 of 3,027 |
+
+- Recall change: +0.064, 95% CI [+0.039, +0.094].
+- Precision change: −0.003, 95% CI [−0.021, +0.014].
+- Among wrong words, the fusion recovered 75 that v3 missed and lost 3.
+- Among correct words, it added 19 false accusations and removed 13.
+
+**Split 2:** fit on groups 00000–00008 with verse set A, test on groups
+00009–00017 with verse set B. Both the recording groups and the verses are
+unseen. Test set: 2,139 words, 584 of them wrong.
+
+| | Precision | Recall | Vowel | Consonant | Gemination | False accusations |
+|---|---|---|---|---|---|---|
+| v3 | 0.945 | 0.474 | 0.353 | 0.480 | 16/24 = 0.667 | 16 of 1,555 |
+| v3 + GOP | 0.916 | 0.541 | 0.456 | 0.540 | 7/24 = 0.292 | 29 of 1,555 |
+
+- Recall change: +0.066, 95% CI [+0.035, +0.100].
+- Precision change: −0.030, 95% CI [−0.063, −0.001].
+- The recall gain survives on unseen verses, but precision does not fully
+  survive: false accusations nearly double.
+- Gemination drops; with only 24 words, that number is unstable.
+
+**Are the errors independent?** On the 3,330 error phonemes:
+
+- Spearman correlation between the v3 probability and GOP: 0.48.
+- v3 ≥ 0.5 catches 44.1% and GOP > 0 catches 39.8%.
+- Both catch 26.1%, against 17.6% expected if the two were independent.
+- Either one catches 57.8%; neither catches 42.2%.
+
+The two signals overlap a lot, so even a perfect combination of them tops out
+near 58% at phoneme level. The other 42% need new evidence (better data or a
+different acoustic model), not a better fusion.
+
+Verdict: a real but modest gain in recall, a precision cost on unseen verses,
+and a hard ceiling. Not a breakthrough.
+
 ## E3: retrain only the verifier with vowel/shadda-targeted planted changes (negative)
 
 Kernel `safha-e3-full`. The encoder and CTC head were frozen at v3. The
@@ -112,5 +163,7 @@ checkpoints was not saved. Not repeating this direction.
   precision ≈ 0.95 on test groups, no retraining).
 - 30–38% of natural vowel and consonant error slots are missed by both
   signals while the CTC head confidently hears the expected phoneme. Before
-  more modelling, a blind human relisten of a sample of these (and of false
-  alarms) will separate label noise from a canonical bias in the encoder.
+  more modelling, a blind human review will separate label noise from a
+  canonical bias in the encoder. That review is the listening review in
+  `tools/listening-review/`: 172 items, stratified, two stages, adjudicated.
+  No new model will be trained until it reports.
