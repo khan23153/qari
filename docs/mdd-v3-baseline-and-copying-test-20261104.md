@@ -226,3 +226,36 @@ words, so it is not reliable. They do not address the missed-by-both slots.
 The 20-clip audit is a private artifact named "Missed-Error Audit". It shows
 labelled-error words that both models confidently accept, none of them in the
 blinded review. It will tell how much of that stratum is label noise.
+
+## Missed-by-both audit, first reviewer (2026-11-05)
+
+This covers 20 QuranMB.v2 words labelled as errors that both v3 (< 0.1) and
+full-ayah GOP (< −5) accept. None of them are in the blinded review. One
+reviewer, an alima, listened through the owner and answered on the
+blind-first page; her answers were copied back. She explained in voice notes
+that she judged each word inside the whole recording. The cut word clip can
+sound wrong on its own because joined recitation from the neighbouring words
+leaks into it.
+
+| Her verdict | n | Error kinds in the dataset label |
+|---|---|---|
+| Recited as written (the label does not hold) | **16 / 19 = 84%** (Wilson 95% [62%, 95%]) | consonant 16, vowel 12 |
+| Real mistake that both models missed | 3 / 19 | A04 and A10: ٱلظَّهِيرَةِ (24:58), the final ة dropped, two different recordings. A13: يَنسِلُونَ (36:51) |
+| Not answered | 1 (A03) | |
+
+The 3 real misses have GOP −5.6, −6.1 and −6.2, all near the −5 cut-off. Most
+"label does not hold" words sit between −10.3 and −7.4. With n = 3 this is
+only a hint.
+
+Reading, with caveats: this is one reviewer, 19 words, and one stratum. In
+that stratum (the 30–38% of error slots both signals miss), most labelled
+errors were not audible as errors. So label noise in QuranMB.v2, which is
+built from elicited errors, explains most of what looked like a canonical
+bias in the encoder. Measured recall on QuranMB.v2 therefore understates
+recall on genuine errors, and its labels cannot be the qualification test
+set. The blinded 172-clip review, with more than one reviewer and
+adjudication, has to confirm this before any decision rests on it.
+
+Tool fix from her feedback: both review pages now say the word clip may
+contain parts of the neighbouring words, so judge it within the whole
+recording.

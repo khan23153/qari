@@ -1535,3 +1535,15 @@ Branch `feat/pronunciation-verifier-v3` (PR #60, open). Full numbers with interv
   QuranMB.v2) are CC BY-NC 4.0, checked on HF on 2026-11-04. v1–v3 are
   research-only unless the organisers grant permission. Quran-Lab Zipformer is
   NPL-1.2 (no monetised use). TLOG is CC BY 4.0.
+
+## 2026-11-05 (afternoon): E6 and first human audit
+
+- **E6** (word-cropped GOP, vowel duel, shadda duration) adds +0.030 recall
+  over E5 at the same precision. Removing ayah context does **not** reveal the
+  missed-by-both errors.
+- **Missed-by-both audit**, one alima: 16 of 19 labelled errors were recited
+  correctly (84%, Wilson 95% CI [62%, 95%]); 3 were real misses
+  (ٱلظَّهِيرَةِ ×2, يَنسِلُونَ).
+- Label noise in QuranMB.v2 likely explains most of that stratum. This still
+  has to be confirmed with the blinded multi-reviewer review.
+- Details are in `docs/mdd-v3-baseline-and-copying-test-20261104.md`.
