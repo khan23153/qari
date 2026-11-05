@@ -259,3 +259,19 @@ adjudication, has to confirm this before any decision rests on it.
 Tool fix from her feedback: both review pages now say the word clip may
 contain parts of the neighbouring words, so judge it within the whole
 recording.
+
+**Second pass, same reviewer.** We told her to judge each word inside the
+whole recording, not from the cut clip; she answered all 20:
+
+- **Recited as written:** 16 / 20 = 80% (Wilson 95% [58%, 92%]).
+- **Can't tell:** A04, A10, A13. These are the three she had called real misses
+  in the first pass.
+- **Real mistake:** A20, مُّهِينًۭا (4:37). Its GOP is −6.1, again near the cut-off.
+- **Agreement with the first pass:** 15 of 19 answers are the same. All 15 are
+  "recited as written" words, and none of those flipped to a mistake. The 4
+  changes are the 3 earlier misses moving to "can't tell", and A20 moving to a
+  mistake.
+
+Combined reading: at most 4 of the 20 missed-by-both "errors" are real. For
+each of those 4 the reviewer is unsure or changed her mind, and each sits at
+the GOP margin. At least 16 are label noise.
