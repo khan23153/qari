@@ -167,3 +167,62 @@ checkpoints was not saved. Not repeating this direction.
   canonical bias in the encoder. That review is the listening review in
   `tools/listening-review/`: 172 items, stratified, two stages, adjudicated.
   No new model will be trained until it reports.
+
+## E6: context-starved word-crop GOP, vowel duel, shadda duration (2026-11-05)
+
+Kaggle job `safha-e6-wordcrop`; analysis is `ml/evaluation/experiments_e6_wordcrop.py`.
+
+Method:
+
+- Each word is cut from the recording using forced alignment, with ±80 ms and
+  15 ms Hann fades, and encoded on its own, so the encoder sees no ayah context.
+- Per phoneme slot it computes:
+  - GOP on the crop;
+  - for vowel slots, a vowel-family "duel" (sequence-level and frame-level
+    margin against the other short or long vowels);
+  - for consonant and shadda slots, a duration ratio: frames with consonant
+    posterior > 0.3 divided by the utterance's mean for single consonants.
+- Fusion is a logistic regression fitted on the first half; thresholds are set
+  there at precision ≥ 0.90.
+
+**Groups 00000–00008 → 00009–00017** (4,151 test words, 1,124 wrong):
+
+| | AUC | Precision | Recall | Vowel | Consonant | Gemination (n=37) | False accusations |
+|---|---|---|---|---|---|---|---|
+| Full-ayah GOP | 0.844 | 0.950 | 0.235 | 0.279 | 0.292 | 0.108 | 14 / 3,027 |
+| E5 (v3 + GOP) | 0.867 | 0.945 | 0.535 | 0.444 | 0.531 | 0.459 | 35 |
+| E6 alone | 0.798 | 0.897 | 0.109 | 0.144 | 0.142 | 0.054 | 14 |
+| v3 + E6 | 0.862 | 0.951 | 0.513 | 0.407 | 0.519 | 0.432 | 30 |
+| v3 + GOP + E6 | 0.875 | 0.945 | 0.565 | 0.478 | 0.558 | 0.568 | 37 |
+
+Recall change of v3 + GOP + E6 against E5: +0.030, group-bootstrap 95% CI
+[+0.018, +0.044].
+
+**Groups and verses both unseen** (2,139 test words, 584 wrong):
+
+- v3 + GOP + E6 against E5: recall +0.019 [+0.004, +0.037].
+- Precision is 0.901 for v3 + GOP + E6 against 0.916 for E5.
+- E6 alone again stays well below full-ayah GOP.
+
+**Did removing context reveal hidden errors?** No. Take the 1,096 labelled error
+slots that both v3 and full-ayah GOP accept (GOP < −5):
+
+- The word-cropped GOP turns positive on only 3.8% of them. That is lower
+  than its 10.2% rate on correctly pronounced slots.
+- The vowel duel does the same: positive on 3.8% (sequence) and 3.5% (frame)
+  of the 368 vowel slots.
+- So the encoder hears the canonical phoneme in those slots even without the
+  ayah. Full-ayah over-smoothing does not explain them. What remains is label
+  noise, or errors this encoder cannot represent at all.
+
+Cropping cuts encoder compute per window but not memory: the weights stay at
+~2.4 GB fp32, and the process RSS of 4.2 GB comes from the model, not from the
+audio length.
+
+Verdict: the cropped features add a small, real gain on top of E5 (+2 to +3
+recall points), mostly on gemination. That gemination gain rests on 37 and 24
+words, so it is not reliable. They do not address the missed-by-both slots.
+
+The 20-clip audit is a private artifact named "Missed-Error Audit". It shows
+labelled-error words that both models confidently accept, none of them in the
+blinded review. It will tell how much of that stratum is label noise.
